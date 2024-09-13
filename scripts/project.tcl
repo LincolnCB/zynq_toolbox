@@ -2,17 +2,33 @@
 package require fileutil
 
 set project_name [lindex $argv 0]
-
 set part_name [lindex $argv 1]
+set core_vendor_list [lindex $argv 2]
+
 
 file delete -force tmp/$project_name.cache tmp/$project_name.gen tmp/$project_name.hw tmp/$project_name.ip_user_files tmp/$project_name.runs tmp/$project_name.sim tmp/$project_name.srcs tmp/$project_name.xpr
 
 create_project -part $part_name $project_name tmp
 
-set_property IP_REPO_PATHS tmp/cores [current_project]
-
+# Collect the paths to vendor cores directories
+set vendor_cores_paths {}
+foreach vendor $core_vendor_list {
+  set vendor_cores_path "tmp/cores/$vendor"
+  lappend vendor_cores_paths $vendor_cores_path
+}
+foreach vendor_path $vendor_cores_paths {
+  puts "Vendor cores path: $vendor_path"
+}
+# Add the path to the custom IP core packages
+set_property IP_REPO_PATHS $vendor_cores_paths [current_project]
+# Load the custom IP source files
 update_ip_catalog
 
+################################################################################
+### Define a set of Tcl procedures to simplify the creation of block designs
+################################################################################
+
+# Procedure for connecting (wiring) two ports together
 proc wire {name1 name2} {
   set port1 [get_bd_pins $name1]
   set port2 [get_bd_pins $name2]
@@ -29,6 +45,7 @@ proc wire {name1 name2} {
   error "** ERROR: can't connect $name1 and $name2"
 }
 
+# Procedure for creating a cell
 proc cell {cell_vlnv cell_name {cell_props {}} {cell_ports {}}} {
   set cell [create_bd_cell -type ip -vlnv $cell_vlnv $cell_name]
   set prop_list {}
@@ -43,6 +60,7 @@ proc cell {cell_vlnv cell_name {cell_props {}} {cell_ports {}}} {
   }
 }
 
+# Procedure for creating a module sourced from another tcl script
 proc module {module_name module_body {module_ports {}}} {
   set instance [current_bd_instance .]
   current_bd_instance [create_bd_cell -type hier $module_name]
@@ -85,12 +103,18 @@ proc addr {offset range port master} {
   apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config $config $object
   assign_bd_address -offset $offset -range $range $segment
 }
+##############################################################################
+## End of block design helper procedures
+##############################################################################
 
+# Start the block design
 create_bd_design system
 
+# Execute the port definition and block design scripts for the project
 source cfg/ports.tcl
 source projects/$project_name/block_design.tcl
 
+# Clear out the processes defined above to avoid conflicts, now that the block design is complete
 rename wire {}
 rename cell {}
 rename module {}

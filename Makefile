@@ -9,13 +9,11 @@ NAME = adc_recorder_limited_cores
 PART = xc7z010clg400-1
 PROC = ps7_cortexa9_0
 
-# Convert this list to a list of core names (e.g. "projects/$(NAME)/cores/uart.v" -> "cores/uart")
-PROJECT_CORES = $(shell cat projects/$(NAME)/cores.txt) 
-
-# Get a list of all cores in the cores directory
-ALL_VERILOG_FILES = $(wildcard cores/*.v)
-# Convert this list to a list of core names (e.g. "cores/uart.v" -> "cores/uart")
-ALL_CORES = $(ALL_VERILOG_FILES:cores/%.v=%)
+# Get the list of cores from the project file
+PROJECT_CORES = $(shell ./scripts/get_cores_from_tcl.sh projects/$(NAME)/block_design.tcl)
+$(info PROJECT_CORES = $(PROJECT_CORES))
+VENDOR_LIST = $(shell ./scripts/get_vendors_from_cores.sh "$(PROJECT_CORES)")
+$(info VENDOR_LIST = $(VENDOR_LIST))
 
 # Set up commands
 VIVADO = vivado -nolog -nojournal -mode batch
@@ -37,16 +35,16 @@ xpr: tmp/$(NAME).xpr
 # The bitstream file
 bit: tmp/$(NAME).bit
 
-# Cores are built using the scripts/core.tcl script
+# Cores are built using the scripts/package_core.tcl script
 tmp/cores/%: cores/%.v
 	mkdir -p $(@D)
-	$(VIVADO) -source scripts/core.tcl -tclargs $* $(PART)
+	$(VIVADO) -source scripts/package_core.tcl -tclargs $* $(PART)
 
 # The project file requires all the cores
 # Built using the scripts/project.tcl script
 tmp/%.xpr: projects/% $(addprefix tmp/cores/, $(PROJECT_CORES))
 	mkdir -p $(@D)
-	$(VIVADO) -source scripts/project.tcl -tclargs $* $(PART)
+	$(VIVADO) -source scripts/project.tcl -tclargs $* $(PART) {$(VENDOR_LIST)}
 
 # The bitstream file requires the project file
 # Built using the scripts/bitstream.tcl script
