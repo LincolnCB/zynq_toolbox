@@ -5,7 +5,7 @@
 # These can be set on the command line, e.g. 'make PROJECT=adc_recorder_limited_cores BOARD=snickerdoodle_black'
 
 # Default values for PROJECT and BOARD
-PROJECT ?= adc_recorder_limited_cores
+PROJECT ?= adc_recorder
 BOARD ?= stemlab_125_14
 
 # Run some checks and setup, but only if the target isn't just 'clean'
