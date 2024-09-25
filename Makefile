@@ -6,7 +6,10 @@
 
 # Default values for PROJECT and BOARD
 PROJECT ?= adc_recorder_limited_cores
-BOARD ?= stemlab_125_14
+BOARD ?= stemlab_125_145
+
+# Run some checks and setup, but only if the target isn't just 'clean'
+ifneq (clean,$(filter clean,$(MAKECMDGOALS))) ### CLEAN CHECK
 
 # Check that the project and board exist
 ifeq (,$(wildcard projects/$(PROJECT)/block_design.tcl))
@@ -19,6 +22,7 @@ ifeq (,$(wildcard projects/$(PROJECT)/$(BOARD)/ports.tcl))
 $(error Board "$(BOARD)" or the corresponding ports file "projects/$(PROJECT)/$(BOARD)/ports.tcl" does not exist for the project "$(PROJECT) -- make sure it's supported by the project")
 endif
 
+
 # Extract the part and processor from the board configuration file
 export PART=$(shell jq -r '.HDL.part' boards/$(BOARD)/board_config.json)
 export PROC=$(shell jq -r '.HDL.proc' boards/$(BOARD)/board_config.json)
@@ -26,6 +30,8 @@ export PROC=$(shell jq -r '.HDL.proc' boards/$(BOARD)/board_config.json)
 # Get the list of cores from the project file
 PROJECT_CORES = $(shell ./scripts/get_cores_from_tcl.sh projects/$(PROJECT)/block_design.tcl)
 VENDOR_LIST = $(shell ./scripts/get_vendors_from_cores.sh "$(PROJECT_CORES)")
+
+endif ########################################## CLEAN CHECK
 
 # Set up commands
 VIVADO = vivado -nolog -nojournal -mode batch
