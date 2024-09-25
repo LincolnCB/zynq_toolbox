@@ -6,7 +6,7 @@
 
 # Default values for PROJECT and BOARD
 PROJECT ?= adc_recorder_limited_cores
-BOARD ?= stemlab_125_145
+BOARD ?= stemlab_125_14
 
 # Run some checks and setup, but only if the target isn't just 'clean'
 ifneq (clean,$(filter clean,$(MAKECMDGOALS))) ### CLEAN CHECK
