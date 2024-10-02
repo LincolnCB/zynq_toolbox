@@ -2,11 +2,11 @@
 
 
 module AND_gate(
-    input   wire    a,
-    input   wire    b,
-    output  wire    and_out
+  input   wire    in_a,
+  input   wire    in_b,
+  output  wire    out_and
 );
-    
-    assign and_out = a & b;
-    
+
+  assign out_and = in_a & in_b;
+
 endmodule
