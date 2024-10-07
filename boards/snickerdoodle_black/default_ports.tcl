@@ -1,3 +1,5 @@
+## Example TCL script to create ports for the default Snickerdoodle Black ports.xdc
+
 # GPIO
 create_bd_port -dir IO -from 24 -to 0 gpio0_tri_io
 create_bd_port -dir IO -from 24 -to 0 gpio1_tri_io

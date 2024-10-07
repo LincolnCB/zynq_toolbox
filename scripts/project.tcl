@@ -123,6 +123,7 @@ proc addr {offset range port master} {
   apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config $config $object
   assign_bd_address -offset $offset -range $range $segment
 }
+
 ##############################################################################
 ## End of block design helper procedures
 ##############################################################################
@@ -131,7 +132,7 @@ proc addr {offset range port master} {
 create_bd_design system
 
 # Execute the port definition and block design scripts for the project, by board
-source projects/$project_name/$board_name/ports.tcl
+source projects/$project_name/ports.tcl
 source projects/$project_name/block_design.tcl
 
 # Clear out the processes defined above to avoid conflicts, now that the block design is complete
@@ -155,14 +156,12 @@ add_files -norecurse $wrapper
 
 set_property TOP system_wrapper [current_fileset]
 
-# TODO: Remove cfg/ from use
 # Load all Verilog and SystemVerilog source files from the project folder, as well as any .mem files
 set files [glob -nocomplain projects/$project_name/*.v projects/$project_name/*.sv, projects/$project_name/*.mem]
 if {[llength $files] > 0} {
   add_files -norecurse $files
 }
 
-# TODO: Remove cfg/ from use
 # Load all XDC constraint files specific to the board from the project folder
 set files [glob -nocomplain projects/$project_name/$board_name/*.xdc]
 if {[llength $files] > 0} {

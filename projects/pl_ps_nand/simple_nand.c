@@ -8,9 +8,9 @@
 
 #define CMA_ALLOC _IOWR('Z', 0, uint32_t)
 
-#define AXI_HUB_BASE  0x40000000
-#define AXI_HUB_CFG   0x00000000
-#define AXI_HUB_STS   0x01000000
+#define AXI_HUB_BASE                  0x40000000
+#define AXI_HUB_CFG   AXI_HUB_BASE |  0x00000000
+#define AXI_HUB_STS   AXI_HUB_BASE |  0x01000000
 
 uint8_t nand_8bit(uint8_t a, uint8_t b, volatile void *cfg, volatile void *sts)
 {
@@ -54,8 +54,10 @@ int main()
   // Bits 24-26 are used to indicate the target in the hub
   // 0 is the CFG register and 1 is the STS register
   printf("Mapping CFG and STS registers...\n");
-  cfg = mmap(NULL, sysconf(_SC_PAGESIZE), PROT_READ|PROT_WRITE, MAP_SHARED, fd, AXI_HUB_BASE | AXI_HUB_CFG);
-  sts = mmap(NULL, sysconf(_SC_PAGESIZE), PROT_READ|PROT_WRITE, MAP_SHARED, fd, AXI_HUB_BASE | AXI_HUB_STS);
+  cfg = mmap(NULL, sysconf(_SC_PAGESIZE), PROT_READ|PROT_WRITE, MAP_SHARED, fd, AXI_HUB_CFG);
+  printf("CFG register mapped to %x\n", AXI_HUB_CFG);
+  sts = mmap(NULL, sysconf(_SC_PAGESIZE), PROT_READ|PROT_WRITE, MAP_SHARED, fd, AXI_HUB_STS);
+  printf("STS register mapped to %x\n", AXI_HUB_STS);
 
   close(fd);
   printf("Mapping complete.\n");

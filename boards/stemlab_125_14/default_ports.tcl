@@ -1,3 +1,4 @@
+## Example TCL script to create ports for the default Stemlab-125-14 ports.xdc
 
 ### ADC
 

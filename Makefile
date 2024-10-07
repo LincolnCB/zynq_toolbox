@@ -6,20 +6,26 @@
 
 # Default values for PROJECT and BOARD
 PROJECT ?= adc_recorder
-BOARD ?= stemlab_125_14
+BOARD ?= snickerdoodle_black
 
 # Run some checks and setup, but only if the target isn't just 'clean'
 ifneq (clean,$(filter clean,$(MAKECMDGOALS))) ### CLEAN CHECK
 
-# Check that the project and board exist
-ifeq (,$(wildcard projects/$(PROJECT)/block_design.tcl))
-$(error Project "$(PROJECT)" or the corresponding block design file "projects/$(PROJECT)/block_design.tcl" does not exist)
-endif
+# Check that the project and board exist, and that the necessary files are present
 ifeq (,$(wildcard boards/$(BOARD)/board_config.json))
 $(error Board "$(BOARD)" or the corresponding board configuration file "boards/$(BOARD)/board_config.json" does not exist)
 endif
-ifeq (,$(wildcard projects/$(PROJECT)/$(BOARD)/ports.tcl))
-$(error Board "$(BOARD)" or the corresponding ports file "projects/$(PROJECT)/$(BOARD)/ports.tcl" does not exist for the project "$(PROJECT) -- make sure it's supported by the project")
+ifeq (,$(wildcard projects/$(PROJECT)))
+$(error Project "$(PROJECT)" does not exist)
+endif
+ifeq (,$(wildcard projects/$(PROJECT)/block_design.tcl))
+$(error Project "$(PROJECT)" does not have a block design file "projects/$(PROJECT)/block_design.tcl")
+endif
+ifeq (,$(wildcard projects/$(PROJECT)/ports.tcl))
+$(error Project "$(PROJECT)" does not have a ports file "projects/$(PROJECT)/ports.tcl")
+endif
+ifeq (,$(wildcard projects/$(PROJECT)/$(BOARD)/ports.xdc))
+$(error No support for board "$(BOARD)" in project "$(PROJECT)" -- "projects/$(PROJECT)/$(BOARD)/ports.xdc" missing)
 endif
 
 

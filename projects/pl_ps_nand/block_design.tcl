@@ -2,7 +2,9 @@
 
 # Create the PS (processing_system7)
 # - GP AXI 0 (Master) clock is connected to the processing system's first clock, FCLK_CLK0
-cell xilinx.com:ip:processing_system7:5.5 ps_0 {} {
+cell xilinx.com:ip:processing_system7:5.5 ps_0 {
+  PCW_FPGA0_PERIPHERAL_FREQMHZ 5.0
+} {
   M_AXI_GP0_ACLK ps_0/FCLK_CLK0
 }
 
@@ -80,12 +82,23 @@ cell xilinx.com:ip:util_vector_logic not_0 {
   Res hub_0/sts_data
 }
 
-## Concatenate the inputs and outputs and the FCLK to the GPIO
-cell xilinx.com:ip:xlconcat:2.1 spiconcat_0 {
+## Send some probable signals out to the GPIO
+
+# Concatenate for outputs
+cell xilinx.com:ip:xlconcat:2.1 concat_0 {
+  NUM_PORTS 3
+} {
+  In0 hub_0/cfg_data
+  In1 not_0/Res
+  In2 rst_0/peripheral_aresetn
+  dout gpio0_tri_io
+}
+
+cell xilinx.com:ip:xlconcat:2.1 concat_1 {
   NUM_PORTS 3
 } {
   In0 hub_0/cfg_data
   In1 not_0/Res
   In2 ps_0/FCLK_CLK0
-  dout gpio0_tri_io
+  dout gpio1_tri_io
 }
