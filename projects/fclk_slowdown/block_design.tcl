@@ -17,3 +17,4 @@ apply_bd_automation -rule xilinx.com:bd_rule:processing_system7 -config {
 } [get_bd_cells ps_0]
 
 ## Connect the FLCK externally
+wire ps_0/FCLK_CLK0 fclk0
