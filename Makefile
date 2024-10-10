@@ -24,8 +24,8 @@ endif
 ifeq (,$(wildcard projects/$(PROJECT)/ports.tcl))
 $(error Project "$(PROJECT)" does not have a ports file "projects/$(PROJECT)/ports.tcl")
 endif
-ifeq (,$(wildcard projects/$(PROJECT)/$(BOARD)/ports.xdc))
-$(error No support for board "$(BOARD)" in project "$(PROJECT)" -- "projects/$(PROJECT)/$(BOARD)/ports.xdc" missing)
+ifeq (,$(wildcard projects/$(PROJECT)/$(BOARD)_xdc))
+$(error No support for board "$(BOARD)" in project "$(PROJECT)" -- design constraints folder "projects/$(PROJECT)/$(BOARD)_xdc" does not exist)
 endif
 
 

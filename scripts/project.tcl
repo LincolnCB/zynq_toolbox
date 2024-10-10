@@ -116,6 +116,7 @@ proc container {container_name container_designs {container_ports {}}} {
   set_property CONFIG.LIST_SIM_BD $list $container
 }
 
+# Procedure for assigning an address to an interface port
 proc addr {offset range port master} {
   set object [get_bd_intf_pins $port]
   set segment [get_bd_addr_segs -of_objects $object]
@@ -163,7 +164,7 @@ if {[llength $files] > 0} {
 }
 
 # Load all XDC constraint files specific to the board from the project folder
-set files [glob -nocomplain projects/$project_name/$board_name/*.xdc]
+set files [glob -nocomplain projects/$project_name/{$board_name}_xdc/*.xdc]
 if {[llength $files] > 0} {
   add_files -norecurse -fileset constrs_1 $files
 }
