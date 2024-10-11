@@ -30,8 +30,8 @@ endif
 
 
 # Extract the part and processor from the board configuration file
-export PART=$(shell jq -r '.HDL.part' boards/$(BOARD)/board_config.json)
-export PROC=$(shell jq -r '.HDL.proc' boards/$(BOARD)/board_config.json)
+export PART=$(shell jq -r '.part' boards/$(BOARD)/board_config.json)
+export PROC=$(shell jq -r '.proc' boards/$(BOARD)/board_config.json)
 
 # Get the list of cores from the project file
 PROJECT_CORES = $(shell ./scripts/get_cores_from_tcl.sh projects/$(PROJECT)/block_design.tcl)

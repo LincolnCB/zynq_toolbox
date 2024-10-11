@@ -7,7 +7,7 @@ package require json
 set project_name [lindex $argv 0]
 set board_name [lindex $argv 1]
 
-# Read the config for the board for scripting variables
+# Read the script config for the board into a dict
 if {[file exists boards/${board_name}/board_config.json]} {
     set board_config_fd [open boards/${board_name}/board_config.json "r"]
 } else {
@@ -18,8 +18,8 @@ close $board_config_fd
 set board_config_dict [json::json2dict $board_config_str]
 
 # Get the part name from the config dict
-set part_name [dict get $board_config_dict HDL part]
-set board_part [dict get $board_config_dict HDL board_part]
+set part_name [dict get $board_config_dict part]
+set board_part [dict get $board_config_dict board_part]
 
 # Clear out old build files
 file delete -force tmp/${board_name}_${project_name}.cache tmp/${board_name}_${project_name}.gen tmp/${board_name}_${project_name}.hw tmp/${board_name}_${project_name}.ip_user_files tmp/${board_name}_${project_name}.runs tmp/${board_name}_${project_name}.sim tmp/${board_name}_${project_name}.srcs tmp/${board_name}_${project_name}.xpr

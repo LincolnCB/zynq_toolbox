@@ -1,8 +1,5 @@
 {
-    "HDL": {
-        "part": "xc7z020clg400-1",
-        "proc": "ps7_cortexa9_0",
-        "board_part": "redpitaya.com:sdrlab_122_16:part0:1.0",
-        "projects": ["ocra_mri", "base_pl"]
-    }
+    "part": "xc7z020clg400-1",
+    "proc": "ps7_cortexa9_0",
+    "board_part": "redpitaya.com:sdrlab_122_16:part0:1.0"
 }
