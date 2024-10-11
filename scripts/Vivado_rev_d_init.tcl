@@ -1,6 +1,6 @@
 # Initialize the Vivado environment for the Snickerdoodle Rev D, declaring directories
 # Source this from your Vivado_init.tcl
-# Vivado_init.tcl is searched for in the following directories (in order):
+# Vivado_init.tcl is searched for in the following directories (in order, with each overwriting the previous):
 # - Install directory (`/tools/Xilinx/Vivado/<version>/Vivado_init.tcl` by default)
 # - Particular Vivado version (`~/.Xilinx/Vivado/<version>/Vivado_init.tc`)
 # - Overall Vivado (`~/.Xilinx/Vivado/Vivado_init.tcl`)
