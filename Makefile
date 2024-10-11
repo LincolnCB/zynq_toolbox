@@ -5,7 +5,7 @@
 # These can be set on the command line, e.g. 'make PROJECT=adc_recorder BOARD=snickerdoodle_black'
 
 # Default values for PROJECT and BOARD
-PROJECT ?= adc_recorder
+PROJECT ?= example_axi_cfg
 BOARD ?= snickerdoodle_black
 
 # Run some checks and setup, but only if the target isn't just 'clean'
