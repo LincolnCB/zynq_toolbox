@@ -129,7 +129,7 @@ int main(int argc, char* argv[])
     int start_val = atoi(argv[2]);
     int write_num = atoi(argv[3]);
 
-    // Write 10 32-bit words to the FIFO
+    // Write N 32-bit words to the FIFO
     printf("Writing %d integers starting from %d to FIFO...\n", write_num, start_val);
     for(i = 0; i < write_num; i++)
     {
@@ -138,7 +138,7 @@ int main(int argc, char* argv[])
     }
   }
 
-  // Check FIFO status in register
+  // Print out the FIFO status
   printf("Checking FIFO status...\n");
   print_fifo_status(sts);
 }
