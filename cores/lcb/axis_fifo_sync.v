@@ -1,4 +1,3 @@
-
 `timescale 1 ns / 1 ps
 
 // An AXIS wrapper around Xilinx's synchronous FIFO XPM_FIFO_SYNC. 

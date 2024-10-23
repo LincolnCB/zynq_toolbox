@@ -52,68 +52,30 @@ addr 0x40000000 128M hub_0/S_AXI
 
 
 ## Add a FIFO loopback on AXI hub port 0
-
-# Create a FIFO block connected to the AXI hub
-cell lcb:user:axis_fifo_sync fifo_0 {
-  WRITE_DEPTH 16
-  ALWAYS_READY TRUE
-  ALWAYS_VALID TRUE
+module fifo_0 {
+  source projects/example_axi_hub_ports/fifo.tcl
 } {
-  S_AXIS hub_0/M00_AXIS
-  M_AXIS hub_0/S00_AXIS
   aclk ps_0/FCLK_CLK0
+  s_axis hub_0/M00_AXIS
+  m_axis hub_0/S00_AXIS
+  cfg_word hub_0/cfg_data
+  sts_word hub_0/sts_data
 }
 
-# Slice out the first CFG bit to be the FIFO's reset signal
-cell pavel-demin:user:port_slicer fifo_0_rst_slice {
-  DIN_WIDTH 32
-  DIN_FROM 0
-  DIN_TO 0
+## Add a BRAM on AXI hub port 1
+# There are 140 36Kib (36864 bit) BRAM blocks in the Zynq-7020
+# This block has 16384 32-bit words, 512Kib (524288 bits)
+# Because of the 32-bit width, this utilizes 16 36Kib blocks
+cell xilinx.com:ip:blk_mem_gen bram_0 {
+  MEMORY_TYPE True_Dual_Port_RAM
+  USE_BRAM_BLOCK Stand_Alone
+  USE_BYTE_WRITE_ENABLE true
+  BYTE_SIZE 8
+  WRITE_WIDTH_A 32
+  WRITE_DEPTH_A 16384
+  WRITE_WIDTH_B 32
+  REGISTER_PORTA_OUTPUT_OF_MEMORY_PRIMITIVES false
+  REGISTER_PORTB_OUTPUT_OF_MEMORY_PRIMITIVES false
 } {
-  din hub_0/cfg_data
+  BRAM_PORTA hub_0/B01_BRAM
 }
-# Negate it (active 1 from CFG)
-# Do a NOT on the result, output to STS
-cell xilinx.com:ip:util_vector_logic fifo_0_rst_inv {
-  C_SIZE 1
-  C_OPERATION not
-} {
-  Op1 fifo_0_rst_slice/dout
-  Res fifo_0/aresetn
-}
-
-# Concatenate the FIFO's status signals to the axi_hub's status signals
-#  Read and write data width can only use the first 5 bits.
-cell pavel-demin:user:port_slicer fifo_0_wr_cnt_slice {
-  DIN_WIDTH 24
-  DIN_FROM 4
-  DIN_TO 0
-} {
-  din fifo_0/write_count
-}
-cell pavel-demin:user:port_slicer fifo_0_rd_cnt_slice {
-  DIN_WIDTH 24
-  DIN_FROM 4
-  DIN_TO 0
-} {
-  din fifo_0/read_count
-}
-# 18 bit pad to make the status word 32 bits
-cell xilinx.com:ip:xlconstant:1.1 fifo_0_sts_pad {
-  CONST_VAL 0
-  CONST_WIDTH 18
-} {}
-# Concatenate the status signals into a 32-bit word
-cell xilinx.com:ip:xlconcat:2.1 fifo_0_sts_word {
-  NUM_PORTS 7
-} {
-  In0 fifo_0_wr_cnt_slice/dout
-  In1 fifo_0/full
-  In2 fifo_0/overflow
-  In3 fifo_0_rd_cnt_slice/dout
-  In4 fifo_0/empty
-  In5 fifo_0/underflow
-  In6 fifo_0_sts_pad/dout
-}
-# Connect the status word to the axi_hub
-wire fifo_0_sts_word/dout hub_0/sts_data
