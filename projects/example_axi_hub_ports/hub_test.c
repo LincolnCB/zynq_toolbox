@@ -109,7 +109,7 @@ int main()
 
   //////////////////// 2. Compatibility with other examples ////////////////////
 
-  // Compatibility with the code in example_axi_hub_regs/axi_hub_regs.c
+  // Compatibile with the code in example_axi_hub_regs/axi_hub_regs.c
   // CFG bits 63:0 and STS bits 31:0 are used for the NAND example
   cfg = cfg + 8; // Skip the first 8 bytes of the CFG register
   sts = sts + 4; // Skip the first 4 bytes of the STS register
