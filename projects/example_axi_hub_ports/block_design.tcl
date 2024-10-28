@@ -1,23 +1,15 @@
 ############# General setup #############
 
-## Instantiate the processing system and connect it to fixed IO and DDR
+## Instantiate the processing system
 
 # Create the PS (processing_system7)
+# 0: Don't use board preset
+# {}: No additional CFG parameters
 # - GP AXI 0 (Master) clock is connected to the processing system's first clock, FCLK_CLK0
-cell xilinx.com:ip:processing_system7:5.5 ps_0 {} {
+init_ps ps_0 0 {} {
   M_AXI_GP0_ACLK ps_0/FCLK_CLK0
 }
-# Create all required interconnections
-# - Make the processing system's FIXED_IO and DDR interfaces external
-apply_bd_automation -rule xilinx.com:bd_rule:processing_system7 -config {
-  make_external {FIXED_IO, DDR}
-  apply_board_preset 1
-  Master Disable
-  Slave Disable
-} [get_bd_cells ps_0]
 
-
-## Create the reset hub
 
 ## Create the reset hub
 
@@ -70,7 +62,7 @@ cell pavel-demin:user:port_slicer fifo_0_cfg {
 }
 # Create a FIFO block connected to the AXI hub (see source file)
 module fifo_0 {
-  source [project_dir]/fifo.tcl
+  source projects/example_axi_hub_ports/fifo.tcl
 } {
   aclk ps_0/FCLK_CLK0
   s_axis hub_0/M00_AXIS

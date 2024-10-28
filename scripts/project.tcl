@@ -39,11 +39,6 @@ update_ip_catalog
 ### Define a set of Tcl procedures to simplify the creation of block designs
 ################################################################################
 
-# Procedure for returning the directory of the current project
-proc project_dir {} {
-  return "projects/$project_name"
-}
-
 # Procedure for connecting (wiring) two ports together
 proc wire {name1 name2} {
   set port1 [get_bd_pins $name1]
@@ -73,6 +68,30 @@ proc cell {cell_vlnv cell_name {cell_props {}} {cell_ports {}}} {
   }
   foreach {local_name remote_name} [uplevel 1 [list subst $cell_ports]] {
     wire $cell_name/$local_name $remote_name
+  }
+}
+
+# Procedure for initializing the processing system
+proc init_ps {ps_name preset {ps_props {}} {ps_ports {}}} {
+  # Create the PS
+  cell xilinx.com:ip:processing_system7:5.5 $ps_name {} {}
+  # Apply the automation configuration
+  # - make_external externalizes the pins
+  # - apply_board_preset applies the preset configuration in boards/[board]/board_files/1.0/preset.xml
+  # - Master/Slave control the cross-triggering feature (In/Out, not needed for any projects right now)
+  set cfg_list {make_external {FIXED_IO, DDR} apply_board_preset $preset Master Disable Slave Disable}
+  apply_bd_automation -rule xilinx.com:bd_rule:processing_system7 -config $cfg_list [get_bd_cells $ps_name]
+  # Set post-automation properties
+  set prop_list {}
+  foreach {prop_name prop_value} [uplevel 1 [list subst $ps_props]] {
+    lappend prop_list CONFIG.$prop_name $prop_value
+  }
+  if {[llength $prop_list] > 1} {
+    set_property -dict $prop_list [get_bd_cells $ps_name]
+  }
+  # Wire the ports
+  foreach {local_name remote_name} [uplevel 1 [list subst $ps_ports]] {
+    wire $ps_name/$local_name $remote_name
   }
 }
 
