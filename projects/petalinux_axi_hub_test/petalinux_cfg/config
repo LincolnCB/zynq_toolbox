@@ -225,8 +225,8 @@ CONFIG_SUBSYSTEM_RFS_FORMATS="cpio cpio.gz cpio.gz.u-boot ext4 tar.gz jffs2"
 #
 # Firmware Version Configuration
 #
-CONFIG_SUBSYSTEM_HOSTNAME="shim_controller"
-CONFIG_SUBSYSTEM_PRODUCT="shim_controller"
+CONFIG_SUBSYSTEM_HOSTNAME="test_system"
+CONFIG_SUBSYSTEM_PRODUCT="test_system"
 CONFIG_SUBSYSTEM_FW_VERSION="1.00"
 CONFIG_YOCTO_MACHINE_NAME="zynq-generic"
 CONFIG_YOCTO_INCLUDE_MACHINE_NAME=""

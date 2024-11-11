@@ -12,12 +12,6 @@ if [ ! -f "tmp/${1}_${2}.xsa" ]; then
     exit 1
 fi
 
-# Check that the necessary bitstream exists
-if [ ! -f "tmp/${1}_${2}.bit" ]; then
-    echo "Missing generated bitstream file: tmp/${1}_${2}.xsa."
-    exit 1
-fi
-
 # Check that the necessary PetaLinux config files exist
 if [ ! -f "projects/${2}/petalinux_cfg/config" ]; then
     echo "Missing source PetaLinux project configuration for project ${2}: projects/${2}/petalinux_cfg/config"
