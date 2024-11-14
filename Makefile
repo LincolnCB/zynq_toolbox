@@ -179,9 +179,9 @@ tmp/$(BOARD)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(PROJECT)/project.xpr
 
 # The compressed root filesystem
 # Requires the hardware definition file
-# Build using the scripts/petalinux.sh file
+# Build using the scripts/petalinux_build.sh file
 tmp/$(BOARD)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(PROJECT)/hw_def.xsa
 	@./scripts/makefile_status.sh "MAKING LINUX SYSTEM: $(BOARD)/$(PROJECT)/petalinux"
 	source $(PETALINUX_PATH)/settings.sh && \
-	scripts/petalinux.sh $(BOARD) $(PROJECT)
+		scripts/petalinux_build.sh $(BOARD) $(PROJECT)
 

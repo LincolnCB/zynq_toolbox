@@ -1,7 +1,7 @@
 `timescale 1ns / 1ps
 
 // A wrapper for the Xilinx OBUFDS primitive with a parameterized width
-module lcb_differential_out_buffer #
+module differential_out_buffer #
 (
   parameter integer DIFF_BUFFER_WIDTH = 1
 )

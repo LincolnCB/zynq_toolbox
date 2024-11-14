@@ -1,17 +1,13 @@
-global board_name
-global project_name
-
-# Create processing_system7
-cell xilinx.com:ip:processing_system7:5.5 ps_0 {} {
+# Create processing system
+init_ps ps_0 1 {
+  PCW_USE_S_AXI_ACP 0
+  PCW_UART1_PERIPHERAL_ENABLE 1
+  PCW_UART1_UART1_IO {MIO 36 .. 37}
+  PCW_MIO_36_PULLUP enabled
+  PCW_MIO_37_PULLUP enabled
+} {
   M_AXI_GP0_ACLK ps_0/FCLK_CLK0
 }
-
-# Create all required interconnections
-apply_bd_automation -rule xilinx.com:bd_rule:processing_system7 -config {
-  make_external {FIXED_IO, DDR}
-  Master Disable
-  Slave Disable
-} [get_bd_cells ps_0]
 
 # Create proc_sys_reset
 cell xilinx.com:ip:proc_sys_reset:5.0 rst_0
@@ -47,6 +43,7 @@ cell xilinx.com:ip:blk_mem_gen:8.4 gradient_memory_0 {
   REGISTER_PORTB_OUTPUT_OF_MEMORY_PRIMITIVES false
 }
 
+
 # Create axi_bram_writer for gradient waveform
 cell pavel-demin:user:axi_bram_writer:1.0 gradient_writer_0 {
   AXI_DATA_WIDTH 32
@@ -56,31 +53,19 @@ cell pavel-demin:user:axi_bram_writer:1.0 gradient_writer_0 {
 } {
   BRAM_PORTA gradient_memory_0/BRAM_PORTA
 }
-
 # Create all required interconnections on AXI bus for waveform writer
-apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {
-  Master /ps_0/M_AXI_GP0
-  Clk Auto
-} [get_bd_intf_pins gradient_writer_0/S_AXI]
+auto_connect_axi 0x40000000 256K gradient_writer_0/S_AXI /ps_0/M_AXI_GP0
 
 
-set_property RANGE 256K [get_bd_addr_segs ps_0/Data/SEG_gradient_writer_0_reg0]
-set_property OFFSET 0x40000000 [get_bd_addr_segs ps_0/Data/SEG_gradient_writer_0_reg0]
-
+# Create the shim_dac controller (spi sequencer)
 module shim_dac_0 {
     source projects/shim_controller/shim_dacs.tcl
 } {
     spi_sequencer_0/BRAM_PORT0 gradient_memory_0/BRAM_PORTB
 }
-
 # Create all required interconnections on AXI bus for shim_dac controller
-apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {
-  Master /ps_0/M_AXI_GP0
-  Clk Auto
-} [get_bd_intf_pins shim_dac_0/spi_sequencer_0/S_AXI]
+auto_connect_axi 0x40201000 4K shim_dac_0/spi_sequencer_0/S_AXI /ps_0/M_AXI_GP0
 
-set_property RANGE  4K [get_bd_addr_segs ps_0/Data/SEG_spi_sequencer_0_reg0]
-set_property OFFSET 0x40201000 [get_bd_addr_segs ps_0/Data/SEG_spi_sequencer_0_reg0]
 
 # Create an AXI bus config register
 # this should not be needed at all, but makes it easy right now to provide some
@@ -90,17 +75,10 @@ cell pavel-demin:user:axi_cfg_register:1.0 cfg_0 {
   AXI_ADDR_WIDTH 32
   AXI_DATA_WIDTH 32
 }
-
 # Create all required interconnections
-apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {
-  Master /ps_0/M_AXI_GP0
-  Clk Auto
-} [get_bd_intf_pins cfg_0/S_AXI]
+auto_connect_axi 0x40200000 4K cfg_0/S_AXI /ps_0/M_AXI_GP0
 
-set_property RANGE 4K [get_bd_addr_segs ps_0/Data/SEG_cfg_0_reg0]
-set_property OFFSET 0x40200000 [get_bd_addr_segs ps_0/Data/SEG_cfg_0_reg0]
-
-# Connect the MMCM to the PS
+# Manually connect the MMCM to the PS
 apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {
     Clk_master {/ps_0/FCLK_CLK0 (142 MHz)}
     Clk_slave {Auto}
@@ -110,9 +88,7 @@ apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {
     intc_ip {/ps_0_axi_periph}
     master_apm {0}
 }  [get_bd_intf_pins mmcm_0/s_axi_lite]
-
 # seems like by default this is mapped to 0x43c00000/64K
-
 # set the address map for the MMCM, note for this interface the basename is "Reg" not "reg0"
 set_property RANGE 64K [get_bd_addr_segs ps_0/Data/SEG_mmcm_0_Reg]
 set_property OFFSET 0x43C00000 [get_bd_addr_segs ps_0/Data/SEG_mmcm_0_Reg]
@@ -122,26 +98,28 @@ cell open-mri:user:axi_trigger_core:1.0 trigger_core_0 {
   C_S_AXI_DATA_WIDTH 32
   C_S_AXI_ADDR_WIDTH 12
 } {
-    aclk /ps_0/FCLK_CLK0
-    aresetn /rst_0/peripheral_aresetn
+  aclk /ps_0/FCLK_CLK0
+  aresetn /rst_0/peripheral_aresetn
 }
-
 # Create all required interconnections on AXI bus for trigger core
-apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {
-  Master /ps_0/M_AXI_GP0
-  Clk Auto
-} [get_bd_intf_pins trigger_core_0/S_AXI]
-
-set_property RANGE  4K [get_bd_addr_segs ps_0/Data/SEG_trigger_core_0_reg0]
-set_property OFFSET 0x40202000 [get_bd_addr_segs ps_0/Data/SEG_trigger_core_0_reg0]
+auto_connect_axi 0x40202000 4K trigger_core_0/S_AXI /ps_0/M_AXI_GP0
 
 # The RAM for the gradients should not have wait states?
 set_property -dict [list CONFIG.Register_PortB_Output_of_Memory_Primitives {true} CONFIG.Register_PortB_Output_of_Memory_Core {false}] [get_bd_cells gradient_memory_0]
 
 # the gradient DAC trigger pulse
 connect_bd_net [get_bd_pins trigger_core_0/trigger_out] [get_bd_pins shim_dac_0/spi_sequencer_0/waveform_trigger]
-# connect to pins
-connect_bd_net [get_bd_pins trigger_i] [get_bd_pins trigger_core_0/trigger_in]
+###############
+# 2024-11-05: Trigger is inverted on the first test board. Invert again here.
+cell xilinx.com:ip:util_vector_logic trigger_inv {
+  C_SIZE 1
+  C_OPERATION not
+} {
+  Op1 trigger_i
+  Res trigger_core_0/trigger_in
+}
+# connect_bd_net [get_bd_pins trigger_i] [get_bd_pins trigger_core_0/trigger_in]
+###############
 
 # Hook up the SPI reference clock
 connect_bd_net [get_bd_pins shim_dac_0/spi_sequencer_0/spi_ref_clk] [get_bd_pins mmcm_0/clk_out1] 
@@ -166,10 +144,16 @@ cell lcb:user:differential_out_buffer:1.0 spi_clk_o_buf {
   diff_out_n spi_clk_o_n
 }
 # Differential output buffer for LDAC
+cell xilinx.com:ip:util_vector_logic ldac_inv {
+  C_SIZE 1
+  C_OPERATION not
+} {
+  Op1 /shim_dac_0/spi_sequencer_0/spi_ldacn
+}
 cell lcb:user:differential_out_buffer:1.0 ldac_o_buf {
   DIFF_BUFFER_WIDTH 1
 } {
-  d_in /shim_dac_0/spi_sequencer_0/spi_ldacn
+  d_in ldac_inv/Res
   diff_out_p ldac_o_p
   diff_out_n ldac_o_n
 }

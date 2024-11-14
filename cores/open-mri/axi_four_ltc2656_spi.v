@@ -30,11 +30,11 @@
 //
 module axi_four_ltc2656_spi #
 (
- parameter integer C_S_AXI_DATA_WIDTH = 32,
- parameter integer C_S_AXI_ADDR_WIDTH = 16,
- parameter integer BRAM_DATA_WIDTH = 32,
- parameter integer BRAM_ADDR_WIDTH = 16,
- parameter CONTINUOUS = "FALSE"
+  parameter integer C_S_AXI_DATA_WIDTH = 32,
+  parameter integer C_S_AXI_ADDR_WIDTH = 16,
+  parameter integer BRAM_DATA_WIDTH = 32,
+  parameter integer BRAM_ADDR_WIDTH = 16,
+  parameter CONTINUOUS = "FALSE"
 )
 (
   // System signals
@@ -53,9 +53,9 @@ module axi_four_ltc2656_spi #
   output  wire                            bram_port0_clk,
   (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 bram_port0 RST" *)
   output  wire                            bram_port0_rst,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 b_bram ADDR" *)
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 bram_port0 ADDR" *)
   output  wire  [BRAM_ADDR_WIDTH-1:0]     bram_port0_addr,
-  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 b_bram DOUT" *)
+  (* X_INTERFACE_INFO = "xilinx.com:interface:bram:1.0 bram_port0 DOUT" *)
   input   wire  [BRAM_DATA_WIDTH-1:0]     bram_port0_rddata,
 
   // SPI signals for the three DAC ICs
