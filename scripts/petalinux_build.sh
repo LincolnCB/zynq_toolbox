@@ -41,7 +41,7 @@ fi
 
 # Create and enter the project
 cd tmp/${BRD}/${PRJ}
-petalinux-create project --template zynq --name petalinux
+petalinux-create -t project --template zynq --name petalinux --force
 cd petalinux
 
 # Patch the project configuration

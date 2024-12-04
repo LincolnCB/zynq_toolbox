@@ -15,8 +15,23 @@ BOARD ?= snickerdoodle_black
 ## Initialization
 #############################################
 
+# Check for the REV D environment variable
+ifneq ($(shell pwd),$(REV_D_DIR))
+$(error Environment variable REV_D_DIR does not match the current directory)
+$(error - Current directory: $(shell pwd))
+$(error - REV_D_DIR: $(REV_D_DIR))
+endif
+
+# Check if the target is only clean or cleanall (to avoid unnecessary checks)
+CLEAN_ONLY = false
+ifneq ($(),$(MAKECMDGOALS))
+ifeq ($(),$(filter-out clean cleanall,$(MAKECMDGOALS)))
+CLEAN_ONLY = true
+endif
+endif
+
 # Run some checks and setup, but only if there are targets other than clean or cleanall
-ifneq ($(),$(filter-out clean cleanall,$(MAKECMDGOALS))) # Clean check
+ifneq (true, CLEAN_ONLY) # Clean check
 
 # Check that the project and board exist, and that the necessary files are present
 ifeq ($(),$(wildcard boards/$(BOARD)/board_config.json))
@@ -102,7 +117,7 @@ boot: tmp/$(BOARD)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz
 	@./scripts/makefile_status.sh "PACKAGING BOOT.BIN"
 	cd tmp/$(BOARD)/$(PROJECT)/petalinux && \
 		source $(PETALINUX_PATH)/settings.sh && \
-		petalinux-package boot \
+		petalinux-package --boot \
 		--format BIN \
 		--fsbl \
 		--fpga \
@@ -158,7 +173,7 @@ tmp/cores/%: cores/%.v
 # Requires all the cores
 # Built using the `scripts/project.tcl` script, which uses
 # 	the block design and ports files from the project
-tmp/$(BOARD)/$(PROJECT)/project.xpr: projects/$(PROJECT) $(addprefix tmp/cores/, $(PROJECT_CORES))
+tmp/$(BOARD)/$(PROJECT)/project.xpr: $(addprefix tmp/cores/, $(PROJECT_CORES))
 	@./scripts/makefile_status.sh "MAKING PROJECT: $(BOARD)/$(PROJECT)/project.xpr"
 	mkdir -p $(@D)
 	$(VIVADO) -source scripts/project.tcl -tclargs $(BOARD) $(PROJECT)

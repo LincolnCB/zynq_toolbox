@@ -1,9 +1,22 @@
 #!/bin/bash
 # Create a patch file for the PetaLinux filesystem configuration
-# Usage: petalinux.sh <board_name> <project_name>
-if [ $# -ne 2 ]; then
-    echo "Usage: $0 <board_name> <project_name>"
+# Usage: petalinux.sh <board_name> <project_name> ['update' (optional)]
+if [ $# -ne 2 ] && [ $# -ne 3 ]; then
+    echo "Usage: $0 <board_name> <project_name> ['update' (optional)]"
     exit 1
+fi
+
+# Exit if "update" is not the third argument
+if [ $# -eq 3 ] && [ "${3}" != "update" ]; then
+    echo "Usage: $0 <board_name> <project_name> ['update' (optional)]"
+    exit 1
+fi
+
+# Update is the third argument or there is none
+if [ $# -eq 3 ] ; then
+    UPDATE=1
+else
+    UPDATE=0
 fi
 
 # Check if terminal width is at least 80 columns
@@ -14,6 +27,7 @@ fi
 
 # Store the positional parameters in named variables and clear them
 # (Petalinux settings script requires no positional parameters)
+CMD=${0}
 BRD=${1}
 PRJ=${2}
 set --
@@ -31,6 +45,24 @@ if [ ! -f "projects/${PRJ}/petalinux_cfg/config.patch" ]; then
     echo
     echo "  scripts/petalinux_config_project.sh ${BRD} ${PRJ}"
     echo
+    exit 1
+fi
+
+# Check that the PetaLinux root filesystem configuration patch does not already exist if not updating
+if [ -f "projects/${PRJ}/petalinux_cfg/rootfs_config.patch" ] && [ $UPDATE -ne 1]; then
+    echo "PetaLinux root filesystem configuration patch already exists for project ${PRJ}: projects/${PRJ}/petalinux_cfg/rootfs_config.patch"
+    echo "If you want to use that patch as the start point, use the following command:"
+    echo
+    echo "  ${CMD} ${BRD} ${PRJ} update"
+    exit 1
+fi
+
+# Check that the PetaLinux root filesystem configuration patch DOES exist if updating
+if [ ! -f "projects/${PRJ}/petalinux_cfg/rootfs_config.patch" ] && [ $UPDATE -eq 1 ]; then
+    echo "PetaLinux root filesystem configuration patch not found for project ${PRJ}: projects/${PRJ}/petalinux_cfg/rootfs_config.patch"
+    echo "If you want to create a new patch, copy one in or use the following command:"
+    echo
+    echo "  ${CMD} ${BRD} ${PRJ}"
     exit 1
 fi
 
@@ -54,7 +86,7 @@ if [ -d "petalinux_template" ]; then
 fi
 mkdir petalinux_template
 cd petalinux_template
-petalinux-create project --template zynq --name petalinux
+petalinux-create -t project --template zynq --name petalinux
 cd petalinux
 
 # Patch the project configuration
@@ -71,6 +103,12 @@ petalinux-config -c rootfs --silentconfig
 # Copy the default root filesystem configuration
 echo "[MAKE SCRIPT] Saving default root filesystem configuration"
 cp project-spec/configs/rootfs_config project-spec/configs/rootfs_config.default
+
+# If updating, apply the existing patch
+if [ $UPDATE -eq 1 ]; then
+    echo "[MAKE SCRIPT] Applying existing root filesystem configuration patch"
+    patch project-spec/configs/rootfs_config ../../../projects/${PRJ}/petalinux_cfg/rootfs_config.patch
+fi
 
 # Manually configure the root filesystem
 echo "[MAKE SCRIPT] Manually configuring root filesystem"

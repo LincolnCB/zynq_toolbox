@@ -12,6 +12,8 @@
 #include <signal.h>
 
 #define PI 3.14159265
+// 4-bit command word used by DAC to write to channel register, but not update the output: 0b0000 for LTC2656, 0b0001 for AD5676
+#define DAC_CMD 0b00010000
 
 typedef union {
   int32_t le_value;
@@ -53,7 +55,7 @@ typedef struct {
 // Function 1
 /* generate a gradient waveform that just changes a state 
 
-         events like this need a 30us gate time in the sequence
+  events like this need a 30us gate time in the sequence
 
   Notes about the DAC control:
   In the present OCRA hardware configuration of the AD5781 DAC, the RBUF bit must always be set so
@@ -321,7 +323,7 @@ int main(int argc, char *argv[])
 
   sleep(1);
   
-  printf("Setting FPGA clock to 143 MHz !\n"); fflush(stdout);
+  printf("Setting FPGA clock to 50 MHz !\n"); fflush(stdout);
   /* set FPGA clock to 50 MHz */
   slcr[2] = 0xDF0D;
   slcr[92] = (slcr[92] & ~0x03F03F30) | 0x00201400;  

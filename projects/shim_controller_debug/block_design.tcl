@@ -59,7 +59,7 @@ auto_connect_axi 0x40000000 256K gradient_writer_0/S_AXI /ps_0/M_AXI_GP0
 
 # Create the shim_dac controller (spi sequencer)
 module shim_dac_0 {
-    source projects/shim_controller/shim_dacs.tcl
+    source projects/shim_controller_debug/shim_dacs.tcl
 } {
     spi_sequencer_0/BRAM_PORT0 gradient_memory_0/BRAM_PORTB
 }
@@ -123,7 +123,7 @@ cell xilinx.com:ip:util_vector_logic trigger_inv {
 ###############
 
 # Hook up the SPI reference clock
-connect_bd_net [get_bd_pins shim_dac_0/spi_sequencer_0/spi_ref_clk] [get_bd_pins ps_0/FCLK_CLK0] 
+wire shim_dac_0/spi_sequencer_0/spi_ref_clk ps_0/FCLK_CLK0
 
 
 # Connect output buffers
@@ -166,3 +166,6 @@ cell lcb:user:differential_out_buffer:1.0 dac_mosi_o_buf {
   diff_out_p dac_mosi_o_p
   diff_out_n dac_mosi_o_n
 }
+
+## LCB: Add output port for AXI clock
+wire axi_clk_out ps_0/FCLK_CLK0
