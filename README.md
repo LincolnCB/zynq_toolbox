@@ -76,6 +76,23 @@ The Makefile will (with the help of the scripts, and marked by which build targe
 - Running out of disk space: Run `make clean` to remove the `tmp/` directory. This directory is used to store the Vivado project files, and can get quite large.
 - Network issues with PetaLinux: If your network connection is messy, PetaLinux can grind to a hald in the bitbake process. I'm not sure the best way to avoid this, aside from improving your connection.
 
+## Adding a board
+
+TODO
+
+## Adding a core
+
+TODO
+
+## Adding a project
+
+TODO
+
+## Configuring PetaLinux for a project
+
+TODO
+
+
 ## Directory Structure
 
 The modified organization of this repository is as follows:
