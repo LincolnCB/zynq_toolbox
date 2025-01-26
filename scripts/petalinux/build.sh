@@ -31,18 +31,18 @@ if [ ! -f "tmp/${BRD}/${PRJ}/hw_def.xsa" ]; then
 fi
 
 # Check that the necessary PetaLinux config files exist
-if [ ! -f "projects/${PRJ}/petalinux_cfg/config.patch" ]; then
+if [ ! -f "projects/${PRJ}/cfg/${BRD}/petalinux/config.patch" ]; then
     echo "[PTLNX BUILD SCRIPT] ERROR:"
-    echo "Missing PetaLinux project configuration patch file for project ${PRJ}: projects/${PRJ}/petalinux_cfg/config.patch"
+    echo "Missing PetaLinux project configuration patch file for project ${PRJ} and board ${BRD}: projects/${PRJ}/cfg/${BRD}/petalinux/config.patch"
     echo "You can create this file by running the following command:"
     echo
     echo "  scripts/petalinux/config_project.sh ${BRD} ${PRJ}"
     echo
     exit 1
 fi
-if [ ! -f "projects/${PRJ}/petalinux_cfg/rootfs_config.patch" ]; then
+if [ ! -f "projects/${PRJ}/cfg/${BRD}/petalinux/rootfs_config.patch" ]; then
     echo "[PTLNX BUILD SCRIPT] ERROR:"
-    echo "Missing PetaLinux filesystem configuration patch file for project ${PRJ}: projects/${PRJ}/petalinux_cfg/rootfs_config.patch"
+    echo "Missing PetaLinux filesystem configuration patch file for project ${PRJ} and board ${BRD}: projects/${PRJ}/cfg/${BRD}/petalinux/rootfs_config.patch"
     echo "You can create this file by running the following command:"
     echo
     echo "  scripts/petalinux/config_rootfs.sh ${BRD} ${PRJ}"
@@ -59,14 +59,14 @@ cd petalinux
 echo "[PTLNX BUILD SCRIPT] Initializing default PetaLinux project configuration"
 petalinux-config --get-hw-description ../hw_def.xsa --silentconfig
 echo "[PTLNX BUILD SCRIPT] Patching and configuring PetaLinux project"
-patch project-spec/configs/config ../../../../projects/${PRJ}/petalinux_cfg/config.patch
+patch project-spec/configs/config ../../../../projects/${PRJ}/cfg/${BRD}/petalinux/config.patch
 petalinux-config --silentconfig
 
 # Patch the root filesystem configuration
 echo "[PTLNX BUILD SCRIPT] Initializing default PetaLinux root filesystem configuration"
 petalinux-config -c rootfs --silentconfig
 echo "[PTLNX BUILD SCRIPT] Patching and configuring PetaLinux root filesystem"
-patch project-spec/configs/rootfs_config ../../../../projects/${PRJ}/petalinux_cfg/rootfs_config.patch
+patch project-spec/configs/rootfs_config ../../../../projects/${PRJ}/cfg/${BRD}/petalinux/rootfs_config.patch
 petalinux-config -c rootfs --silentconfig
 
 # Build the project

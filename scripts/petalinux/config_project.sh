@@ -41,9 +41,9 @@ if [ ! -d "projects/${PRJ}" ]; then
 fi
 
 # Check that the project configuration patch does not already exist if not updating
-if [ -f "projects/${PRJ}/petalinux_cfg/config.patch" ] && [ $UPDATE -ne 1 ]; then
+if [ -f "projects/${PRJ}/cfg/${BRD}/petalinux/config.patch" ] && [ $UPDATE -ne 1 ]; then
     echo "[PTLNX CFG SCRIPT] ERROR:"
-    echo "PetaLinux project configuration patch already exists for project ${PRJ}: projects/${PRJ}/petalinux_cfg/config.patch"
+    echo "PetaLinux project configuration patch already exists for project ${PRJ} and board ${BRD}: projects/${PRJ}/cfg/${BRD}/petalinux/config.patch"
     echo "If you want to use that patch as the start point, use the following command:"
     echo
     echo "  ${CMD} ${BRD} ${PRJ} update"
@@ -51,9 +51,9 @@ if [ -f "projects/${PRJ}/petalinux_cfg/config.patch" ] && [ $UPDATE -ne 1 ]; the
 fi
 
 # Check that the project configuration patch DOES exist if updating
-if [ ! -f "projects/${PRJ}/petalinux_cfg/config.patch" ] && [ $UPDATE -eq 1 ]; then
+if [ ! -f "projects/${PRJ}/cfg/${BRD}/petalinux/config.patch" ] && [ $UPDATE -eq 1 ]; then
     echo "[PTLNX CFG SCRIPT] ERROR:"
-    echo "Missing PetaLinux project configuration patch for project ${PRJ}: projects/${PRJ}/petalinux_cfg/config.patch"
+    echo "Missing PetaLinux project configuration patch for project ${PRJ} and board ${BRD}: projects/${PRJ}/cfg/${BRD}/petalinux/config.patch"
     echo "If you want to create a new patch, copy one in or use the following command:"
     echo
     echo "  ${CMD} ${BRD} ${PRJ}"
@@ -96,7 +96,7 @@ cp project-spec/configs/config project-spec/configs/config.default
 # If updating, apply the existing patch
 if [ $UPDATE -eq 1 ]; then
     echo "[PTLNX CFG SCRIPT] Applying existing PetaLinux project configuration patch"
-    patch project-spec/configs/config ../../../projects/${PRJ}/petalinux_cfg/config.patch
+    patch project-spec/configs/config ../../../projects/${PRJ}/cfg/${BRD}/petalinux/config.patch
 fi
 
 # Manually configure the project
@@ -107,7 +107,7 @@ petalinux-config
 echo "[PTLNX CFG SCRIPT] Creating PetaLinux project configuration patch"
 diff -u project-spec/configs/config.default project-spec/configs/config | \
     tail -n +3 > \
-    ../../../projects/${PRJ}/petalinux_cfg/config.patch
+    ../../../projects/${PRJ}/cfg/${BRD}/petalinux/config.patch
 
 # Replace the patched project configuration with the default
 echo "[PTLNX CFG SCRIPT] Restoring default PetaLinux project configuration for template project"

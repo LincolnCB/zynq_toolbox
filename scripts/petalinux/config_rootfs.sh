@@ -40,9 +40,9 @@ if [ ! -d "projects/${PRJ}" ]; then
 fi
 
 # Check that the PetaLinux project configuration patch exists
-if [ ! -f "projects/${PRJ}/petalinux_cfg/config.patch" ]; then
+if [ ! -f "projects/${PRJ}/cfg/${BRD}/petalinux/config.patch" ]; then
     echo "[PTLNX ROOTFS SCRIPT] ERROR:"
-    echo "Missing PetaLinux project configuration patch for project ${PRJ}: projects/${PRJ}/petalinux_cfg/config.patch"
+    echo "Missing PetaLinux project configuration patch for project ${PRJ} and board ${BRD}: projects/${PRJ}/cfg/${BRD}/petalinux/config.patch"
     echo "First run the following command:"
     echo
     echo "  scripts/petalinux/config_project.sh ${BRD} ${PRJ}"
@@ -51,9 +51,9 @@ if [ ! -f "projects/${PRJ}/petalinux_cfg/config.patch" ]; then
 fi
 
 # Check that the PetaLinux root filesystem configuration patch does not already exist if not updating
-if [ -f "projects/${PRJ}/petalinux_cfg/rootfs_config.patch" ] && [ $UPDATE -ne 1 ]; then
+if [ -f "projects/${PRJ}/cfg/${BRD}/petalinux/rootfs_config.patch" ] && [ $UPDATE -ne 1 ]; then
     echo "[PTLNX ROOTFS SCRIPT] ERROR:"
-    echo "PetaLinux root filesystem configuration patch already exists for project ${PRJ}: projects/${PRJ}/petalinux_cfg/rootfs_config.patch"
+    echo "PetaLinux root filesystem configuration patch already exists for project ${PRJ} and board ${BRD}: projects/${PRJ}/cfg/${BRD}/petalinux/rootfs_config.patch"
     echo "If you want to use that patch as the start point, use the following command:"
     echo
     echo "  ${CMD} ${BRD} ${PRJ} update"
@@ -61,9 +61,9 @@ if [ -f "projects/${PRJ}/petalinux_cfg/rootfs_config.patch" ] && [ $UPDATE -ne 1
 fi
 
 # Check that the PetaLinux root filesystem configuration patch DOES exist if updating
-if [ ! -f "projects/${PRJ}/petalinux_cfg/rootfs_config.patch" ] && [ $UPDATE -eq 1 ]; then
+if [ ! -f "projects/${PRJ}/cfg/${BRD}/petalinux/rootfs_config.patch" ] && [ $UPDATE -eq 1 ]; then
     echo "[PTLNX ROOTFS SCRIPT] ERROR:"
-    echo "Missing PetaLinux root filesystem configuration patch for project ${PRJ}: projects/${PRJ}/petalinux_cfg/rootfs_config.patch"
+    echo "Missing PetaLinux root filesystem configuration patch for project ${PRJ} and board ${BRD}: projects/${PRJ}/cfg/${BRD}/petalinux/rootfs_config.patch"
     echo "If you want to create a new patch, copy one in or use the following command:"
     echo
     echo "  ${CMD} ${BRD} ${PRJ}"
@@ -98,7 +98,7 @@ cd petalinux
 echo "[PTLNX ROOTFS SCRIPT] Initializing default PetaLinux project configuration"
 petalinux-config --get-hw-description ../../${BRD}/${PRJ}/hw_def.xsa --silentconfig
 echo "[PTLNX ROOTFS SCRIPT] Patching and configuring PetaLinux project"
-patch project-spec/configs/config ../../../../projects/${PRJ}/petalinux_cfg/config.patch
+patch project-spec/configs/config ../../../../projects/${PRJ}/cfg/${BRD}/petalinux/config.patch
 petalinux-config --silentconfig
 
 # Initialize the default root filesystem configuration
@@ -112,7 +112,7 @@ cp project-spec/configs/rootfs_config project-spec/configs/rootfs_config.default
 # If updating, apply the existing patch
 if [ $UPDATE -eq 1 ]; then
     echo "[PTLNX ROOTFS SCRIPT] Applying existing PetaLinux root filesystem configuration patch"
-    patch project-spec/configs/rootfs_config ../../../projects/${PRJ}/petalinux_cfg/rootfs_config.patch
+    patch project-spec/configs/rootfs_config ../../../projects/${PRJ}/cfg/${BRD}/petalinux/rootfs_config.patch
 fi
 
 # Manually configure the root filesystem
@@ -123,7 +123,7 @@ petalinux-config -c rootfs
 echo "[PTLNX ROOTFS SCRIPT] Creating PetaLinux root filesystem configuration patch"
 diff -u project-spec/configs/rootfs_config.default project-spec/configs/rootfs_config | \
     tail -n +3 > \
-    ../../../projects/${PRJ}/petalinux_cfg/rootfs_config.patch
+    ../../../projects/${PRJ}/cfg/${BRD}/petalinux/rootfs_config.patch
 
 # Replace the root filesystem configuration with the default for the template project
 echo "[PTLNX ROOTFS SCRIPT] Restoring default PetaLinux root filesystem configuration for template project"
