@@ -1,4 +1,5 @@
 ## FIFO Module with 32-bit CFG and STS connections
+
 # Ports to connect:
 # S_AXIS: AXI Stream Subordinate interface
 create_bd_intf_pin -mode Slave -vlnv xilinx.com:interface:axis_rtl:1.0 s_axis

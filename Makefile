@@ -7,7 +7,7 @@
 # - e.g. 'make PROJECT=example_axi_hub_regs BOARD=snickerdoodle_black'
 
 # Default values for PROJECT and BOARD
-PROJECT ?= example_axi_hub_regs
+PROJECT ?= example_axi_hub
 BOARD ?= snickerdoodle_black
 
 
