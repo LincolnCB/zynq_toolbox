@@ -49,18 +49,20 @@ update_ip_catalog
 ### Define a set of Tcl procedures to simplify the creation of block designs
 ################################################################################
 
-# Procedure for connecting (wiring) two ports together
+# Procedure for connecting (wiring) two pins together
+# Can handle both regular and interface pins. 
+# Attempts to wire normal pins, then interface pins.
 proc wire {name1 name2} {
-  set port1 [get_bd_pins $name1]
-  set port2 [get_bd_pins $name2]
-  if {[llength $port1] == 1 && [llength $port2] == 1} {
-    connect_bd_net $port1 $port2
+  set pin1 [get_bd_pins $name1]
+  set pin2 [get_bd_pins $name2]
+  if {[llength $pin1] == 1 && [llength $pin2] == 1} {
+    connect_bd_net $pin1 $pin2
     return
   }
-  set port1 [get_bd_intf_pins $name1]
-  set port2 [get_bd_intf_pins $name2]
-  if {[llength $port1] == 1 && [llength $port2] == 1} {
-    connect_bd_intf_net $port1 $port2
+  set pin1 [get_bd_intf_pins $name1]
+  set pin2 [get_bd_intf_pins $name2]
+  if {[llength $pin1] == 1 && [llength $pin2] == 1} {
+    connect_bd_intf_net $pin1 $pin2
     return
   }
   error "** ERROR: can't connect $name1 and $name2"
@@ -68,10 +70,12 @@ proc wire {name1 name2} {
 
 # Procedure for creating a cell
 #  cell_vlnv: VLNV of the cell (vendor:library:name:version)
+#    For repository IP defined in cores, the format is:
+#      [directory (e.g. pavel-demin)]:user:[filename (e.g. axi_hub)]:1.0
 #  cell_name: name of the cell
 #  cell_props: dictionary of properties to set
-#  cell_ports: dictionary of ports to wire (put the local name first)
-proc cell {cell_vlnv cell_name {cell_props {}} {cell_ports {}}} {
+#  cell_conn: dictionary of pins to wire (local_name / remote_name)
+proc cell {cell_vlnv cell_name {cell_props {}} {cell_conn {}}} {
   set cell [create_bd_cell -type ip -vlnv $cell_vlnv $cell_name]
   set prop_list {}
   foreach {prop_name prop_value} [uplevel 1 [list subst $cell_props]] {
@@ -80,16 +84,19 @@ proc cell {cell_vlnv cell_name {cell_props {}} {cell_ports {}}} {
   if {[llength $prop_list] > 1} {
     set_property -dict $prop_list $cell
   }
-  foreach {local_name remote_name} [uplevel 1 [list subst $cell_ports]] {
+  foreach {local_name remote_name} [uplevel 1 [list subst $cell_conn]] {
     wire $cell_name/$local_name $remote_name
   }
 }
 
 # Procedure for initializing the processing system
+# Initialize the processing system from the preset defined in 
+# boards/[board]/board_files/1.0/preset.xml
+# then overwrites some properties with those in ps_props
 #  ps_name: name of the processing system
-#  preset: 0 or 1 (0 for default, 1 for board preset)
 #  ps_props: dictionary of properties to set
-proc init_ps {ps_name preset {ps_props {}} {ps_ports {}}} {
+#  ps_conn: dictionary of pins to wire (local_name / remote_name)
+proc init_ps {ps_name {ps_props {}} {ps_conn {}}} {
   
   # Create the PS
   cell xilinx.com:ip:processing_system7:5.5 $ps_name {} {}
@@ -98,7 +105,7 @@ proc init_ps {ps_name preset {ps_props {}} {ps_ports {}}} {
   # - apply_board_preset applies the preset configuration in boards/[board]/board_files/1.0/preset.xml
   # - make_external externalizes the pins
   # - Master/Slave control the cross-triggering feature (In/Out, not needed for any projects right now)
-  set cfg_list [list apply_board_preset $preset make_external {FIXED_IO, DDR} Master Disable Slave Disable]
+  set cfg_list [list apply_board_preset 1 make_external {FIXED_IO, DDR} Master Disable Slave Disable]
   apply_bd_automation -rule xilinx.com:bd_rule:processing_system7 -config $cfg_list [get_bd_cells $ps_name]
   
   # Set post-automation properties
@@ -110,42 +117,49 @@ proc init_ps {ps_name preset {ps_props {}} {ps_ports {}}} {
     set_property -dict $prop_list [get_bd_cells $ps_name]
   }
 
-  # Wire the ports
-  foreach {local_name remote_name} [uplevel 1 [list subst $ps_ports]] {
+  # Wire the pins
+  foreach {local_name remote_name} [uplevel 1 [list subst $ps_conn]] {
     wire $ps_name/$local_name $remote_name
   }
 }
 
-# Procedure for creating a module sourced from another tcl script
+# Procedure for creating a module from a tcl section
 #  module_name: name of the module
-#  module_body: body of the module (can be sourced from another tcl script)
-#  module_ports: dictionary of ports to wire (put the local name first)
-proc module {module_name module_body {module_ports {}}} {
+#  module_body: body of the module (can just be a source command to another tcl file)
+#  module_conn: dictionary of pins to wire (put the local name first)
+proc module {module_name module_body {module_conn {}}} {
   set instance [current_bd_instance .]
   current_bd_instance [create_bd_cell -type hier $module_name]
   eval $module_body
   current_bd_instance $instance
 
-  # Wire the local ports externally
-  foreach {local_name remote_name} [uplevel 1 [list subst $module_ports]] {
+  # Wire the local pins externally
+  foreach {local_name remote_name} [uplevel 1 [list subst $module_conn]] {
     wire $module_name/$local_name $remote_name
   }
 }
 
-# Procedure for assigning an address for an already-connected AXI interface port
-proc addr {offset range port} {
-  set object [get_bd_intf_pins $port]
+# Procedure for assigning an address for an already-connected AXI interface pin
+#  offset: offset of the address
+#  range: range of the address
+#  intf_pin: name of the interface pin to assign the address to
+proc addr {offset range intf_pin} {
+  set object [get_bd_intf_pins $intf_pin]
   set segment [get_bd_addr_segs -of_objects $object]
   assign_bd_address -offset $offset -range $range $segment
 }
 
 # Automate the creation of an AXI interconnect. This creates an intermediary AXI core.
-#   Note: "master" needs a "/" prefix, "port" does not
-proc auto_connect_axi {offset range port master} {
-  set object [get_bd_intf_pins $port]
+#  offset: offset of the address
+#  range: range of the address
+#  intf_pin: name of the interface pin to connect to the AXI interconnect
+#  master: name of the master to connect to the AXI interconnect
+#   Note: "master" needs to be an absolute path with a "/" prefix, "inf_pin" does not
+proc auto_connect_axi {offset range intf_pin master} {
+  set object [get_bd_intf_pins $intf_pin]
   set config [list Master $master Clk Auto]
   apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config $config $object
-  addr $offset $range $port
+  addr $offset $range $intf_pin
 }
 
 ##############################################################################

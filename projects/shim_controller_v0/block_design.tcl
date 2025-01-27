@@ -1,5 +1,5 @@
 # Create processing system
-init_ps ps_0 1 {
+init_ps ps_0 {
   PCW_USE_S_AXI_ACP 0
   PCW_UART1_PERIPHERAL_ENABLE 1
   PCW_UART1_UART1_IO {MIO 36 .. 37}
