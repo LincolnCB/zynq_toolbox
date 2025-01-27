@@ -5,6 +5,9 @@ Board support can be added here by creating a folder named after the board. A bo
 ```
 [board_name]/
 ├── board_files/1.0/                      - Board files for the board
+│   ├── board.xml                         - Board description file for Vivado
+│   ├── part0_pins.xml                    - Pinout file for the board
+│   └── preset.xml                        - Processing system preset file for the board
 ├── examples/                             - [OPTIONAL] Example or default design constraints
 │   │                                       and port definitions for the board
 │   ├── xdc/                              - [OPTIONAL] Example XDC files for the board, suffixed with .example
@@ -30,3 +33,4 @@ The current boards are:
 - `snickerdoodle_black` - The Snickerdoodle Black, the target board for the Rev D Shim
 - `stemlab_125_14` - The Red Pitaya STEMlab 125-14, used in many of Pavel Demin's projects
 - `sdrlab_122_16` - The Red Pitaya SDRLab 122-16, which the OCRA project supports
+- `zybo_z7_10` - The Digilent Zybo Z7-10, which uses the Zynq-7010 SoC
