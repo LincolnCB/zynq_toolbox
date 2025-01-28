@@ -38,13 +38,16 @@ Shim playback
 
 Milestones:
 - Parity with original OCRA code -- DAC playback works with load on the bench
-- Noise test
-- New trigger core with force trigger from software (for debugging, static shim)
+- Noise test --> RF noise floor variance changes less than 2% when DACs and ADCs operate during image encode readout window
+- New trigger core with force trigger from software (for debugging, static shim).
+- Successfully update slice-by-slice shims in 2D EPI acquisitions and verify that currents settle in < 1ms and cause no image detectable image artifacts
+- Play out an arbitrary waveform during an MRI acquisition using a local encoding coil and verify that image encoding occurs as expected.  For example, play out trapezoid diffusion encode waveforms in a triggered 2D spin-echo EPI sequence (classic Stejskal-Tanner experiment).
+- Create Pulseq acquisition with chemical shift imaging to map the applied field field in phantom at every point during readout to measure the field and verify that it follows the current accurately; use for image recon calibration if needed.
 - DAC streaming with DMA on the bench
 - ADC streaming with DMA on the bench
 - Buffer drain
 - E-stop system with interrupt from software
-- Software-defined SPI clock
+- Software-defined SPI clock 
 - E-stop error codes and interrupt to software
 - Integrator
 - Shutdown sense
