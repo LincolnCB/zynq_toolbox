@@ -59,6 +59,7 @@ export PROC=$(shell jq -r '.proc' boards/$(BOARD)/board_config.json)
 
 # Get the list of necessary cores from the project file to avoid building unnecessary cores
 PROJECT_CORES = $(shell ./scripts/make/get_cores_from_tcl.sh projects/$(PROJECT)/block_design.tcl)
+$(info Project cores: $(PROJECT_CORES))
 
 endif # Clean check
 
