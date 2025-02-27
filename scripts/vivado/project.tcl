@@ -5,10 +5,11 @@ package require json
 
 # Arguments: board_name project_name
 set board_name [lindex $argv 0]
-set project_name [lindex $argv 1]
+set board_ver [lindex $argv 1]
+set project_name [lindex $argv 2]
 
 # Set the temporary directory for the project
-set tmp_dir tmp/${board_name}/${project_name}
+set tmp_dir tmp/${board_name}/${board_ver}/${project_name}
 
 ## Extract the part information from the board name
 # Read the json config for the board into a dict

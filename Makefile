@@ -4,13 +4,14 @@
 ## Required environment variable inputs to the Makefile
 #############################################
 
-# You need to set PROJECT and BOARD to the project and board you want to build
+# You need to set PROJECT, BOARD, and BOARD_VERto the project and board you want to build
 # These can be set on the command line:
-# - e.g. 'make PROJECT=example_axi_hub_regs BOARD=snickerdoodle_black'
+# - e.g. 'make PROJECT=example_axi_hub_regs BOARD=snickerdoodle_black BOARD_VER=1.0'
 
 # Default values for PROJECT and BOARD
 PROJECT ?= example_axi_hub
 BOARD ?= snickerdoodle_black
+BOARD_VER ?= 1.0
 
 #############################################
 
@@ -24,8 +25,8 @@ BOARD ?= snickerdoodle_black
 
 # Check for the REV D environment variable
 ifneq ($(shell pwd),$(REV_D_DIR))
-$(error Environment variable REV_D_DIR does not match the current directory)
-$(error - Current directory: $(shell pwd))
+$(warning Environment variable REV_D_DIR does not match the current directory)
+$(warning - Current directory: $(shell pwd))
 $(error - REV_D_DIR: $(REV_D_DIR))
 endif
 
@@ -37,30 +38,59 @@ CLEAN_ONLY = true
 endif
 endif
 
+$(info --------------------------)
+$(info ---- Making "$(MAKECMDGOALS)")
+
 # Run some checks and setup, but only if there are targets other than clean or cleanall
 ifneq (true, $(CLEAN_ONLY)) # Clean check
+$(info ----  for project "$(PROJECT)" and board "$(BOARD)" version $(BOARD_VER))
 
 # Check that the project and board exist, and that the necessary files are present
-ifeq ($(),$(wildcard boards/$(BOARD)/board_files/))
-$(error Board files for board "$(BOARD)": "boards/$(BOARD)/board_files/[version]" does not exist)
+ifeq ($(),$(wildcard boards/$(BOARD)))
+$(info Board folder for board "$(BOARD)" does not exist)
+$(info  -- boards/$(BOARD)/)
+$(error Missing folder)
 endif
-ifeq ($(),$(wildcard boards/$(BOARD)/board_config.json))
-$(error Board configuration file for board "$(BOARD)": "boards/$(BOARD)/board_config.json" does not exist)
+ifeq ($(),$(wildcard boards/$(BOARD)/board_files/$(BOARD_VER)/*))
+$(info Board files for version "$(BOARD_VER)" of board "$(BOARD)" do not exist)
+$(info -- boards/$(BOARD)/board_files/$(BOARD_VER)/)
+$(error Missing folder/files)
 endif
+# ifeq ($(),$(wildcard boards/$(BOARD)/board_config.json))
+# $(error Board configuration file for board "$(BOARD)": "boards/$(BOARD)/board_config.json" does not exist)
+# endif
 ifeq ($(),$(wildcard projects/$(PROJECT)))
-$(error Project "$(PROJECT)" does not exist -- missing folder "projects/$(PROJECT)")
+$(info Project "$(PROJECT)" folder does not exist)
+$(info  -- projects/$(PROJECT)/)
+$(error Missing folder)
 endif
 ifeq ($(),$(wildcard projects/$(PROJECT)/block_design.tcl))
-$(error Project "$(PROJECT)" does not have a block design file "projects/$(PROJECT)/block_design.tcl")
+$(info Project "$(PROJECT)" does not have a block design TCL file)
+$(info  -- projects/$(PROJECT)/block_design.tcl)
+$(error Missing file)
 endif
 ifeq ($(),$(wildcard projects/$(PROJECT)/ports.tcl))
-$(error Project "$(PROJECT)" does not have a ports file "projects/$(PROJECT)/ports.tcl")
+$(info Project "$(PROJECT)" does not have a ports TCL file)
+$(info  -- projects/$(PROJECT)/ports.tcl)
+$(error Missing file)
 endif
-ifeq ($(),$(wildcard projects/$(PROJECT)/cfg/$(BOARD)/))
-$(error No support for board "$(BOARD)" in project "$(PROJECT)" -- configuration folder "projects/$(PROJECT)/cfg/$(BOARD)/" does not exist or is empty)
+ifeq ($(),$(wildcard projects/$(PROJECT)/cfg/$(BOARD)))
+$(info No support for board "$(BOARD)" in project "$(PROJECT)")
+$(info Configuration folder does not exist)
+$(info  -- projects/$(PROJECT)/cfg/$(BOARD))
+$(error Missing folder)
 endif
-ifeq ($(),$(wildcard projects/$(PROJECT)/cfg/$(BOARD)/xdc/))
-$(error No support for board "$(BOARD)" in project "$(PROJECT)" -- design constraints folder "projects/$(PROJECT)/cfg/$(BOARD)/xdc/" does not exist or is empty)
+ifeq ($(),$(wildcard projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)))
+$(info No support for version "$(BOARD_VER)" of board "$(BOARD)" in project "$(PROJECT)")
+$(info Configuration folder does not exist)
+$(info  -- projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/)
+$(error Missing folder)
+endif
+ifeq ($(),$(wildcard projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/xdc/*.xdc))
+$(info No support for version "$(BOARD_VER)" of board "$(BOARD)" in project "$(PROJECT)")
+$(info Design constraints folder does not exist or is empty)
+$(info -- projects/$(PROJECT)/cfg/$(BOARD)/xdc/*.xdc)
+$(error Missing folder/files)
 endif
 
 # Extract the part and processor from the board configuration file
@@ -69,11 +99,18 @@ export PROC=$(shell jq -r '.proc' boards/$(BOARD)/board_config.json)
 
 # Get the list of necessary cores from the project file to avoid building unnecessary cores
 PROJECT_CORES = $(shell ./scripts/make/get_cores_from_tcl.sh projects/$(PROJECT)/block_design.tcl)
-BOARD_XDC = $(wildcard projects/$(PROJECT)/cfg/$(BOARD)/xdc/*.xdc)
-$(info Project cores: $(PROJECT_CORES))
-$(info XDC files found: $(BOARD_XDC))
+BOARD_XDC = $(wildcard projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/xdc/*.xdc)
+$(info --------------------------)
+$(info ---- Project cores found using `scripts/make/get_cores_from_tcl.sh projects/$(PROJECT)/block_design.tcl`:)
+$(info ----   $(PROJECT_CORES))
+$(info --------------------------)
+$(info ---- XDC files found in `projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/xdc/`:)
+$(info ----   $(BOARD_XDC))
+
+
 
 endif # Clean check
+$(info --------------------------)
 
 # Set up commands
 VIVADO = vivado -nolog -nojournal -mode batch
@@ -99,8 +136,8 @@ all: sd
 
 # Remove a single project's intermediate and temporary files
 clean_project:
-	@./scripts/make/status.sh "CLEANING PROJECT: $(BOARD)/$(PROJECT)"
-	$(RM) tmp/$(BOARD)/$(PROJECT)
+	@./scripts/make/status.sh "CLEANING PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)"
+	$(RM) tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)
 
 # Remove all the intermediate and temporary files
 clean:
@@ -126,22 +163,22 @@ sd: boot rootfs
 
 # The bitstream file (system.bit)
 # Built from the Vivado project (project.xpr)
-bit: tmp/$(BOARD)/$(PROJECT)/bitstream.bit
-	mkdir -p out/$(BOARD)/$(PROJECT)
-	cp tmp/$(BOARD)/$(PROJECT)/bitstream.bit out/$(BOARD)/$(PROJECT)/system.bit
+bit: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit
+	mkdir -p out/$(BOARD)/$(BOARD_VER)/$(PROJECT)
+	cp tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/system.bit
 
 # The compressed root filesystem
 # Made in the petalinux build
-rootfs: tmp/$(BOARD)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz
-	mkdir -p out/$(BOARD)/$(PROJECT)
-	cp tmp/$(BOARD)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz out/$(BOARD)/$(PROJECT)/rootfs.tar.gz
+rootfs: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz
+	mkdir -p out/$(BOARD)/$(BOARD_VER)/$(PROJECT)
+	cp tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/rootfs.tar.gz
 
 # The compressed boot files
 # Requires the petalinux build (which will make the rootfs)
-boot: tmp/$(BOARD)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz
-	mkdir -p out/$(BOARD)/$(PROJECT)
+boot: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz
+	mkdir -p out/$(BOARD)/$(BOARD_VER)/$(PROJECT)
 	@./scripts/make/status.sh "PACKAGING BOOT.BIN"
-	cd tmp/$(BOARD)/$(PROJECT)/petalinux && \
+	cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && \
 		source $(PETALINUX_PATH)/settings.sh && \
 		petalinux-package --boot \
 		--format BIN \
@@ -150,8 +187,8 @@ boot: tmp/$(BOARD)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz
 		--kernel \
 		--boot-device sd \
 		--force
-	tar -czf out/$(BOARD)/$(PROJECT)/BOOT.tar.gz \
-		-C tmp/$(BOARD)/$(PROJECT)/petalinux/images/linux \
+	tar -czf out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/BOOT.tar.gz \
+		-C tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux \
 		BOOT.BIN \
 		image.ub \
 		boot.scr \
@@ -174,11 +211,11 @@ cores: $(addprefix tmp/cores/, $(PROJECT_CORES))
 
 # The Xilinx project file
 # This file can be edited in Vivado to test TCL commands and changes
-xpr: tmp/$(BOARD)/$(PROJECT)/project.xpr
+xpr: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr
 
 # The hardware definition file
 # This file is used by petalinux to build the linux system
-xsa: tmp/$(BOARD)/$(PROJECT)/hw_def.xsa
+xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa
 
 #############################################
 
@@ -199,30 +236,30 @@ tmp/cores/%: cores/%.v
 # Requires all the cores
 # Built using the `scripts/vivado/project.tcl` script, which uses
 # 	the block design and ports files from the project
-tmp/$(BOARD)/$(PROJECT)/project.xpr: projects/$(PROJECT)/block_design.tcl projects/$(PROJECT)/ports.tcl $(BOARD_XDC) $(addprefix tmp/cores/, $(PROJECT_CORES))
-	@./scripts/make/status.sh "MAKING PROJECT: $(BOARD)/$(PROJECT)/project.xpr"
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr: projects/$(PROJECT)/block_design.tcl projects/$(PROJECT)/ports.tcl $(BOARD_XDC) $(addprefix tmp/cores/, $(PROJECT_CORES))
+	@./scripts/make/status.sh "MAKING PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr"
 	mkdir -p $(@D)
-	$(VIVADO) -source scripts/vivado/project.tcl -tclargs $(BOARD) $(PROJECT)
+	$(VIVADO) -source scripts/vivado/project.tcl -tclargs $(BOARD) $(BOARD_VER) $(PROJECT)
 
 # The bitstream file (.bit)
 # Requires the project file
 # Built using the `scripts/vivado/bitstream.tcl` script, with bitstream compression set to false
-tmp/$(BOARD)/$(PROJECT)/bitstream.bit: tmp/$(BOARD)/$(PROJECT)/project.xpr
-	@./scripts/make/status.sh "MAKING BITSTREAM: $(BOARD)/$(PROJECT)/bitstream.bit"
-	$(VIVADO) -source scripts/vivado/bitstream.tcl -tclargs $(BOARD)/$(PROJECT) false
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr
+	@./scripts/make/status.sh "MAKING BITSTREAM: $(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit"
+	$(VIVADO) -source scripts/vivado/bitstream.tcl -tclargs $(BOARD)/$(BOARD_VER)/$(PROJECT) false
 
 # The hardware definition file
 # Requires the project file
 # Built using the scripts/vivado/hw_def.tcl script
-tmp/$(BOARD)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(PROJECT)/project.xpr
-	@./scripts/make/status.sh "MAKING HW DEF: $(BOARD)/$(PROJECT)/hw_def.xsa"
-	$(VIVADO) -source scripts/vivado/hw_def.tcl -tclargs $(BOARD)/$(PROJECT)
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr
+	@./scripts/make/status.sh "MAKING HW DEF: $(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa"
+	$(VIVADO) -source scripts/vivado/hw_def.tcl -tclargs $(BOARD)/$(BOARD_VER)/$(PROJECT)
 
 # The compressed root filesystem
 # Requires the hardware definition file
 # Build using the scripts/petalinux/build.sh file
-tmp/$(BOARD)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(PROJECT)/hw_def.xsa
-	@./scripts/make/status.sh "MAKING LINUX SYSTEM: $(BOARD)/$(PROJECT)/petalinux"
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa
+	@./scripts/make/status.sh "MAKING LINUX SYSTEM: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	source $(PETALINUX_PATH)/settings.sh && \
 		scripts/petalinux/build.sh $(BOARD) $(PROJECT)
 
