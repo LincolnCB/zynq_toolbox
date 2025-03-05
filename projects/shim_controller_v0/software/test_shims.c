@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
   }
 
   int user_dac_divider = atoi(argv[5]);
-  if (user_dac_divider <= 500) {
+  if (user_dac_divider < 500) {
     fprintf(stderr, "DAC refresh divider must be a positive integer of at least 500\n");
     fprintf(stderr, "Usage: %s <trigger lockout (ms)> <fclk_divider_0> <fclk_divider_1> <inputfile> <dac_refresh_divider> [board_to_log]\n", argv[0]);
     exit(-1);
