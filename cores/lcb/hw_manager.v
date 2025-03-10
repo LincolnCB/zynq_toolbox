@@ -14,10 +14,10 @@ module hw_manager #(
   input   wire          sys_en,         // System enable
   input   wire          dac_buf_full,   // DAC buffer full
   input   wire          spi_running,    // SPI running
-  input   wire          over_thresh,    // Over threshold
+  input   wire          ext_shutdown,   // External shutdown
   input   wire          shutdown_sense, // Shutdown sense
   input   wire  [ 2:0]  sense_num,      // Shutdown sense number
-  input   wire          ext_shutdown,   // External shutdown
+  input   wire  [ 7:0]  over_thresh,    // Over threshold (per board)
   input   wire  [ 7:0]  dac_empty_read, // DAC empty read (per board)
   input   wire  [ 7:0]  adc_full_write, // ADC full write (per board)
   input   wire  [ 7:0]  premat_trig,    // Premature trigger (per board)
@@ -175,7 +175,16 @@ module hw_manager #(
             if (!sys_en) status_code <= STATUS_PS_SHUTDOWN;
 
             // Integrator core over threshold
-            else if (over_thresh) status_code <= STATUS_OVER_THRESH;
+            else if (over_thresh) begin
+              status_code <= STATUS_OVER_THRESH;
+              board_num <=  over_thresh[0] ? 3'd0 :
+                over_thresh[1] ? 3'd1 :
+                over_thresh[2] ? 3'd2 :
+                over_thresh[3] ? 3'd3 :
+                over_thresh[4] ? 3'd4 :
+                over_thresh[5] ? 3'd5 :
+                over_thresh[6] ? 3'd6 : 3'd7;
+            end // if (over_thresh)
 
             // Hardware shutdown sense core detected a shutdown
             else if (shutdown_sense) begin
@@ -255,6 +264,7 @@ module hw_manager #(
             state <= IDLE;
             timer <= 0;
             running <= 0;
+            stopping <= 0;
             sys_rst <= 1;
             dma_en <= 0;
             dma_running <= 0;
@@ -265,6 +275,7 @@ module hw_manager #(
             timer <= 0;
             halted <= 1;
             running <= 0;
+            stopping <= 0;
             dma_en <= 0;
             dma_running <= 0;
             n_sclk_pow <= 1;
