@@ -261,5 +261,5 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PRO
 tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa
 	@./scripts/make/status.sh "MAKING LINUX SYSTEM: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	source $(PETALINUX_PATH)/settings.sh && \
-		scripts/petalinux/build.sh $(BOARD) $(PROJECT)
+		scripts/petalinux/build.sh $(BOARD) $(BOARD_VER) $(PROJECT)
 

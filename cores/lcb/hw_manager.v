@@ -128,6 +128,7 @@ module hw_manager #(
           end else if (timer > BUF_LOAD_WAIT) begin
             state <= HALTED;
             timer <= 0;
+            halted <= 1;
             status_code <= STATUS_DAC_BUF_FILL_TIMEOUT;
             running <= 0;
             dma_en <= 0;
@@ -147,6 +148,7 @@ module hw_manager #(
           end else if (timer > SPI_START_WAIT) begin
             state <= HALTED;
             timer <= 0;
+            halted <= 1;
             status_code <= STATUS_SPI_START_TIMEOUT;
             running <= 0;
             dma_en <= 0;
@@ -261,6 +263,7 @@ module hw_manager #(
           end else if (timer > SPI_STOP_WAIT) begin
             state <= HALTED;
             timer <= 0;
+            halted <= 1;
             running <= 0;
             dma_en <= 0;
             dma_running <= 0;
@@ -276,6 +279,7 @@ module hw_manager #(
         HALTED: begin
           if (~sys_en) begin 
             state <= IDLE;
+            halted <= 0;
             status_code <= STATUS_OK;
             prev_sys_en <= 0;
           end
