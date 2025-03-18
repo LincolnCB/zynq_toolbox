@@ -14,27 +14,27 @@ module threshold_integrator (
 );
 
   // Internal signals
-  reg  [47:0] min_value                              ,
-              max_value                              ;
-  reg  [ 4:0] chunk_size                             ;
-  reg  [ 4:0] sample_size                            ;
-  reg  [19:0] sample_timer_max                       ;
-  reg  [ 2:0] sub_average_size                       ;
-  reg  [ 4:0] inflow_sub_average_timer               ;
-  reg  [19:0] inflow_sample_timer                    ;
-  reg  [24:0] outflow_sample_timer                   ;
-  reg  [15:0] inflow_value               [ 7:0]      ;
-  reg  [20:0] sub_average_sum            [ 7:0]      ;
-  reg  [35:0] inflow_sample_sum          [ 7:0]      ;
-  reg  [ 3:0] fifo_in_queue_count                    ;
-  reg  [35:0] queued_fifo_in_sample_sum  [ 7:0]      ;
-  reg  [ 3:0] fifo_out_queue_count                   ;
-  reg  [35:0] queued_fifo_out_sample_sum [ 7:0]      ;
-  reg  [15:0] outflow_value              [ 7:0]      ;
-  reg  [18:0] outflow_remainder          [ 7:0]      ;
-  reg  [47:0] running_total_sum          [ 7:0]      ;
-  reg  [ 2:0] state                                  ;
-  reg         correction_bit             [18:0] [7:0];
+  reg signed [47:0] min_value                              ;
+  reg signed [47:0] max_value                              ;
+  reg        [ 4:0] chunk_size                             ;
+  reg        [ 4:0] sample_size                            ;
+  reg        [19:0] sample_timer_max                       ;
+  reg        [ 2:0] sub_average_size                       ;
+  reg        [ 4:0] inflow_sub_average_timer               ;
+  reg        [19:0] inflow_sample_timer                    ;
+  reg        [24:0] outflow_sample_timer                   ;
+  reg signed [15:0] inflow_value               [ 7:0]      ;
+  reg signed [21:0] sub_average_sum            [ 7:0]      ; // 
+  reg signed [35:0] inflow_sample_sum          [ 7:0]      ;
+  reg        [ 3:0] fifo_in_queue_count                    ;
+  reg signed [35:0] queued_fifo_in_sample_sum  [ 7:0]      ;
+  reg        [ 3:0] fifo_out_queue_count                   ;
+  reg signed [35:0] queued_fifo_out_sample_sum [ 7:0]      ;
+  reg signed [15:0] outflow_value              [ 7:0]      ;
+  reg signed [19:0] outflow_remainder          [ 7:0]      ;
+  reg signed [20:0] running_total_delta        [ 7:0]      ;
+  reg signed [47:0] running_total_sum          [ 7:0]      ;
+  reg        [ 2:0] state                                  ;
 
   // State encoding
   localparam  IDLE          = 3'd0,
@@ -42,22 +42,6 @@ module threshold_integrator (
               WAIT          = 3'd2, 
               RUNNING       = 3'd3,
               OUT_OF_BOUNDS = 3'd4;
-
-  // Correction bits
-  // Notes:
-  //   (outflow_sample_timer & (sample_timer_max >> n)) will trigger every 2^(sample_size - n) cycles
-  //   Over the course of 2^(sample_size) cycles, this will sum to 2^(sample_size) / 2^(sample_size - n) = 2^n
-  //   This means that the remainder will be smoothly accounted for over the course of 2^(sample_size) cycles
-  //   This will be happen sub_average_size times, which will account for everything
-  //   except for the at maximum 2^(sub_average_size) - 1 error, which caps out at 31
-  always @* begin
-    for (int i = 0; i < 8; i = i + 1) begin
-      for (int n = 0; n < 19; n = n + 1) begin
-        correction_bit[n][i] = (outflow_sample_timer & (sample_timer_max >> n)) == 0 ?
-                               (outflow_remainder[i] >> n) & 1 : 0;
-      end
-    end
-  end
 
   // Main logic
   always @(posedge clk or posedge reset) begin
@@ -84,7 +68,9 @@ module threshold_integrator (
         inflow_sample_sum[i] <= 0;
         queued_fifo_in_sample_sum[i] <= 0;
         queued_fifo_out_sample_sum[i] <= 0;
-        outflow_sample_sum[i] <= 0;
+        outflow_value[i] <= 0;
+        outflow_remainder[i] <= 0;
+        running_total_delta[i] <= 0;
         running_total_sum[i] <= 0;
       end
     end else begin
@@ -191,13 +177,16 @@ module threshold_integrator (
               inflow_value[i] <= value_in[i] - 16'h8000; // Convert to signed
             end
             // Sub-average logic
-            if (inflow_sub_average_timer == 0) begin
-              sub_average_sum[i] <= sub_average_sum[i] & ((1 << sub_average_size) - 1);
+            if (inflow_sub_average_timer != 0) begin
+              sub_average_sum[i] <= sub_average_sum[i] + inflow_value[i];
+            end else begin
+              // Remove the sub-average value from the sub-average sum and add the new inflow value
+              sub_average_sum[i] <= sub_average_sum[i] - ((sub_average_sum[i] >>> sub_average_size) <<< sub_average_size) + inflow_value[i];
               // Sample sum logic
               if (inflow_sample_timer != 0) begin // Add to sample sum
-                inflow_sample_sum[i] <= inflow_sample_sum[i] + (sub_average_sum[i] >> sub_average_size);
+                inflow_sample_sum[i] <= inflow_sample_sum[i] + (sub_average_sum[i] >>> sub_average_size);
               end else begin // Add to sample sum and move into FIFO queue. Reset sample sum
-                queued_fifo_in_sample_sum[i] <= inflow_sample_sum[i] + (sub_average_sum[i] >> sub_average_size);
+                queued_fifo_in_sample_sum[i] <= inflow_sample_sum[i] + (sub_average_sum[i] >>> sub_average_size);
                 inflow_sample_sum[i] <= 0;
               end
             end
@@ -219,29 +208,51 @@ module threshold_integrator (
             outflow_sample_timer <= (1 << chunk_size) - 1;
           end // Outflow timer
 
+          // Outflow channel logic
+          for (int i = 0; i < 8; i = i + 1) begin
+            // Move queued samples in to outflow value and remainder
+            if (outflow_sample_timer == 0) begin
+              outflow_value[i] <= queued_fifo_out_sample_sum[i] >>> sample_size;
+              // TODO: This rounds down negative numbers, and should round towards zero
+              outflow_remainder[i] <= (queued_fifo_out_sample_sum[i] - (queued_fifo_out_sample_sum[i] >>> sample_size));
+            end
+          end // Outflow channel logic
+
           // Outflow FIFO logic
           if (fifo_out_queue_count != 0) begin
             // TODO: Pop from FIFO
             fifo_out_queue_count <= fifo_out_queue_count - 1;
           end // Outflow FIFO logic
 
-          // TODO
           // Running total logic
           for (int i = 0; i < 8; i = i + 1) begin
-            running_total_sum[i] <= running_total_sum[i] - (queued_fifo_out_sample_sum[i] >> (sample_size - 1));
-            for (int n = 1; n < sample_size; n = n + 1) begin
-              if (queued_fifo_out_sample_sum[i][sample_size - n]) begin
-                if ((outflow_sample_timer % (1 << n)) == 0) begin
-                  running_total_sum[i] <= running_total_sum[i] - 1;
-                end
-              end
+            if (outflow_remainder >= 0) begin
+              running_total_delta[i] <= (outflow_timer >= outflow_remainder[i])
+                                      ? inflow_value[i] - outflow_value[i]
+                                      : inflow_value[i] - outflow_value[i] - 1;
+            else
+              running_total_delta[i] <= (outflow_timer >= -outflow_remainder[i])
+                                      ? inflow_value[i] - outflow_value[i]
+                                      : inflow_value[i] - outflow_value[i] + 1;
             end
-            if (running_total_sum[i] < min_value || running_total_sum[i] > max_value) begin
+            
+            // Check for over threshold while avoiding overflow
+            if (running_total_delta[i] < min_value || running_total_delta[i] > max_value) begin
               over_threshold <= 1;
               state <= OUT_OF_BOUNDS;
+            end else if (running_total_delta[i] < 0 && min_value - running_total_delta[i] > running_total_sum[i]) begin
+              over_threshold <= 1;
+              state <= OUT_OF_BOUNDS;
+            end else if (running_total_delta[i] > 0 && max_value - running_total_delta[i] < running_total_sum[i]) begin
+              over_threshold <= 1;
+              state <= OUT_OF_BOUNDS;
+            end else begin
+              running_total_sum[i] <= running_total_sum[i] + running_total_delta[i];
             end
-          end
-        end
+              
+          end // Running total logic
+
+        end // RUNNING
         OUT_OF_BOUNDS: begin
           // Stop everything until reset
         end
