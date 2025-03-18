@@ -40,7 +40,11 @@ void sigint_handler(int s){
   }
   volatile uint32_t *dac_ctrl = mmap(NULL, sysconf(_SC_PAGESIZE), PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0x40201000);
   volatile uint32_t *dac_enable = ((uint32_t *)(dac_ctrl+3));
+
+  volatile uint32_t *cfg = mmap(NULL, sysconf(_SC_PAGESIZE), PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0x40200000);
+  volatile uint32_t *n_shutdown_force = ((uint32_t *)(cfg));
   
+  *n_shutdown_force = 0x0;
   *dac_enable = 0x0;
   exit(1); 
 }
@@ -348,6 +352,7 @@ int main(int argc, char *argv[])
   }
   
   sleep(1);
+  *n_shutdown_force = 0x0;
   *dac_enable = 0x0;
   return EXIT_SUCCESS;
 } // End main
