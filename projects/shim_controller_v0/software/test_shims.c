@@ -53,6 +53,7 @@ int main(int argc, char *argv[])
   int fd;
   void *cfg;
   volatile uint32_t *slcr, \
+    *n_shutdown_force, *shutdown_reset, \
     *dac_ctrl, *dac_enable, *dac_nsamples, *dac_board_offset, *dac_version, \
     *dac_control_register, *dac_trigger_count, *dac_refresh_divider, \
     *shim_memory, \
@@ -82,8 +83,8 @@ int main(int argc, char *argv[])
   }
 
   int user_dac_divider = atoi(argv[5]);
-  if (user_dac_divider < 500) {
-    fprintf(stderr, "DAC refresh divider must be a positive integer of at least 500\n");
+  if (user_dac_divider < 300) {
+    fprintf(stderr, "DAC refresh divider must be a positive integer of at least 300\n");
     fprintf(stderr, "Usage: %s <trigger lockout (ms)> <fclk_divider_0> <fclk_divider_1> <inputfile> <dac_refresh_divider> [board_to_log]\n", argv[0]);
     exit(-1);
   }
@@ -229,6 +230,10 @@ int main(int argc, char *argv[])
 
   usleep(250000);
 
+  // Map the shutdown reset
+  n_shutdown_force = ((uint32_t *)(cfg));
+  shutdown_reset = ((uint32_t *)(cfg+1));
+
   // Check version etc
   dac_nsamples = ((uint32_t *)(dac_ctrl+0));
   dac_board_offset = ((uint32_t *)(dac_ctrl+1));
@@ -316,8 +321,22 @@ int main(int argc, char *argv[])
 
   // Clock cycles per DAC sample
   *dac_refresh_divider = user_dac_divider;
-  
+  printf("DAC refresh divider = %d\n", user_dac_divider); fflush(stdout);
+
+  // Release the shutdown force
+  printf("Releasing shutdown force...\n"); fflush(stdout);
+  *n_shutdown_force = 0x0;
+  // Sleep 10ms to let the DAC come out of shutdown
+  usleep(10000);
+  // Pulse the shutdown reset for 100us
+  printf("Pulsing shutdown reset...\n"); fflush(stdout);
+  *shutdown_reset = 0x1;
+  usleep(100);
+  *shutdown_reset = 0x0;
+  // Sleep 100ms to let everything boot up
+  usleep(100000);
   // enable the DAC
+  printf("Enabling DAC...\n"); fflush(stdout);
   *dac_enable = 0x1;
 
 

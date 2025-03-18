@@ -74,12 +74,40 @@ auto_connect_axi 0x40201000 4K shim_dac_0/spi_sequencer_0/S_AXI /ps_0/M_AXI_GP0
 # this should not be needed at all, but makes it easy right now to provide some
 # triggers
 cell pavel-demin:user:axi_cfg_register:1.0 cfg_0 {
-  CFG_DATA_WIDTH 32
+  CFG_DATA_WIDTH 64
   AXI_ADDR_WIDTH 32
   AXI_DATA_WIDTH 32
 }
 # Create all required interconnections
 auto_connect_axi 0x40200000 4K cfg_0/S_AXI /ps_0/M_AXI_GP0
+
+# LCB: Slice off bits 0 and 32 from the config register
+cell pavel-demin:user:port_slicer n_shutdown_force_slice {
+  DIN_WIDTH 64 DIN_FROM 0 DIN_TO 0
+} {
+  din cfg_0/cfg_data
+}
+cell pavel-demin:user:port_slicer shutdown_reset_slice {
+  DIN_WIDTH 64 DIN_FROM 32 DIN_TO 32
+} {
+  din cfg_0/cfg_data
+}
+# Invert both shutdown signals, so the initial 0 in the cfg register means shutdown and no reset
+cell xilinx.com:ip:util_vector_logic n_shutdown_force_inv {
+  C_SIZE 1
+  C_OPERATION not
+} {
+  Op1 n_shutdown_force_slice/dout
+  Res Shutdown_Force
+}
+cell xilinx.com:ip:util_vector_logic shutdown_reset_inv {
+  C_SIZE 1
+  C_OPERATION not
+} {
+  Op1 shutdown_reset_slice/dout
+  Res n_Shutdown_Reset
+}
+
 
 # # Manually connect the MMCM to the PS
 # apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {

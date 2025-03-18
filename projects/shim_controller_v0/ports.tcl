@@ -15,3 +15,8 @@ create_bd_port -dir O -from 3 -to 0 dac_mosi_o_n
 
 # # AXI clock out (DEBUG)
 # create_bd_port -dir O axi_clk_out
+
+# (Shutdown_Force)
+create_bd_port -dir O Shutdown_Force
+# (~Shutdown_Reset)
+create_bd_port -dir O n_Shutdown_Reset
