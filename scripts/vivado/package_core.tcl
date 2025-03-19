@@ -25,8 +25,8 @@ add_files -norecurse cores/$core_path.v
 # Set the main (core_name) module as the top module
 set_property TOP $core_name [current_fileset]
 
-# Load in the other source files (modules)
-set files [glob -nocomplain modules/*.v]
+# Load in the other source files (submodules from the vendor directory)
+set files [glob -nocomplain cores/$vendor_name/submodules/*.v]
 if {[llength $files] > 0} {
   add_files -norecurse $files
 }
