@@ -45,57 +45,18 @@ $(info ---- Making "$(MAKECMDGOALS)")
 ifneq (true, $(CLEAN_ONLY)) # Clean check
 $(info ----  for project "$(PROJECT)" and board "$(BOARD)" version $(BOARD_VER))
 
-# Check that the project and board exist, and that the necessary files are present
-ifeq ($(),$(wildcard boards/$(BOARD)))
-$(info Board folder for board "$(BOARD)" does not exist)
-$(info  -- boards/$(BOARD)/)
-$(error Missing folder)
-endif
-ifeq ($(),$(wildcard boards/$(BOARD)/board_files/$(BOARD_VER)/*))
-$(info Board files for version "$(BOARD_VER)" of board "$(BOARD)" do not exist)
-$(info -- boards/$(BOARD)/board_files/$(BOARD_VER)/)
-$(error Missing folder/files)
-endif
-# ifeq ($(),$(wildcard boards/$(BOARD)/board_config.json))
-# $(error Board configuration file for board "$(BOARD)": "boards/$(BOARD)/board_config.json" does not exist)
-# endif
-ifeq ($(),$(wildcard projects/$(PROJECT)))
-$(info Project "$(PROJECT)" folder does not exist)
-$(info  -- projects/$(PROJECT)/)
-$(error Missing folder)
-endif
-ifeq ($(),$(wildcard projects/$(PROJECT)/block_design.tcl))
-$(info Project "$(PROJECT)" does not have a block design TCL file)
-$(info  -- projects/$(PROJECT)/block_design.tcl)
-$(error Missing file)
-endif
-ifeq ($(),$(wildcard projects/$(PROJECT)/ports.tcl))
-$(info Project "$(PROJECT)" does not have a ports TCL file)
-$(info  -- projects/$(PROJECT)/ports.tcl)
-$(error Missing file)
-endif
-ifeq ($(),$(wildcard projects/$(PROJECT)/cfg/$(BOARD)))
-$(info No support for board "$(BOARD)" in project "$(PROJECT)")
-$(info Configuration folder does not exist)
-$(info  -- projects/$(PROJECT)/cfg/$(BOARD))
-$(error Missing folder)
-endif
-ifeq ($(),$(wildcard projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)))
-$(info No support for version "$(BOARD_VER)" of board "$(BOARD)" in project "$(PROJECT)")
-$(info Configuration folder does not exist)
-$(info  -- projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/)
-$(error Missing folder)
-endif
-ifeq ($(),$(wildcard projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/xdc/*.xdc))
-$(info No support for version "$(BOARD_VER)" of board "$(BOARD)" in project "$(PROJECT)")
-$(info Design constraints folder does not exist or is empty)
-$(info -- projects/$(PROJECT)/cfg/$(BOARD)/xdc/*.xdc)
-$(error Missing folder/files)
+# Check the board, board version, and project
+ifneq ($(), $(shell ./scripts/check/project.sh $(BOARD) $(BOARD_VER) $(PROJECT)))
+$(info --------------------------)
+$(info ----  Project check failed)
+$(info ----  $(shell ./scripts/check/project.sh $(BOARD) $(BOARD_VER) $(PROJECT)))
+$(info --------------------------)
+$(error Missing sources)
 endif
 
-# Extract the part and processor from the board configuration file
-export PART=$(shell jq -r '.part' boards/$(BOARD)/board_config.json)
-export PROC=$(shell jq -r '.proc' boards/$(BOARD)/board_config.json)
+# Extract the part from board file
+export PART=$(shell ./scripts/make/get_part.sh $(BOARD) $(BOARD_VER))
+$(info ----  Part: $(PART))
 
 # Get the list of necessary cores from the project file to avoid building unnecessary cores
 PROJECT_CORES = $(shell ./scripts/make/get_cores_from_tcl.sh projects/$(PROJECT)/block_design.tcl)

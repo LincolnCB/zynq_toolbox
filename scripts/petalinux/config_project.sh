@@ -35,21 +35,11 @@ PRJ=${3}
 PBV="project \"${PRJ}\" and board \"${BRD}\" v${VER}"
 set --
 
-# Check that the project exists in "projects"
-if [ ! -d "projects/${PRJ}" ]; then
-    echo "[PTLNX CFG SCRIPT] ERROR:"
-    echo "Repository project directory not found for project \"${PRJ}\""
-    echo "  projects/${PRJ}"
-    exit 1
-fi
+# If any subsequent command fails, exit immediately
+set -e
 
-# Check that the board cfg directory (and petalinux directory) exists
-if [ ! -d "projects/${PRJ}/cfg/${BRD}/${VER}/petalinux" ]; then
-    echo "[PTLNX CFG SCRIPT] ERROR:"
-    echo "Board PetaLinux configuration directory not found for ${PBV}"
-    echo "  projects/${PRJ}/cfg/${BRD}/${VER}/petalinux"
-    exit 1
-fi
+# Check the XSA and dependencies
+./scripts/check/xsa.sh ${BRD} ${VER} ${PRJ}
 
 # Check that the project configuration patch does not already exist if not updating
 if [ -f "projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/config.patch" ] && [ $UPDATE -ne 1 ]; then
@@ -70,19 +60,6 @@ if [ ! -f "projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/config.patch" ] && [ $UPD
     echo "If you want to create a new patch, copy one in or use the following command:"
     echo
     echo "  ${CMD} ${BRD} ${VER} ${PRJ}"
-    exit 1
-fi
-
-
-# Check that the necessary XSA exists
-if [ ! -f "tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa" ]; then
-    echo "[PTLNX CFG SCRIPT] ERROR:"
-    echo "Missing Vivado-generated XSA hardware definition file for ${PBV}"
-    echo "  tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa"
-    echo "First run the following command:"
-    echo
-    echo "  make BOARD=${BRD} BOARD_VER=${VER} PROJECT=${PRJ} xsa"
-    echo
     exit 1
 fi
 

@@ -11,21 +11,34 @@ set project_name [lindex $argv 2]
 # Set the temporary directory for the project
 set tmp_dir tmp/$board_name/$board_ver/$project_name
 
-## Extract the part information from the board name
-# Read the json config for the board into a dict
-set board_cfg_fname boards/$board_name/board_config.json
-if {[file exists $board_cfg_fname]} {
-    set board_cfg_fd [open $board_cfg_fname "r"]
-} else {
-    error "Board configuration file $board_cfg_fname missing."
-}
-set board_cfg_str [read $board_cfg_fd]
-close $board_cfg_fd
-set board_cfg_dict [json::json2dict $board_cfg_str]
+## Extract the part information from the board name and version using the provided scripts
+# Define the paths to the scripts
+set get_part_script [file join [pwd] scripts/make/get_part.sh]
+set get_board_part_script [file join [pwd] scripts/make/get_board_part.sh]
 
-# Get the part name from the config dict
-set part_name [dict get $board_cfg_dict part]
-set board_part [dict get $board_cfg_dict board_part]
+# Ensure the scripts exist
+if {![file exists $get_part_script]} {
+  error "Script $get_part_script missing."
+}
+if {![file exists $get_board_part_script]} {
+  error "Script $get_board_part_script missing."
+}
+
+# Get the part name
+set part_name [exec bash $get_part_script $board_name $board_ver]
+if {$part_name eq ""} {
+  error "Failed to retrieve part name using $get_part_script for board $board_name version $board_ver."
+} else {
+  puts "Part name: $part_name"
+}
+
+# Get the board part
+set board_part [exec bash $get_board_part_script $board_name $board_ver]
+if {$board_part eq ""} {
+  error "Failed to retrieve board part using $get_board_part_script for board $board_name version $board_ver."
+} else {
+  puts "Board part: $board_part"
+}
 
 
 ## Initialize the project and dependencies

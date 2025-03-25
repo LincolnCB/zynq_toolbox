@@ -44,9 +44,11 @@ void sigint_handler(int s){
   volatile uint32_t *cfg = mmap(NULL, sysconf(_SC_PAGESIZE), PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0x40200000);
   volatile uint32_t *n_shutdown_force = ((uint32_t *)(cfg));
   
+  fprintf(stderr, "Setting shutdown force...\n");
   *n_shutdown_force = 0x0;
+  fprintf(stderr, "Disabling DAC...\n");
   *dac_enable = 0x0;
-  exit(1); 
+  exit(1);
 }
 
 int main(int argc, char *argv[])
@@ -236,7 +238,7 @@ int main(int argc, char *argv[])
 
   // Map the shutdown reset
   n_shutdown_force = ((uint32_t *)(cfg));
-  shutdown_reset = ((uint32_t *)(cfg+1));
+  shutdown_reset = ((uint32_t *)(cfg)+1);
 
   // Check version etc
   dac_nsamples = ((uint32_t *)(dac_ctrl+0));
@@ -272,6 +274,19 @@ int main(int argc, char *argv[])
   int dbo = *dac_board_offset;
 
   fprintf(stdout, "board offset %d words\n", dbo);
+
+  // Release the shutdown force
+  printf("Releasing shutdown force...\n"); fflush(stdout);
+  *n_shutdown_force = 0x1;
+  // Sleep 10ms to let the DAC come out of shutdown
+  usleep(10000);
+  // Pulse the shutdown reset for 100us
+  printf("Pulsing shutdown reset...\n"); fflush(stdout);
+  *shutdown_reset = 0x1;
+  usleep(100);
+  *shutdown_reset = 0x0;
+  // Sleep 100ms to let everything boot up
+  usleep(100000);
 
 
   //// Load the sequence into the shim memory
@@ -327,18 +342,6 @@ int main(int argc, char *argv[])
   *dac_refresh_divider = user_dac_divider;
   printf("DAC refresh divider = %d\n", user_dac_divider); fflush(stdout);
 
-  // Release the shutdown force
-  printf("Releasing shutdown force...\n"); fflush(stdout);
-  *n_shutdown_force = 0x0;
-  // Sleep 10ms to let the DAC come out of shutdown
-  usleep(10000);
-  // Pulse the shutdown reset for 100us
-  printf("Pulsing shutdown reset...\n"); fflush(stdout);
-  *shutdown_reset = 0x1;
-  usleep(100);
-  *shutdown_reset = 0x0;
-  // Sleep 100ms to let everything boot up
-  usleep(100000);
   // enable the DAC
   printf("Enabling DAC...\n"); fflush(stdout);
   *dac_enable = 0x1;
