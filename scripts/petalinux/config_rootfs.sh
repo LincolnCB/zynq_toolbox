@@ -34,9 +34,6 @@ PRJ=${3}
 PBV="project \"${PRJ}\" and board \"${BRD}\" v${VER}"
 set --
 
-# If any subsequent command fails, exit immediately
-set -e
-
 # Check the PetaLinux config and dependencies
 ./scripts/check/petalinux_cfg.sh ${BRD} ${VER} ${PRJ}
 

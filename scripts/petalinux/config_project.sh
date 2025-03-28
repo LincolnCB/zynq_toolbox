@@ -35,9 +35,6 @@ PRJ=${3}
 PBV="project \"${PRJ}\" and board \"${BRD}\" v${VER}"
 set --
 
-# If any subsequent command fails, exit immediately
-set -e
-
 # Check the XSA and dependencies
 ./scripts/check/xsa.sh ${BRD} ${VER} ${PRJ}
 
