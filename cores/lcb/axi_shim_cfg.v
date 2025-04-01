@@ -214,7 +214,9 @@ module axi_shim_cfg #
   assign sys_en_oob = int_data_wire[SYS_EN_32_OFFSET*32+31:SYS_EN_32_OFFSET*32] > 1;
 
   // Address and value bound compliance sent to write response
+  // Send SLVERR if there are any violations
   assign int_bresp_wire = 
+    locked ? 2'b10 :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == TRIGGER_LOCKOUT_32_OFFSET) ? (trig_lockout_oob ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == CALIBRATION_OFFSET_32_OFFSET) ? (cal_offset_oob ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == DAC_DIVIDER_32_OFFSET) ? (dac_divider_oob ? 2'b10 : 2'b00) :
@@ -222,7 +224,7 @@ module axi_shim_cfg #
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_WINDOW_32_OFFSET) ? (integ_window_oob ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_EN_32_OFFSET) ? (integ_en_oob ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == SYS_EN_32_OFFSET) ? (sys_en_oob ? 2'b10 : 2'b00) :
-    2'b11;
+    2'b10;
   
   assign sys_en = int_data_wire[SYS_EN_32_OFFSET*32];
 
