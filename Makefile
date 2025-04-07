@@ -86,13 +86,16 @@ RM = rm -rf
 ## Make-specific targets (clean, all, .PHONY, etc.)
 #############################################
 
-# Files not to delete on half-completion (.PRECIOUS is a special target that tells make not to delete these files)
+# Files not to delete on half-completion (GNU Make 4.9)
 .PRECIOUS: tmp/cores/% tmp/%.xpr tmp/%.bit
 
-# Targets that aren't real files
+# Targets that aren't real files (GNU Make 4.9)
 .PHONY: all clean clean_project clean_all bit sd rootfs boot cores xpr xsa
 
-# Default target is the first listed
+# Enable secondary expansion (GNU Make 3.9) to allow for more complex pattern matching (see cores target)
+.SECONDEXPANSION:
+
+# Default target is the first listed (GNU Make 2.3)
 all: sd
 
 # Remove a single project's intermediate and temporary files, including cores
@@ -189,17 +192,20 @@ xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa
 
 # Core RTL needs to be packaged to be used in the block design flow
 # Cores are packaged using the `scripts/vivado/package_core.tcl` script
-# TODO: This isn't checking for changes to the modules.
-tmp/cores/%: 
-	@./scripts/make/status.sh "MAKING CORE: $*"
+# This make target uses "pattern-specific variables" (GNU Make 6.12) to set the vendor and core
+#  as well as "secondary expansion" (GNU Make 3.9) to allow for their use in the prerequisite
+tmp/user_cores/%: VENDOR = $(word 1,$(subst /, ,$*))
+tmp/user_cores/%: CORE = $(word 2,$(subst /, ,$*))
+tmp/user_cores/%: user_cores/$$(VENDOR)/cores/$$(CORE)/$$(CORE).v
+	@./scripts/make/status.sh "MAKING USER CORE: '$(CORE)' by '$(VENDOR)'"
 	mkdir -p $(@D)
-	$(VIVADO) -source scripts/vivado/package_core.tcl -tclargs $* $(PART)
+	$(VIVADO) -source scripts/vivado/package_core.tcl -tclargs $(VENDOR) $(CORE) $(PART)
 
 # The project file (.xpr)
 # Requires all the cores
 # Built using the `scripts/vivado/project.tcl` script, which uses
 # 	the block design and ports files from the project
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr: projects/$(PROJECT)/block_design.tcl projects/$(PROJECT)/ports.tcl $(BOARD_XDC) $(addprefix tmp/cores/, $(PROJECT_CORES))
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr: projects/$(PROJECT)/block_design.tcl projects/$(PROJECT)/ports.tcl $(BOARD_XDC) $(addprefix tmp/user_cores/, $(PROJECT_CORES))
 	@./scripts/make/status.sh "MAKING PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr"
 	mkdir -p $(@D)
 	$(VIVADO) -source scripts/vivado/project.tcl -tclargs $(BOARD) $(BOARD_VER) $(PROJECT)

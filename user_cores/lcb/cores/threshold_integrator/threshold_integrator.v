@@ -7,7 +7,7 @@ module threshold_integrator (
   input   wire         enable            ,
   input   wire [ 31:0] window            ,
   input   wire [ 14:0] threshold_average ,
-  input   wire         dac_done          ,
+  input   wire         sample_core_done          ,
   input   wire [127:0] value_in_concat   ,
   input   wire [  7:0] value_ready_concat,
 
@@ -203,9 +203,9 @@ module threshold_integrator (
           state <= WAIT;
         end // SETUP
 
-        // WAIT state, waiting for DAC to be ready
+        // WAIT state, waiting for sample core (DAC/ADC) to finish setting up
         WAIT: begin
-          if (dac_done) begin
+          if (sample_core_done) begin
             // Calculate masks
             chunk_mask <= (1 << chunk_size) - 1;
             sample_mask <= (1 << sample_size) - 1;

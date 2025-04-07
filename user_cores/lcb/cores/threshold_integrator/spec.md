@@ -11,7 +11,7 @@ The `threshold_integrator` module is a safety core designed for the Rev D shim f
 
 - **Control Signals**:
   - `enable`: Enable signal to start the integrator.
-  - `dac_done`: Signal indicating that the DAC is ready.
+  - `sample_core_done`: Signal indicating that the DAC is ready.
 
 - **Configuration Signals**:
   - `window`: 32-bit unsigned value defining the integration window size (range: \(2^{11}\) to \(2^{32} - 1\)).
@@ -33,7 +33,7 @@ The `threshold_integrator` module is a safety core designed for the Rev D shim f
 ### States:
 - **IDLE**: Waits for the `enable` signal to go high.
 - **SETUP**: Performs intermediate calculations for chunk size, sub-average size, and sample size.
-- **WAIT**: Waits for the `dac_done` signal before transitioning to the running state.
+- **WAIT**: Waits for the `sample_core_done` signal before transitioning to the running state.
 - **RUNNING**: Executes the main logic for inflow, outflow, and running sum calculations.
 - **OUT_OF_BOUNDS**: Halts operation if the running sum exceeds the threshold.
 - **ERROR**: Halts operation if a FIFO overflow or underflow occurs.
@@ -43,7 +43,7 @@ The `threshold_integrator` module is a safety core designed for the Rev D shim f
 2. Calculate `sub_average_size`: \( \max(0, \text{chunk_size} - 20) \) (max value: 5). Sub-averaging is used to reduce the number of samples processed directly by the FIFO when the window is larger than the maximum sample size would allow. It introduces slightly more error than the sample size, so is kept to a minimum.
 3. Calculate `sample_size`: \( \min(20, \text{chunk_size}) \) (max value: 20). This defines the number of samples aggregated into a single FIFO entry.
 4. Compute min/max values: \( \text{threshold_average} \times \text{window} \), converted to signed values.
-5. Wait for `dac_done` to initialize timers and transition to the running state.
+5. Wait for `sample_core_done` to initialize timers and transition to the running state.
 
 ### Running Phase:
 - **Inflow Logic**:

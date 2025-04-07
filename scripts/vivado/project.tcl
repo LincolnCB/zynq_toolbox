@@ -52,7 +52,7 @@ create_project -part $part_name project $tmp_dir
 set_property BOARD_PART $board_part [current_project]
 
 # Add the path to the custom IP core packages, if they exist
-set cores_list [glob -type d -nocomplain tmp/cores/*]
+set cores_list [glob -type d -nocomplain tmp/user_cores/*]
 if {[llength $cores_list] > 0} {
   set_property IP_REPO_PATHS $cores_list [current_project]
 }

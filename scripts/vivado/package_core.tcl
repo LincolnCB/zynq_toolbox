@@ -1,38 +1,42 @@
 # This script creates a custom Vivado IP core for a given core path and part name.
-# The cores are packaged to tmp/cores/[vendor_name]/[core_name] and used in the project.tcl script.
+# The cores are packaged to tmp/user_cores/[vendor_name]/cores/[core_name] and used in the project.tcl script.
 
 package require fileutil
 package require json
 
-# First argument is the path to the core (relative to the top-level cores/ directory)
-set core_path [lindex $argv 0]
+# First argument is the vendor name
+set vendor_name [lindex $argv 0]
+# Second argument is the core name
+set core_name [lindex $argv 1]
 # Second argument is the part name
-set part_name [lindex $argv 1]
+set part_name [lindex $argv 2]
 
-# Split the core path into "vendor_name" and "core_name" for use in the commands below
-set vendor_name [file dirname $core_path]
-set core_name [file tail $core_path]
+# Set the source directory for the core
+set src_path user_cores/$vendor_name/cores/$core_name
+# Set the temporary build directory
+set tmp_path tmp/user_cores/$vendor_name/$core_name
+
 
 # Clear out old build files
-file delete -force tmp/cores/$core_path tmp/cores/$core_path.cache tmp/cores/$core_path.hw tmp/cores/$core_path.ip_user_files tmp/cores/$core_path.sim tmp/cores/$core_path.xpr
+file delete -force $tmp_path $tmp_path.cache $tmp_path.hw $tmp_path.ip_user_files $tmp_path.sim $tmp_path.xpr
 
 # Create the core project
-create_project -part $part_name $core_name tmp/cores/$vendor_name
+create_project -part $part_name $core_name tmp/user_cores/$vendor_name
 
 # Add the main source file to the core project
-add_files -norecurse cores/$vendor_name/cores/$core_name/$core_name.v
+add_files -norecurse $src_path/$core_name.v
 
 # Set the main (core_name) module as the top module
 set_property TOP $core_name [current_fileset]
 
-# Load in the other source files (submodules from the vendor directory)
-set files [glob -nocomplain cores/$vendor_name/cores/$core_name/submodules/*.v]
+# Load in the other source files (submodules from the core directory)
+set files [glob -nocomplain $src_path/submodules/*.v]
 if {[llength $files] > 0} {
   add_files -norecurse $files
 }
 
 # Set the IP packaging path
-ipx::package_project -root_dir tmp/cores/$core_path -import_files cores/$core_path.v
+ipx::package_project -root_dir $tmp_path -import_files cores/$vendor_name/$core_name.v
 
 # Get the Vivado core
 set core [ipx::current_core]
@@ -45,7 +49,7 @@ set_property VENDOR $vendor_name $core
 
 ## Extract the info for the vendor display name and company URL
 # Read the json config for the board into a dict
-set vendor_info_fname cores/$vendor_name/info/vendor_info.json
+set vendor_info_fname user_cores/$vendor_name/vendor_info.json
 if {[file exists $vendor_info_fname]} {
     set vendor_info_fd [open $vendor_info_fname "r"]
 } else {

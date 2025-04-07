@@ -10,7 +10,7 @@ module spi_cfg_sync (
   input  wire [31:0] trig_lockout,
   input  wire [15:0] cal_offset,
   input  wire [15:0] dac_divider,
-  input  wire [15:0] integ_thresh_avg,
+  input  wire [14:0] integ_thresh_avg,
   input  wire [31:0] integ_window,
   input  wire        integ_en,
   input  wire        spi_en,
@@ -19,7 +19,7 @@ module spi_cfg_sync (
   output reg  [31:0] trig_lockout_stable,
   output reg  [15:0] cal_offset_stable,
   output reg  [15:0] dac_divider_stable,
-  output reg  [15:0] integ_thresh_avg_stable,
+  output reg  [14:0] integ_thresh_avg_stable,
   output reg  [31:0] integ_window_stable,
   output reg         integ_en_stable,
   output reg         spi_en_stable
