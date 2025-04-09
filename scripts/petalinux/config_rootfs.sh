@@ -35,7 +35,8 @@ PBV="project \"${PRJ}\" and board \"${BRD}\" v${VER}"
 set --
 
 # Check the PetaLinux config and dependencies
-./scripts/check/petalinux_cfg.sh ${BRD} ${VER} ${PRJ}
+echo "[PTLNX ROOTFS SCRIPT] Checking PetaLinux config and dependencies for ${PBV}"
+./scripts/check/petalinux_cfg.sh ${BRD} ${VER} ${PRJ} || exit 1
 
 # Check that the PetaLinux root filesystem configuration patch does not already exist if not updating
 if [ -f "projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/rootfs_config.patch" ] && [ $UPDATE -ne 1 ]; then

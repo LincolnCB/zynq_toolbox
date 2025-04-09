@@ -22,15 +22,6 @@
  
  #
  # linuxptp 
-@@ -490,7 +490,7 @@
- #
- # lrzsz 
- #
--# CONFIG_lrzsz is not set
-+CONFIG_lrzsz=y
- # CONFIG_lrzsz-dbg is not set
- # CONFIG_lrzsz-dev is not set
- 
 @@ -3705,7 +3705,7 @@
  #
  # packagegroup-petalinux 
@@ -49,14 +40,3 @@
  # CONFIG_packagegroup-petalinux-utils-dbg is not set
  # CONFIG_packagegroup-petalinux-utils-dev is not set
  
-@@ -3844,7 +3844,7 @@
- #
- # PetaLinux RootFS Settings
- #
--CONFIG_ADD_EXTRA_USERS="root:root;petalinux::passwd-expire;"
-+CONFIG_ADD_EXTRA_USERS="root:root;shim:shim;"
- CONFIG_CREATE_NEW_GROUPS="aie;"
--CONFIG_ADD_USERS_TO_GROUPS="petalinux:audio,video,aie,input;"
--CONFIG_ADD_USERS_TO_SUDOERS="petalinux"
-+CONFIG_ADD_USERS_TO_GROUPS="shim:audio,video,aie,input;"
-+CONFIG_ADD_USERS_TO_SUDOERS="shim"

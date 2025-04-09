@@ -27,7 +27,7 @@ if [ ! -f "tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa" ]; then
     echo " Path: tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa."
     echo "First run the following command:"
     echo
-    echo " Path: make BOARD=${BRD} BOARD_VER=${VER} PROJECT=${PRJ} xsa"
+    echo " make BOARD=${BRD} BOARD_VER=${VER} PROJECT=${PRJ} xsa"
     echo
     exit 1
 fi
