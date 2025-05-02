@@ -17,8 +17,8 @@ set --
 # If any subsequent command fails, exit immediately
 set -e
 
-# Check up to PetaLinux RootFS config file
-./scripts/check/petalinux_rootfs_cfg.sh ${BRD} ${VER} ${PRJ}
+# Check that the PetaLinux project and its dependencies exist
+./scripts/check/petalinux_project.sh ${BRD} ${VER} ${PRJ}
 
 # Check for the kernel_modules file
 KERNEL_MODULES_FILE="projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/kernel_modules"
@@ -37,6 +37,28 @@ if [ -f "${KERNEL_MODULES_FILE}" ]; then
       echo "[CHECK KERNEL MODULES] ERROR:"
       echo "Kernel module directory not found for '${module}'"
       echo "Expected path: kernel_modules/${module}"
+      exit 1
+    fi
+
+    # Check that the directory for the module contains a PetaLinux folder of the correct version
+    if [ ! -d "kernel_modules/${module}/petalinux/${PETALINUX_VERSION}" ]; then
+      echo "[CHECK KERNEL MODULES] ERROR:"
+      echo "Missing PetaLinux version ${PETALINUX_VERSION} folder for '${module}'"
+      echo "Expected path: kernel_modules/${module}/petalinux/${PETALINUX_VERSION}"
+      exit 1
+    fi
+
+    # Check that the PetaLinux folder contains a Makefile and C file of the same name
+    if [ ! -f "kernel_modules/${module}/petalinux/${PETALINUX_VERSION}/Makefile" ]; then
+      echo "[CHECK KERNEL MODULES] ERROR:"
+      echo "Missing PetaLinux-configured Makefile for '${module}'"
+      echo "Expected path: kernel_modules/${module}/petalinux/${PETALINUX_VERSION}/Makefile"
+      exit 1
+    fi
+    if [ ! -f "kernel_modules/${module}/petalinux/${PETALINUX_VERSION}/${module}.c" ]; then
+      echo "[CHECK KERNEL MODULES] ERROR:"
+      echo "Missing kernel module C file for '${module}'"
+      echo "Expected path: kernel_modules/${module}/petalinux/${PETALINUX_VERSION}/${module}.c"
       exit 1
     fi
   done < "${KERNEL_MODULES_FILE}"

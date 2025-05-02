@@ -17,8 +17,8 @@ set --
 # If any subsequent command fails, exit immediately
 set -e
 
-# Check that the necessary PetaLinux dependencies exist
-./scripts/check/petalinux_req.sh ${BRD} ${VER} ${PRJ}
+# Check that the PetaLinux project and its dependencies exist
+./scripts/check/petalinux_project.sh ${BRD} ${VER} ${PRJ}
 
 # Check for a software folder
 if [ ! -d "projects/${PRJ}/software" ]; then
@@ -28,17 +28,6 @@ if [ ! -d "projects/${PRJ}/software" ]; then
 fi
 
 # Enter the project
-# Check that the necessary PetaLinux project exists
-if [ ! -d "tmp/${BRD}/${VER}/${PRJ}/petalinux" ]; then
-    echo "[PTLNX SOFTWARE] ERROR:"
-    echo "Missing PetaLinux project directory for ${PBV}"
-    echo " Path: tmp/${BRD}/${VER}/${PRJ}/petalinux."
-    echo "First run the following command:"
-    echo
-    echo " make BOARD=${BRD} BOARD_VER=${VER} PROJECT=${PRJ} petalinux"
-    echo
-    exit 1
-fi
 cd tmp/${BRD}/${VER}/${PRJ}/petalinux
 
 # Set the software path

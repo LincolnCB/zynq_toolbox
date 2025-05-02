@@ -35,8 +35,8 @@ PRJ=${3}
 PBV="project \"${PRJ}\" and board \"${BRD}\" v${VER}"
 set --
 
-# Check the XSA and dependencies
-echo "[PTLNX CFG SCRIPT] Checking XSA and dependencies for ${PBV}"
+# Check the PetaLinux requirements
+echo "[PTLNX CFG SCRIPT] Checking PetaLinux prerequisites for ${PBV}"
 ./scripts/check/petalinux_req.sh ${BRD} ${VER} ${PRJ} || exit 1
 
 # Check that the project configuration patch does not already exist if not updating

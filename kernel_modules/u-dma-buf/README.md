@@ -56,7 +56,7 @@ Linux Kernel 5.x.
 
 ### Changes from udmabuf to u-dma-buf
 
-| Categoly            | udmabuf                | u-dma-buf               |
+| Category            | udmabuf                | u-dma-buf               |
 |:--------------------|:-----------------------|:------------------------|
 | module name         | udmabuf.ko             | u-dma-buf.ko            |
 | source file         | udmabuf.c              | u-dma-buf.c             |
@@ -69,8 +69,8 @@ Linux Kernel 5.x.
 
 ### Makefile
 
-This repository contains a [Makefie](./Makefile).
-Makefile has the following Parameters:
+This repository contains a [Makefile](./Makefile).
+The Makefile has the following Parameters:
 
 | Parameter Name                       | Description                  | Default Value                        |
 |--------------------------------------|------------------------------|--------------------------------------|

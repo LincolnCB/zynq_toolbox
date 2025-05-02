@@ -251,7 +251,8 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux: tmp/$(BOARD)/$(BOARD_VER)/$(PROJ
 	@./scripts/make/status.sh "MAKING CONFIGURED PETALINUX PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	source $(PETALINUX_PATH)/settings.sh && \
 		scripts/petalinux/project.sh $(BOARD) $(BOARD_VER) $(PROJECT) && \
-		scripts/petalinux/software.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+		scripts/petalinux/software.sh $(BOARD) $(BOARD_VER) $(PROJECT) && \
+		scripts/petalinux/kernel_modules.sh $(BOARD) $(BOARD_VER) $(PROJECT)
 
 # The compressed root filesystem
 # Requires the PetaLinux project
