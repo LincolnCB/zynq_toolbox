@@ -267,6 +267,8 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$
 	cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && \
 		source $(PETALINUX_PATH)/settings.sh && \
 		petalinux-build
+	@./scripts/make/status.sh "PACKAGING ADDITIONAL ROOTFS FILES FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
+	scripts/petalinux/package_rootfs_files.sh $(BOARD) $(BOARD_VER) $(PROJECT)
 
 # The compressed boot files
 # Requires the root filesystem

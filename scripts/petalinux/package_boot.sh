@@ -34,7 +34,7 @@ source $PETALINUX_PATH/settings.sh
 # Enter the project
 cd tmp/${BRD}/${VER}/${PRJ}/petalinux
 
-# Check 
+# Check that the build images exist
 if [ ! -d "images/linux" ]; then
   echo "[PTLNX BOOT PKG] ERROR:"
   echo "Missing PetaLinux-generated image directory for ${PBV}"
