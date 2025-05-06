@@ -47,3 +47,9 @@ if [ -z "$PETALINUX_VERSION" ]; then
   echo "[CHECK PTLNX REQ] ERROR: PETALINUX_VERSION environment variable is not set."
   exit 1
 fi
+
+# Check that the PetaLinux version is valid
+if [[ ! "$PETALINUX_VERSION" =~ ^[0-9]{4}\.[0-9]+$ ]]; then
+  echo "[CHECK PTLNX REQ] ERROR: Invalid PetaLinux version format (${PETALINUX_VERSION}). Expected format: YYYY.X"
+  exit 1
+fi

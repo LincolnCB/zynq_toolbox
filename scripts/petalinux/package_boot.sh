@@ -46,6 +46,14 @@ if [ ! -d "images/linux" ]; then
   exit 1
 fi
 
+# Extract the PetaLinux year from the version string
+if [[ "$PETALINUX_VERSION" =~ ^([0-9]{4}) ]]; then
+  PETALINUX_YEAR=${BASH_REMATCH[1]}
+else
+  echo "[PTLNX PROJ SCRIPT] ERROR: Invalid PetaLinux version format (${PETALINUX_VERSION}). Expected format: YYYY.X"
+  exit 1
+fi
+
 # Package the boot image using the year-specific command line arguments
 if [ "$PETALINUX_YEAR" -lt 2024 ]; then
   echo "[PTLNX BOOT PKG] Using legacy PetaLinux project creation command for year ${PETALINUX_YEAR}"
