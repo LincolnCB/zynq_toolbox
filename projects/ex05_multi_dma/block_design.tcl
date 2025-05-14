@@ -101,3 +101,13 @@ cell xilinx.com:ip:axis_combiner:1.1 axis_combiner {
   aresetn ps_rst/peripheral_aresetn
   M_AXIS axi_mcdma/S_AXIS_S2MM
 }
+
+# Eight channels of loopback
+for {set i 0} {$i < 8} {incr i} {
+  cell xilinx.com:ip:axis_data_fifo:2.0 axis_loopback_$i {} {
+    S_AXIS axis_broadcaster/M0${i}_AXIS
+    M_AXIS axis_combiner/S0${i}_AXIS
+    s_axis_aresetn ps_rst/peripheral_aresetn
+    s_axis_aclk ps/FCLK_CLK0
+  }
+}
