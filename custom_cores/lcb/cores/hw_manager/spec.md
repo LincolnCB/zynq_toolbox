@@ -15,8 +15,6 @@ The `hw_manager` module is responsible for managing the hardware system's startu
 
 - **Configuration Signals**:
 	- `trig_lockout_oob`: Trigger lockout out of bounds.
-	- `cal_offset_oob`: Calibration offset out of bounds.
-	- `dac_divider_oob`: DAC divider out of bounds.
 	- `integ_thresh_avg_oob`: Integrator threshold average out of bounds.
 	- `integ_window_oob`: Integrator window out of bounds.
 	- `integ_en_oob`: Integrator enable register out of bounds.
@@ -41,20 +39,16 @@ The `hw_manager` module is responsible for managing the hardware system's startu
 	- `adc_buf_overflow`: 8-bit signal indicating ADC buffer overflow per board.
 
 - **Premature Triggers**:
-	- `premat_dac_trig`: 8-bit signal indicating premature DAC trigger per board.
-	- `premat_adc_trig`: 8-bit signal indicating premature ADC trigger per board.
-	- `premat_dac_div`: 8-bit signal indicating premature DAC division per board.
-	- `premat_adc_div`: 8-bit signal indicating premature ADC division per board.
+	- `unexp_dac_trig`: 8-bit signal indicating unexpected DAC trigger per board.
+	- `unexp_adc_trig`: 8-bit signal indicating unexpected ADC trigger per board.
 
 - **Subsystem Status**:
-	- `dac_buf_loaded`: Indicates that the DAC buffer is preloaded.
 	- `spi_running`: Indicates that the SPI subsystem is operational.
 
 ### Outputs:
 - **System Control**:
 	- `sys_rst`: System reset signal.
 	- `unlock_cfg`: Configuration lock control signal.
-	- `dma_en`: DMA enable signal.
 	- `spi_en`: SPI subsystem enable signal.
 	- `trig_en`: Trigger enable signal.
 
@@ -84,17 +78,12 @@ The `hw_manager` module is responsible for managing the hardware system's startu
 4. **Shutdown Reset Delay**:
 	 - Waits for a delay (`SHUTDOWN_RESET_DELAY`) to allow the power stage to boot.
 
-5. **Enable DMA**:
-	 - Enables DMA transfer via `dma_en`.
-	 - Waits for `dac_buf_loaded` to confirm the buffer is preloaded.
-	 - Halts if the buffer is not loaded within the timeout (`BUF_LOAD_WAIT`).
-
-6. **Enable SPI**:
+5. **Enable SPI**:
 	 - Enables the SPI subsystem via `spi_en`.
 	 - Waits for `spi_running` to confirm the SPI subsystem is operational.
 	 - Halts if the SPI subsystem does not start within the timeout (`SPI_START_WAIT`).
 
-7. **Running State**:
+6. **Running State**:
 	 - Enables triggers via `trig_en`.
 	 - Continuously monitors for errors or shutdown conditions.
 
@@ -104,7 +93,7 @@ The `hw_manager` module is responsible for managing the hardware system's startu
 - Shutdown detected via `shutdown_sense` or `ext_shutdown`.
 - DAC/ADC thresholds exceeded or underflow/overflow conditions occur.
 - DAC/ADC buffers experience underflow or overflow.
-- Premature DAC/ADC triggers or divisions occur.
+- Premature DAC/ADC triggers occur.
 
 ### Status Word:
 - The 32-bit `status_word` is formatted as follows:
@@ -118,28 +107,24 @@ The `hw_manager` module is responsible for managing the hardware system's startu
 - `1`: STATUS_OK - System is operating normally.
 - `2`: STATUS_PS_SHUTDOWN - Processing system shutdown.
 - `3`: STATUS_TRIG_LOCKOUT_OOB - Trigger lockout out of bounds.
-- `4`: STATUS_CAL_OFFSET_OOB - Calibration offset out of bounds.
-- `5`: STATUS_DAC_DIVIDER_OOB - DAC divider out of bounds.
-- `6`: STATUS_INTEG_THRESH_AVG_OOB - Integrator threshold average out of bounds.
-- `7`: STATUS_INTEG_WINDOW_OOB - Integrator window out of bounds.
-- `8`: STATUS_INTEG_EN_OOB - Integrator enable register out of bounds.
-- `9`: STATUS_SYS_EN_OOB - System enable register out of bounds.
-- `10`: STATUS_LOCK_VIOL - Configuration lock violation.
-- `11`: STATUS_SHUTDOWN_SENSE - Shutdown sense detected.
-- `12`: STATUS_EXT_SHUTDOWN - External shutdown triggered.
-- `13`: STATUS_DAC_OVER_THRESH - DAC over threshold.
-- `14`: STATUS_ADC_OVER_THRESH - ADC over threshold.
-- `15`: STATUS_DAC_THRESH_UNDERFLOW - DAC threshold FIFO underflow.
-- `16`: STATUS_DAC_THRESH_OVERFLOW - DAC threshold FIFO overflow.
-- `17`: STATUS_ADC_THRESH_UNDERFLOW - ADC threshold FIFO underflow.
-- `18`: STATUS_ADC_THRESH_OVERFLOW - ADC threshold FIFO overflow.
-- `19`: STATUS_DAC_BUF_UNDERFLOW - DAC buffer underflow.
-- `20`: STATUS_DAC_BUF_OVERFLOW - DAC buffer overflow.
-- `21`: STATUS_ADC_BUF_UNDERFLOW - ADC buffer underflow.
-- `22`: STATUS_ADC_BUF_OVERFLOW - ADC buffer overflow.
-- `23`: STATUS_PREMAT_DAC_TRIG - Premature DAC trigger.
-- `24`: STATUS_PREMAT_ADC_TRIG - Premature ADC trigger.
-- `25`: STATUS_PREMAT_DAC_DIV - Premature DAC division.
-- `26`: STATUS_PREMAT_ADC_DIV - Premature ADC division.
-- `27`: STATUS_DAC_BUF_FILL_TIMEOUT - DAC buffer fill timeout.
-- `28`: STATUS_SPI_START_TIMEOUT - SPI start timeout.
+- `4`: STATUS_INTEG_THRESH_AVG_OOB - Integrator threshold average out of bounds.
+- `5`: STATUS_INTEG_WINDOW_OOB - Integrator window out of bounds.
+- `6`: STATUS_INTEG_EN_OOB - Integrator enable register out of bounds.
+- `7`: STATUS_SYS_EN_OOB - System enable register out of bounds.
+- `8`: STATUS_LOCK_VIOL - Configuration lock violation.
+- `9`: STATUS_SHUTDOWN_SENSE - Shutdown sense detected.
+- `10`: STATUS_EXT_SHUTDOWN - External shutdown triggered.
+- `11`: STATUS_DAC_OVER_THRESH - DAC over threshold.
+- `12`: STATUS_ADC_OVER_THRESH - ADC over threshold.
+- `13`: STATUS_DAC_THRESH_UNDERFLOW - DAC threshold FIFO underflow.
+- `14`: STATUS_DAC_THRESH_OVERFLOW - DAC threshold FIFO overflow.
+- `15`: STATUS_ADC_THRESH_UNDERFLOW - ADC threshold FIFO underflow.
+- `16`: STATUS_ADC_THRESH_OVERFLOW - ADC threshold FIFO overflow.
+- `17`: STATUS_DAC_BUF_UNDERFLOW - DAC buffer underflow.
+- `18`: STATUS_DAC_BUF_OVERFLOW - DAC buffer overflow.
+- `19`: STATUS_ADC_BUF_UNDERFLOW - ADC buffer underflow.
+- `20`: STATUS_ADC_BUF_OVERFLOW - ADC buffer overflow.
+- `21`: STATUS_UNEXP_DAC_TRIG - Unexpected DAC trigger.
+- `22`: STATUS_UNEXP_ADC_TRIG - Unexpected ADC trigger.
+- `23`: STATUS_SPI_START_TIMEOUT - SPI start timeout.
+
