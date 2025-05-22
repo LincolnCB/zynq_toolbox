@@ -244,12 +244,15 @@ module axi_shim_cfg #
         end
       end
 
+      // Reset the buffers if requested
+      if (~sys_en && ~locked) begin
+        buffer_reset <= int_data_wire[BUFFER_RESET_32_OFFSET*32+BUFFER_RESET_WIDTH-1:BUFFER_RESET_32_OFFSET*32];
+      end else if (buffer_reset) begin
+        buffer_reset <= 0;
+      end
+
     end
   end
-
-  // Buffer reset assignment
-  assign buffer_reset = (~sys_en && ~locked) ? int_data_wire[BUFFER_RESET_32_OFFSET*32+BUFFER_RESET_WIDTH-1:BUFFER_RESET_32_OFFSET*32] : 0; 
-
 
   // Write response logic
   always @*

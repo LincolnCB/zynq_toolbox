@@ -14,7 +14,7 @@ module threshold_integrator (
   // Outputs
   output  reg         err_overflow  ,
   output  reg         err_underflow ,
-  output  reg         over_threshold,
+  output  wire        over_threshold,
   output  reg         setup_done
 );
 
@@ -49,6 +49,7 @@ module threshold_integrator (
   reg [19:0] outflow_remainder          [ 7:0];
   reg signed [17:0] sum_delta   [ 7:0];
   reg signed [48:0] total_sum   [ 7:0];
+  reg [ 7:0] channel_over_threshold;
 
   // State encoding
   localparam  IDLE          = 3'd0,
@@ -57,6 +58,9 @@ module threshold_integrator (
               RUNNING       = 3'd3,
               OUT_OF_BOUNDS = 3'd4,
               ERROR         = 3'd5;
+
+  // Over threshold if any channel is over threshold
+  assign over_threshold = |channel_over_threshold;
 
   //// FIFO instantiation
   // xpm_fifo_sync: Synchronous FIFO
@@ -128,7 +132,7 @@ module threshold_integrator (
       fifo_out_queue_count <= 0;
 
       // Zero all output signals
-      over_threshold <= 0;
+      channel_over_threshold <= 8'b0;
       err_overflow <= 0;
       err_underflow <= 0;
       setup_done <= 0;
@@ -185,7 +189,7 @@ module threshold_integrator (
             end else if (window[11]) begin
               chunk_size <= 5;
             end else begin // Disallowed size of window
-              over_threshold <= 1;
+              channel_over_threshold <= 8'b111111111;
               state <= OUT_OF_BOUNDS;
             end
 
@@ -334,7 +338,7 @@ module threshold_integrator (
                   : $signed({2'b00, inflow_value[i]}) - $signed({2'b00, outflow_value[i]});
           total_sum[i] <= total_sum[i] + sum_delta[i];
           if (total_sum[i] > max_value) begin
-            over_threshold <= 1;
+            channel_over_threshold[i] <= 1;
             state <= OUT_OF_BOUNDS;
           end
         end // RUNNING
