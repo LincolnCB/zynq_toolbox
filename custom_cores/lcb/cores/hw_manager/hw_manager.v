@@ -5,15 +5,16 @@ module hw_manager #(
   parameter integer SHUTDOWN_FORCE_DELAY = 25000000, // 100 ms, Delay after releasing "n_shutdown_force" before pulsing "n_shutdown_rst"
   parameter integer SHUTDOWN_RESET_PULSE = 25000,    // 100 us, Pulse width for "n_shutdown_rst"
   parameter integer SHUTDOWN_RESET_DELAY = 25000000, // 100 ms, Delay after pulsing "n_shutdown_rst" before starting the system
-  parameter integer SPI_START_WAIT = 250000000  // SPI start after "spi_en" is set
+  parameter integer SPI_INIT_WAIT = 25000000,   // 100 ms, Delay after starting the SPI clock before checking if the SPI subsystem is initialized to off
+  parameter integer SPI_START_WAIT = 250000000  // 1 second, Delay after starting the SPI clock before halting if the SPI subsystem doesn't start
 )
 (
   input   wire          clk,
-  input   wire          rst,
+  input   wire          aresetn,        // Active low reset
 
   // Inputs
   input   wire          sys_en,         // System enable (turn the system on)
-  input   wire          spi_running,    // SPI system up and running
+  input   wire          spi_off,        // SPI system powered off
   input   wire          ext_shutdown,   // External shutdown
   // Configuration values
   input   wire          trig_lockout_oob,     // Trigger lockout out of bounds
@@ -36,18 +37,19 @@ module hw_manager #(
   input   wire  [ 7:0]  dac_buf_overflow,  // DAC buffer overflow (per board)
   input   wire  [ 7:0]  adc_buf_underflow, // ADC buffer underflow (per board)
   input   wire  [ 7:0]  adc_buf_overflow,  // ADC buffer overflow (per board)
-  input   wire  [ 7:0]  unexp_dac_trig, // Unexpected DAC trigger (per board)
-  input   wire  [ 7:0]  unexp_adc_trig, // Unexpected ADC trigger (per board)
+  input   wire  [ 7:0]  unexp_dac_trig,    // Unexpected DAC trigger (per board)
+  input   wire  [ 7:0]  unexp_adc_trig,    // Unexpected ADC trigger (per board)
 
   // Outputs
-  output  reg           sys_rst,        // System reset
-  output  reg           unlock_cfg,     // Lock configuration
-  output  reg           spi_en,         // SPI subsystem enable
-  output  reg           trig_en,        // Trigger enable
-  output  reg           n_shutdown_force, // Shutdown force (negated)
-  output  reg           n_shutdown_rst, // Shutdown reset (negated)
-  output  wire  [31:0]  status_word,    // Status - Status word
-  output  reg           ps_interrupt    // Interrupt signal
+  output  reg           unlock_cfg,        // Lock configuration
+  output  reg           spi_clk_power_n,   // SPI clock power (negated)
+  output  reg           spi_en,            // SPI subsystem enable
+  output  reg           shutdown_sense_en, // Shutdown sense enable
+  output  reg           trig_en,           // Trigger enable
+  output  reg           n_shutdown_force,  // Shutdown force (negated)
+  output  reg           n_shutdown_rst,    // Shutdown reset (negated)
+  output  wire  [31:0]  status_word,       // Status - Status word
+  output  reg           ps_interrupt       // Interrupt signal
 );
 
   // Internal signals
@@ -60,13 +62,14 @@ module hw_manager #(
   assign status_word = {board_num, status_code, state};
 
   // State encoding
-  localparam  IDLE         = 4'd1,
-              RELEASE_SD_F = 4'd2,
-              PULSE_SD_RST = 4'd3,
-              SD_RST_DELAY = 4'd4,
-              START_SPI    = 4'd5,
-              RUNNING      = 4'd6,
-              HALTED       = 4'd7;
+  localparam  IDLE              = 4'd1,
+              CONFIRM_SPI_INIT  = 4'd2,
+              RELEASE_SD_F      = 4'd3,
+              PULSE_SD_RST      = 4'd4,
+              SD_RST_DELAY      = 4'd5,
+              CONFIRM_SPI_START = 4'd6,
+              RUNNING           = 4'd7,
+              HALTED            = 4'd8;
 
   // Status codes
   localparam  STATUS_OK                   = 25'd1,
@@ -91,17 +94,19 @@ module hw_manager #(
               STATUS_ADC_BUF_OVERFLOW     = 25'd20,
               STATUS_UNEXP_DAC_TRIG       = 25'd21,
               STATUS_UNEXP_ADC_TRIG       = 25'd22,
-              STATUS_SPI_START_TIMEOUT    = 25'd23;
+              STATUS_SPI_START_TIMEOUT    = 25'd23,
+              STATUS_SPI_INIT_TIMEOUT     = 25'd24;
 
   // Main state machine
-  always @(posedge clk or posedge rst) begin
-    if (rst) begin
+  always @(posedge clk) begin
+    if (~aresetn) begin
       state <= IDLE;
       timer <= 0;
-      sys_rst <= 1;
       n_shutdown_force <= 0;
       n_shutdown_rst <= 1;
+      shutdown_sense_en <= 0;
       unlock_cfg <= 1;
+      spi_clk_power_n <= 1;
       spi_en <= 0;
       trig_en <= 0;
       status_code <= STATUS_OK;
@@ -113,8 +118,8 @@ module hw_manager #(
       case (state)
 
         // Idle state, hardware shut down, waiting for system enable to go high
-        // When enabled, remove the system reset and shutdown force, lock the config registers
-        IDLE: begin
+        // When enabled, lock the config registers and confirm the SPI subsystem is initialized
+        IDLE: begin : idle_state
           if (sys_en) begin
             // Check for out of bounds configuration values
             if (trig_lockout_oob) begin // Trigger lockout out of bounds
@@ -137,18 +142,41 @@ module hw_manager #(
               state <= HALTED;
               status_code <= STATUS_SYS_EN_OOB;
               ps_interrupt <= 1;
-            end else begin // Start bootup
-              state <= RELEASE_SD_F;
+            end else begin // Lock the cfg registers and start the SPI clock to confirm the SPI subsystem is initialized
+              state <= CONFIRM_SPI_INIT;
               timer <= 0;
-              sys_rst <= 0;
               unlock_cfg <= 0;
-              n_shutdown_force <= 1;
+              spi_clk_power_n <= 0;
             end
           end // if (sys_en)
-          
         end // IDLE
 
+        // Confirm the SPI subsystem is initialized
+        // If the SPI subsystem is not initialized, halt the system
+        // Signals to halt:
+        //   timer
+        //   spi_clk_power_n
+        CONFIRM_SPI_INIT: begin
+          if (timer >= 10 && spi_off) begin
+            state <= RELEASE_SD_F;
+            timer <= 0;
+            spi_clk_power_n <= 1;
+            n_shutdown_force <= 1;
+          end else if (timer >= SPI_INIT_WAIT) begin
+            state <= HALTED;
+            timer <= 0;
+            spi_clk_power_n <= 1;
+            status_code <= STATUS_SPI_INIT_TIMEOUT;
+            ps_interrupt <= 1;
+          end else begin
+            timer <= timer + 1;
+          end // if (spi_off)
+        end // CONFIRM_SPI_INIT
+
         // Wait for a delay between releasing the shutdown force and pulsing the shutdown reset
+        // Signals to halt:
+        //   timer
+        //   n_shutdown_force
         RELEASE_SD_F: begin
           if (timer >= SHUTDOWN_FORCE_DELAY) begin
             state <= PULSE_SD_RST;
@@ -160,6 +188,10 @@ module hw_manager #(
         end // RELEASE_SD_F
 
         // Pulse the shutdown reset for a short time
+        // Signals to halt:
+        //   timer
+        //   n_shutdown_force
+        //   n_shutdown_rst
         PULSE_SD_RST: begin
           if (timer >= SHUTDOWN_RESET_PULSE) begin
             state <= SD_RST_DELAY;
@@ -171,20 +203,33 @@ module hw_manager #(
         end // PULSE_SD_RST
 
         // Wait for a delay after pulsing the shutdown reset before starting the system
+        // Signals to halt:
+        //   timer
+        //   n_shutdown_force
         SD_RST_DELAY: begin
           if (timer >= SHUTDOWN_RESET_DELAY) begin
-            state <= START_SPI;
+            state <= CONFIRM_SPI_START;
             timer <= 0;
+            shutdown_sense_en <= 1;
+            spi_clk_power_n <= 0;
             spi_en <= 1;
           end else begin
             timer <= timer + 1;
           end // if (timer >= SHUTDOWN_RESET_DELAY)
         end // SD_RST_DELAY
 
+
         // Wait for the SPI subsystem to start before running the system
         // If the SPI subsystem doesn't start in time, halt the system
-        START_SPI: begin
-          if (spi_running) begin
+        // Signals to halt:
+        //   timer
+        //   n_shutdown_force
+        //   shutdown_sense_en
+        //   spi_clk_power_n
+        //   spi_en
+        //   trig_en
+        CONFIRM_SPI_START: begin
+          if (~spi_off) begin
             state <= RUNNING;
             timer <= 0;
             trig_en <= 1;
@@ -192,17 +237,24 @@ module hw_manager #(
           end else if (timer >= SPI_START_WAIT) begin
             state <= HALTED;
             timer <= 0;
-            sys_rst <= 1;
             n_shutdown_force <= 0;
+            shutdown_sense_en <= 0;
+            spi_clk_power_n <= 1;
             spi_en <= 0;
             status_code <= STATUS_SPI_START_TIMEOUT;
             ps_interrupt <= 1;
           end else begin
             timer <= timer + 1;
-          end // if (spi_running)
-        end // START_SPI
+          end // if (~spi_off)
+        end // CONFIRM_SPI_START
 
         // Main running state, check for various error conditions or shutdowns
+        // Signals to halt:
+        //   n_shutdown_force
+        //   shutdown_sense_en
+        //   spi_clk_power_n
+        //   spi_en
+        //   trig_en
         RUNNING: begin
           // Reset the interrupt if needed
           if (ps_interrupt) begin
@@ -229,9 +281,9 @@ module hw_manager #(
               ) begin
             // Set the status code and halt the system
             state <= HALTED;
-            timer <= 0;
-            sys_rst <= 1;
             n_shutdown_force <= 0;
+            shutdown_sense_en <= 0;
+            spi_clk_power_n <= 1;
             spi_en <= 0;
             trig_en <= 0;
             ps_interrupt <= 1;
@@ -345,7 +397,7 @@ module hw_manager #(
 
       endcase // case (state)
     end // if (rst) else
-  end // always @(posedge clk or posedge rst)
+  end // always @(posedge clk)
 
   // Function to extract the board number from an 8-bit signal
   function [2:0] extract_board_num;

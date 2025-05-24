@@ -5,28 +5,28 @@ module fifo_sync #(
     parameter ALMOST_EMPTY_THRESHOLD = 2 // Adjust as needed
 )(
     input  wire                   clk,
-    input  wire                   rst_n,
+    input  wire                   aresetn,
     input  wire [DATA_WIDTH-1:0]  wr_data,
     input  wire                   wr_en,
     output wire                   full,
     output wire                   almost_full,
 
-    output wire [DATA_WIDTH-1:0]  rd_data,
+    output reg  [DATA_WIDTH-1:0]  rd_data,
     input  wire                   rd_en,
     output wire                   empty,
     output wire                   almost_empty
 );
 
     // FIFO memory
-    reg [DATA_WIDTH-1:0] mem [0:(1<<ADDR_WIDTH)-1];
+    (* ram_style = "block" *) reg [DATA_WIDTH-1:0] mem [0:(1<<ADDR_WIDTH)-1];
 
     // Write and read pointers
     reg [ADDR_WIDTH:0] wr_ptr_bin;
     reg [ADDR_WIDTH:0] rd_ptr_bin;
 
     // Write logic
-    always @(posedge clk or negedge rst_n) begin
-        if (~rst_n) begin
+    always @(posedge clk) begin
+        if (~aresetn) begin
             wr_ptr_bin <= 0;
         end else if (wr_en && !full) begin
             mem[wr_ptr_bin[ADDR_WIDTH-1:0]] <= wr_data;
@@ -35,15 +35,14 @@ module fifo_sync #(
     end
 
     // Read logic
-    always @(posedge clk or negedge rst_n) begin
-        if (~rst_n) begin
+    always @(posedge clk) begin
+        if (~aresetn) begin
             rd_ptr_bin <= 0;
         end else if (rd_en && !empty) begin
+            rd_data <= mem[rd_ptr_bin[ADDR_WIDTH-1:0]];
             rd_ptr_bin <= rd_ptr_bin + 1;
         end
     end
-
-    assign rd_data = mem[rd_ptr_bin[ADDR_WIDTH-1:0]];
 
     // Generate full and empty flags
     assign full  = ( (wr_ptr_bin[ADDR_WIDTH] != rd_ptr_bin[ADDR_WIDTH]) &&

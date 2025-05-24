@@ -38,7 +38,7 @@ module fifo_asynch_count #(
     endfunction
 
     // FIFO memory
-    reg [DATA_WIDTH-1:0] mem [0:(1<<ADDR_WIDTH)-1];
+    (* ram_style = "block" *) reg [DATA_WIDTH-1:0] mem [0:(1<<ADDR_WIDTH)-1];
 
     // Write and read pointers
     reg [ADDR_WIDTH:0] wr_ptr_bin;

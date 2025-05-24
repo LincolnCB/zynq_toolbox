@@ -6,7 +6,7 @@ module synchronizer #(
   parameter STABLE_COUNT = 2 // Stability count for the stable output signal
 )(
   input  wire clk,               // Clock signal
-  input  wire rst,               // Reset signal (active high)
+  input  wire aresetn,           // Active low reset signal
   input  wire [WIDTH-1:0] din,   // Input signal to be synchronized
   output wire [WIDTH-1:0] dout,  // Synchronized output signal
   output reg  stable // Indicates if the output signal is stable for the specified count
@@ -33,8 +33,8 @@ module synchronizer #(
   reg [clogb2(NONZ_STABLE_COUNT+1)-1:0] stable_counter;
 
   // Initial stage logic
-  always @(posedge clk or posedge rst) begin
-    if (rst) begin
+  always @(posedge clk or negedge aresetn) begin
+    if (~aresetn) begin
       sync_chain[0] <= {WIDTH{1'b0}};
     end else begin
       sync_chain[0] <= din;
@@ -45,8 +45,8 @@ module synchronizer #(
   genvar i;
   generate
     for (i = 1; i < SYNC_DEPTH; i = i + 1) begin : sync_chain_gen
-      always @(posedge clk or posedge rst) begin
-        if (rst) begin
+      always @(posedge clk) begin
+        if (~aresetn) begin
           sync_chain[i] <= {WIDTH{1'b0}};
         end else begin
           sync_chain[i] <= sync_chain[i-1];
@@ -59,8 +59,8 @@ module synchronizer #(
   assign dout = sync_chain[SYNC_DEPTH-1];
 
   // Logic to determine if the output is stable
-  always @(posedge clk or posedge rst) begin
-    if (rst) begin
+  always @(posedge clk) begin
+    if (~aresetn) begin
       stable <= 1'b0; // Reset stable signal
       stable_counter <= 0; // Reset stable counter
       prev_dout <= {WIDTH{1'b0}}; // Reset previous output

@@ -51,7 +51,7 @@ module axi_fifo_bridge #(
 
     // Write response
     always @(posedge aclk) begin
-        if (!aresetn) begin
+        if (~aresetn) begin
             s_axi_bvalid <= 1'b0;
             s_axi_bresp  <= 2'b00;
         end else begin
@@ -72,7 +72,7 @@ module axi_fifo_bridge #(
     assign fifo_rd_en    = s_axi_arvalid && s_axi_arready && ENABLE_READ;
 
     always @(posedge aclk) begin
-        if (!aresetn) begin
+        if (~aresetn) begin
             s_axi_rvalid <= 1'b0;
             s_axi_rresp  <= 2'b00;
             s_axi_rdata  <= {AXI_DATA_WIDTH{1'b0}};

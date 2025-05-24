@@ -2,15 +2,15 @@
 
 module shutdown_sense (
   input wire clk,
-  input wire rst,
+  input wire shutdown_sense_en,
   input wire shutdown_sense_pin,
   output reg [2:0] shutdown_sense_sel,
   output reg [7:0] shutdown_sense
 );
 
-  always @(posedge clk or posedge rst) begin
-    if (rst) begin
-      // Reset logic
+  always @(posedge clk) begin
+    if (~shutdown_sense_en) begin
+      // Disabled state
       shutdown_sense_sel <= 3'b000;
       shutdown_sense <= 8'b00000000;
     end else begin

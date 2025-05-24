@@ -3,7 +3,7 @@
 module threshold_integrator (
   // Inputs
   input   wire         clk               ,
-  input   wire         rst               ,
+  input   wire         aresetn           ,
   input   wire         enable            ,
   input   wire [ 31:0] window            ,
   input   wire [ 14:0] threshold_average ,
@@ -14,11 +14,11 @@ module threshold_integrator (
   // Outputs
   output  reg         err_overflow  ,
   output  reg         err_underflow ,
-  output  wire        over_threshold,
+  output  reg         over_threshold,
   output  reg         setup_done
 );
 
-  // Internal signals
+  //// Internal signals
   wire[15:0] value_in   [7:0];
   wire       value_ready[7:0];
   reg [47:0] max_value               ;
@@ -33,12 +33,14 @@ module threshold_integrator (
   reg [24:0] outflow_timer           ;
   reg [ 3:0] fifo_in_queue_count     ;
   reg [35:0] fifo_din                ;
+  wire       fifo_full               ;
   wire       wr_en                   ;
-  wire       overflow                ;
   reg [ 3:0] fifo_out_queue_count    ;
+  reg [ 3:0] fifo_out_idx            ;
   wire[35:0] fifo_dout               ;
+  wire       fifo_empty              ;
   wire       rd_en                   ;
-  wire       underflow               ;
+  wire[ 7:0] channel_over_threshold  ;
   reg [ 2:0] state                   ;
   reg [15:0] inflow_value               [ 7:0];
   reg [21:0] sub_average_sum            [ 7:0];
@@ -49,9 +51,9 @@ module threshold_integrator (
   reg [19:0] outflow_remainder          [ 7:0];
   reg signed [17:0] sum_delta   [ 7:0];
   reg signed [48:0] total_sum   [ 7:0];
-  reg [ 7:0] channel_over_threshold;
 
-  // State encoding
+
+  //// State encoding
   localparam  IDLE          = 3'd0,
               SETUP         = 3'd1,
               WAIT          = 3'd2,
@@ -59,50 +61,25 @@ module threshold_integrator (
               OUT_OF_BOUNDS = 3'd4,
               ERROR         = 3'd5;
 
-  // Over threshold if any channel is over threshold
-  assign over_threshold = |channel_over_threshold;
 
-  //// FIFO instantiation
-  // xpm_fifo_sync: Synchronous FIFO
-  // Xilinx Parameterized Macro, version 2024.1
-  xpm_fifo_sync #(
-    .FIFO_MEMORY_TYPE("block"),    // String
-    .FIFO_READ_LATENCY(0),         // DECIMAL
-    .FIFO_WRITE_DEPTH(1024),       // DECIMAL
-    .RD_DATA_COUNT_WIDTH(11),      // DECIMAL
-    .READ_DATA_WIDTH(36),          // DECIMAL
-    .READ_MODE("fwft"),            // String
-    .USE_ADV_FEATURES("0101"),     // Enable: overflow, underflow
-    .WRITE_DATA_WIDTH(36),         // DECIMAL
-    .WR_DATA_COUNT_WIDTH(11)       // DECIMAL
+  //// FIFO for rolling integration memory
+  fifo_sync #(
+    .DATA_WIDTH(36),
+    .ADDR_WIDTH(10)
   )
-  xpm_fifo_sync_inst (
-    .dout(fifo_dout),              // READ_DATA_WIDTH-bit output: Read Data: The output data bus is driven
-                                    // when reading the FIFO.
-    .overflow(overflow),           // 1-bit output: Overflow: This signal indicates that a write request
-                                    // (wren) during the prior clock cycle was rejected, because the FIFO is
-                                    // full. Overflowing the FIFO is not destructive to the contents of the
-                                    // FIFO.
-    .underflow(underflow),         // 1-bit output: Underflow: Indicates that the read request (rd_en) during
-                                    // the previous clock cycle was rejected because the FIFO is empty. Under
-                                    // flowing the FIFO is not destructive to the FIFO.
-    .din(fifo_din),                // WRITE_DATA_WIDTH-bit input: Write Data: The input data bus used when
-                                    // writing the FIFO.
-    .rd_en(rd_en),                 // 1-bit input: Read Enable: If the FIFO is not empty, asserting this
-                                    // signal causes data (on dout) to be read from the FIFO. Must be held
-                                    // active-low when rd_rst_busy is active high.
-    .rst(rst),                     // 1-bit input: Reset: Must be synchronous to wr_clk. The clock(s) can be
-                                    // unstable at the time of applying reset, but reset must be released only
-                                    // after the clock(s) is/are stable.
-    .wr_clk(clk),                  // 1-bit input: Write clock: Used for write operation. wr_clk must be a
-                                    // free running clock.
-    .wr_en(wr_en)                  // 1-bit input: Write Enable: If the FIFO is not full, asserting this
-                                    // signal causes data (on din) to be written to the FIFO Must be held
-                                    // active-low when rst or wr_rst_busy or rd_rst_busy is active high
+  rolling_sum_mem (
+    .clk(clk),
+    .aresetn(aresetn),
+    .wr_data(fifo_din),
+    .wr_en(wr_en),
+    .full(fifo_full),
+    .rd_data(fifo_dout),
+    .rd_en(rd_en),
+    .empty(fifo_empty)
   );
-  // End of xpm_fifo_sync_inst instantiation
 
-  // FIFO I/O
+
+  //// FIFO I/O
   always @* begin
     if (fifo_in_queue_count != 0) begin
       fifo_din = queued_fifo_in_sample_sum[fifo_in_queue_count - 1];
@@ -113,11 +90,12 @@ module threshold_integrator (
   assign wr_en = (fifo_in_queue_count != 0);
   assign rd_en = (fifo_out_queue_count != 0);
 
-  // Global logic
-  always @(posedge clk or posedge rst) begin
+
+  //// Global logic
+  always @(posedge clk) begin : global_logic
     // Reset logic
-    if (rst) begin
-      // Zero all internal signals
+    if (~aresetn) begin : reset_logic
+      // Zero all individual signals
       max_value <= 0;
       chunk_size <= 0;
       chunk_mask <= 0;
@@ -130,16 +108,17 @@ module threshold_integrator (
       outflow_timer <= 0;
       fifo_in_queue_count <= 0;
       fifo_out_queue_count <= 0;
+      fifo_out_idx <= 0;
 
       // Zero all output signals
-      channel_over_threshold <= 8'b0;
+      over_threshold <= 0;
       err_overflow <= 0;
       err_underflow <= 0;
       setup_done <= 0;
 
       // Set initial state
       state <= IDLE;
-    end else begin
+    end else begin : state_logic
       case (state)
 
         // IDLE state, waiting for enable signal
@@ -189,7 +168,7 @@ module threshold_integrator (
             end else if (window[11]) begin
               chunk_size <= 5;
             end else begin // Disallowed size of window
-              channel_over_threshold <= 8'b111111111;
+              over_threshold <= 1;
               state <= OUT_OF_BOUNDS;
             end
 
@@ -224,16 +203,22 @@ module threshold_integrator (
         end // WAIT
 
         // RUNNING state, main logic
-        RUNNING: begin
+        RUNNING: begin : running_state
 
           // Error logic
-          if (overflow) begin
+          if (fifo_full & wr_en) begin
             err_overflow <= 1;
             state <= ERROR;
           end
-          if (underflow) begin
+          if (fifo_empty & rd_en) begin
             err_underflow <= 1;
             state <= ERROR;
+          end
+          
+          // Over threshold logic
+          if (|channel_over_threshold) begin
+            over_threshold <= 1;
+            state <= OUT_OF_BOUNDS;
           end
 
           // Inflow timers
@@ -265,19 +250,20 @@ module threshold_integrator (
             outflow_timer <= chunk_mask;
           end // Outflow timer
 
-          // Outflow FIFO logic
+          // Outflow FIFO counters (index 1-delayed from fifo_out_queue_count to allow for 1-cycle read delay)
+          fifo_out_idx <= fifo_out_queue_count;
           if (fifo_out_queue_count != 0) begin
-            queued_fifo_out_sample_sum[fifo_out_queue_count - 1] <= fifo_dout;
+            // FIFO pop is done in the per-channel logic below
             fifo_out_queue_count <= fifo_out_queue_count - 1;
-          end // Outflow FIFO logic
+          end
 
         end // RUNNING
 
-        OUT_OF_BOUNDS: begin
+        OUT_OF_BOUNDS: begin : out_of_bounds_state
           // Stop everything until reset
         end // OUT_OF_BOUNDS
 
-        ERROR: begin
+        ERROR: begin : error_state
           // Stop everything until reset
         end // ERROR
 
@@ -285,15 +271,18 @@ module threshold_integrator (
     end
   end // Global logic
 
-  // Per-channel logic
+
+  //// Per-channel logic
   genvar i;
   generate // Per-channel logic generate
     for (i = 0; i < 8; i = i + 1) begin : channel_loop
       assign value_in[i] = value_in_concat[16 * (i + 1) - 1 -: 16];
       assign value_ready[i] = value_ready_concat[i];
+      assign channel_over_threshold[i] = (total_sum[i] > max_value) ? 1 : 0;
 
-      always @(posedge clk or posedge rst) begin
-        if (rst) begin : channel_reset
+      always @(posedge clk) begin : channel_logic
+        if (~aresetn) begin : channel_reset
+          // Zero all per-channel signals
           inflow_value[i] = 0;
           sub_average_sum[i] = 0;
           inflow_sample_sum[i] = 0;
@@ -325,6 +314,11 @@ module threshold_integrator (
           end
 
           //// Outflow logic
+          // Outflow FIFO logic
+          if (fifo_out_idx == i + 1) begin
+            queued_fifo_out_sample_sum[i] <= fifo_dout;
+          end // Outflow FIFO logic
+
           // Move queued samples in to outflow value and remainder
           if (outflow_timer == 0) begin
             outflow_value[i] <= queued_fifo_out_sample_sum[i] >> sample_size;
@@ -337,10 +331,6 @@ module threshold_integrator (
                   ? $signed({2'b00, inflow_value[i]}) - $signed({2'b00, outflow_value[i]} + 1)
                   : $signed({2'b00, inflow_value[i]}) - $signed({2'b00, outflow_value[i]});
           total_sum[i] <= total_sum[i] + sum_delta[i];
-          if (total_sum[i] > max_value) begin
-            channel_over_threshold[i] <= 1;
-            state <= OUT_OF_BOUNDS;
-          end
         end // RUNNING
       end // channel_running
     end // channel_loop

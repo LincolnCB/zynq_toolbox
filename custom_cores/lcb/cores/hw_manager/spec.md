@@ -1,109 +1,99 @@
 # Hardware Manager Core
 
-The `hw_manager` module is responsible for managing the hardware system's startup, operation, and shutdown processes. It operates as follows:
+The `hw_manager` module manages the hardware system's startup, operation, and shutdown processes. It implements a state machine to sequence power-up, configuration, SPI subsystem enable, and error/shutdown handling.
 
 ## Inputs and Outputs
 
-### Inputs:
-- **Clock and Reset**:
-	- `clk`: Clock signal for synchronous operation.
-	- `rst`: Reset signal to initialize the module.
+### Inputs
 
-- **System Control**:
-	- `sys_en`: System enable signal to start the system.
-	- `ext_shutdown`: External shutdown signal.
+- **Clock and Reset**
+  - `clk`: Clock signal for synchronous operation.
+  - `aresetn`: Active-low reset signal.
 
-- **Configuration Signals**:
-	- `trig_lockout_oob`: Trigger lockout out of bounds.
-	- `integ_thresh_avg_oob`: Integrator threshold average out of bounds.
-	- `integ_window_oob`: Integrator window out of bounds.
-	- `integ_en_oob`: Integrator enable register out of bounds.
-	- `sys_en_oob`: System enable register out of bounds.
-	- `lock_viol`: Configuration lock violation.
+- **System Control**
+  - `sys_en`: System enable signal to start the system.
+  - `spi_off`: Indicates the SPI subsystem is powered off.
+  - `ext_shutdown`: External shutdown signal.
 
-- **Shutdown Sense**:
-	- `shutdown_sense`: 8-bit input signal indicating shutdown conditions per board.
+- **Configuration Status**
+  - `trig_lockout_oob`: Trigger lockout out of bounds.
+  - `integ_thresh_avg_oob`: Integrator threshold average out of bounds.
+  - `integ_window_oob`: Integrator window out of bounds.
+  - `integ_en_oob`: Integrator enable register out of bounds.
+  - `sys_en_oob`: System enable register out of bounds.
+  - `lock_viol`: Configuration lock violation.
 
-- **DAC/ADC Thresholds**:
-	- `dac_over_thresh`: 8-bit signal indicating DAC over-threshold conditions per board.
-	- `adc_over_thresh`: 8-bit signal indicating ADC over-threshold conditions per board.
-	- `dac_thresh_underflow`: 8-bit signal indicating DAC threshold FIFO underflow per board.
-	- `dac_thresh_overflow`: 8-bit signal indicating DAC threshold FIFO overflow per board.
-	- `adc_thresh_underflow`: 8-bit signal indicating ADC threshold FIFO underflow per board.
-	- `adc_thresh_overflow`: 8-bit signal indicating ADC threshold FIFO overflow per board.
+- **Shutdown Sense**
+  - `shutdown_sense [7:0]`: Shutdown sense signals (per board).
 
-- **DAC/ADC Buffers**:
-	- `dac_buf_underflow`: 8-bit signal indicating DAC buffer underflow per board.
-	- `dac_buf_overflow`: 8-bit signal indicating DAC buffer overflow per board.
-	- `adc_buf_underflow`: 8-bit signal indicating ADC buffer underflow per board.
-	- `adc_buf_overflow`: 8-bit signal indicating ADC buffer overflow per board.
+- **DAC/ADC Thresholds**
+  - `dac_over_thresh [7:0]`: DAC over-threshold (per board).
+  - `adc_over_thresh [7:0]`: ADC over-threshold (per board).
+  - `dac_thresh_underflow [7:0]`: DAC threshold FIFO underflow (per board).
+  - `dac_thresh_overflow [7:0]`: DAC threshold FIFO overflow (per board).
+  - `adc_thresh_underflow [7:0]`: ADC threshold FIFO underflow (per board).
+  - `adc_thresh_overflow [7:0]`: ADC threshold FIFO overflow (per board).
 
-- **Premature Triggers**:
-	- `unexp_dac_trig`: 8-bit signal indicating unexpected DAC trigger per board.
-	- `unexp_adc_trig`: 8-bit signal indicating unexpected ADC trigger per board.
+- **DAC/ADC Buffers**
+  - `dac_buf_underflow [7:0]`: DAC buffer underflow (per board).
+  - `dac_buf_overflow [7:0]`: DAC buffer overflow (per board).
+  - `adc_buf_underflow [7:0]`: ADC buffer underflow (per board).
+  - `adc_buf_overflow [7:0]`: ADC buffer overflow (per board).
 
-- **Subsystem Status**:
-	- `spi_running`: Indicates that the SPI subsystem is operational.
+- **Premature Triggers**
+  - `unexp_dac_trig [7:0]`: Unexpected DAC trigger (per board).
+  - `unexp_adc_trig [7:0]`: Unexpected ADC trigger (per board).
 
-### Outputs:
-- **System Control**:
-	- `sys_rst`: System reset signal.
-	- `unlock_cfg`: Configuration lock control signal.
-	- `spi_en`: SPI subsystem enable signal.
-	- `trig_en`: Trigger enable signal.
+### Outputs
 
-- **Shutdown Control**:
-	- `n_shutdown_force`: Negated shutdown force signal.
-	- `n_shutdown_rst`: Negated shutdown reset signal.
+- **System Control**
+  - `unlock_cfg`: Unlock configuration registers (active high).
+  - `spi_clk_power_n`: SPI clock power control (active low).
+  - `spi_en`: SPI subsystem enable.
+  - `shutdown_sense_en`: Enable shutdown sense logic.
+  - `trig_en`: Trigger enable.
+  - `n_shutdown_force`: Negated shutdown force signal.
+  - `n_shutdown_rst`: Negated shutdown reset signal.
 
-- **Status and Interrupts**:
-	- `status_word`: 32-bit status word containing the board number, status code, and state.
-	- `ps_interrupt`: Interrupt signal to notify the processing system.
+- **Status and Interrupts**
+  - `status_word [31:0]`: Status word containing board number, status code, and state.
+  - `ps_interrupt`: Interrupt signal to notify the processing system.
 
 ## Operation
 
-### Startup Sequence:
-1. **Idle State**:
-	 - Waits for `sys_en` to go high.
-	 - Checks for out-of-bounds (OOB) configuration values when `sys_en` is asserted. If any OOB condition is detected, the system halts and sets the corresponding status code.
+### State Machine Overview
 
-2. **Release Shutdown Force**:
-	 - Sets `n_shutdown_force` high.
-	 - Waits for a delay (`SHUTDOWN_FORCE_DELAY`) to stabilize the DAC/ADC before starting the power stage.
+- **IDLE**: Waits for `sys_en` to go high. Checks for out-of-bounds configuration values. If any OOB condition is detected, transitions to HALTED with the corresponding status code and asserts `ps_interrupt`. If all checks pass, locks configuration and powers up the SPI clock.
+- **CONFIRM_SPI_INIT**: Waits for the SPI subsystem to be powered off (`spi_off`). If not powered off within `SPI_INIT_WAIT`, transitions to HALTED with a timeout status.
+- **RELEASE_SD_F**: Releases shutdown force (`n_shutdown_force` high) and waits for `SHUTDOWN_FORCE_DELAY`.
+- **PULSE_SD_RST**: Pulses `n_shutdown_rst` low for `SHUTDOWN_RESET_PULSE`, then sets it high again.
+- **SD_RST_DELAY**: Waits for `SHUTDOWN_RESET_DELAY` after pulsing shutdown reset, then enables shutdown sense, powers up SPI clock, and enables SPI.
+- **START_SPI**: Waits for the SPI subsystem to start (`spi_running`). If not started within `SPI_START_WAIT`, transitions to HALTED with a timeout status. If started, enables triggers and asserts `ps_interrupt`.
+- **RUNNING**: Normal operation. Continuously monitors for halt conditions. If any error or shutdown condition occurs, transitions to HALTED, disables outputs, and asserts `ps_interrupt`.
+- **HALTED**: Waits for `sys_en` to go low, then returns to IDLE and clears status.
 
-3. **Pulse Shutdown Reset**:
-	 - Pulses `n_shutdown_rst` low for a short duration (`SHUTDOWN_RESET_PULSE`).
-	 - Sets `n_shutdown_rst` high again after the pulse.
+### Halt/Error Conditions
 
-4. **Shutdown Reset Delay**:
-	 - Waits for a delay (`SHUTDOWN_RESET_DELAY`) to allow the power stage to boot.
+The system transitions to HALTED and sets the appropriate status code if any of the following occur:
+- `sys_en` goes low (processing system shutdown)
+- Configuration lock violation (`lock_viol`)
+- Shutdown detected via `shutdown_sense` or `ext_shutdown`
+- DAC/ADC thresholds exceeded or underflow/overflow conditions
+- DAC/ADC buffers experience underflow or overflow
+- Premature DAC/ADC triggers occur
+- SPI subsystem fails to start within timeout
 
-5. **Enable SPI**:
-	 - Enables the SPI subsystem via `spi_en`.
-	 - Waits for `spi_running` to confirm the SPI subsystem is operational.
-	 - Halts if the SPI subsystem does not start within the timeout (`SPI_START_WAIT`).
+### Status Word Format
 
-6. **Running State**:
-	 - Enables triggers via `trig_en`.
-	 - Continuously monitors for errors or shutdown conditions.
+The 32-bit `status_word` is formatted as:
+```
+[31:29] - Board number (3 bits)
+[28:4]  - Status code (25 bits)
+[3:0]   - State machine state (4 bits)
+```
 
-### Halt Conditions:
-- `sys_en` goes low.
-- Configuration lock violation (`lock_viol`).
-- Shutdown detected via `shutdown_sense` or `ext_shutdown`.
-- DAC/ADC thresholds exceeded or underflow/overflow conditions occur.
-- DAC/ADC buffers experience underflow or overflow.
-- Premature DAC/ADC triggers occur.
+### Status Codes
 
-### Status Word:
-- The 32-bit `status_word` is formatted as follows:
-	```
-	[31:29] - Board number (3 bits)
-	[28:4]  - Status code (25 bits)
-	[3:0]   - State machine state (4 bits)
-	```
-
-### Status Codes:
 - `1`: STATUS_OK - System is operating normally.
 - `2`: STATUS_PS_SHUTDOWN - Processing system shutdown.
 - `3`: STATUS_TRIG_LOCKOUT_OOB - Trigger lockout out of bounds.
@@ -127,4 +117,11 @@ The `hw_manager` module is responsible for managing the hardware system's startu
 - `21`: STATUS_UNEXP_DAC_TRIG - Unexpected DAC trigger.
 - `22`: STATUS_UNEXP_ADC_TRIG - Unexpected ADC trigger.
 - `23`: STATUS_SPI_START_TIMEOUT - SPI start timeout.
+- `24`: STATUS_SPI_INIT_TIMEOUT - SPI initialization timeout.
 
+## Board Number Extraction
+
+For error/status signals that are 8 bits wide (per board), the board number is extracted as the index of the first asserted bit.
+
+---
+This specification matches the implementation in `hw_manager.v` as of this revision.

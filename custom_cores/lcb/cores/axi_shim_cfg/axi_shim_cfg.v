@@ -29,7 +29,7 @@ module axi_shim_cfg #
   output reg  [31:0]         integ_window,
   output reg                 integ_en,
   output wire                sys_en,
-  output reg  [15:0]         buffer_reset,
+  output reg  [23:0]         buffer_reset,
 
   // Configuration bounds
   output wire  trig_lockout_oob,
@@ -82,7 +82,7 @@ module axi_shim_cfg #
   localparam integer TRIGGER_LOCKOUT_WIDTH = 32;
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_WIDTH = 15;
   localparam integer INTEGRATOR_WINDOW_WIDTH = 32;
-  localparam integer BUFFER_RESET_WIDTH = 16;
+  localparam integer BUFFER_RESET_WIDTH = 24;
 
   // Local capped default values
   localparam integer TRIGGER_LOCKOUT_DEFAULT_CAPPED = 

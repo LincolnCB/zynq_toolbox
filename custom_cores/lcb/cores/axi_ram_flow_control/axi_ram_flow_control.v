@@ -177,7 +177,7 @@ module axi_ram_flow_control #
 
   // Control logic for flow control
   always @(posedge aclk or negedge aresetn) begin
-    if (!aresetn) begin
+    if (~aresetn) begin
       prev_writer_start_loop_parity <= 1'b0;
       prev_writer_end_loop_parity <= 1'b0;
       prev_reader_start_loop_parity <= 1'b0;

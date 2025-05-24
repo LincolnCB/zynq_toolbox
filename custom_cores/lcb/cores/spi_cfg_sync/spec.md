@@ -1,26 +1,35 @@
 # SPI Configuration Synchronization Core
 
-The `spi_cfg_sync` module ensures synchronization of configuration signals between the PS clock domain and the SPI clock domain. It operates as follows:
+The `spi_cfg_sync` module synchronizes configuration signals from the AXI (PS) clock domain to the SPI clock domain.
 
-- **Inputs and Outputs**:
-  - **Inputs**:
-    - `clk`: PS clock signal.
-    - `spi_clk`: SPI clock signal.
-    - `rst`: Reset signal (active high).
-    - `trig_lockout`: 32-bit input signal for trigger lockout configuration.
-    - `integ_thresh_avg`: 16-bit input signal for integration threshold average.
-    - `integ_window`: 32-bit input signal for integration window configuration.
-    - `integ_en`: Input signal to enable integration.
-    - `spi_en`: Input signal to enable SPI synchronization.
-  - **Outputs**:
-    - `trig_lockout_stable`: 32-bit synchronized and stable trigger lockout configuration.
-    - `integ_thresh_avg_stable`: 16-bit synchronized and stable integration threshold average.
-    - `integ_window_stable`: 32-bit synchronized and stable integration window configuration.
-    - `integ_en_stable`: Synchronized and stable integration enable signal.
-    - `spi_en_stable`: Synchronized and stable SPI enable signal.
+## Inputs and Outputs
 
-- **Operation**:
-  - Each input signal is synchronized to the SPI clock domain using a 3-stage synchronizer.
-  - Stability flags are generated for each signal to indicate when the synchronized value is stable.
-  - When all signals are stable and `spi_en` is asserted, the synchronized values are latched into the corresponding stable output registers.
-  - On reset (`rst` high), all stable output registers are cleared to their default values.
+### Inputs
+
+- **Clocks and Reset**
+  - `aclk`: AXI (PS) clock signal.
+  - `spi_clk`: SPI clock signal.
+  - `spi_resetn`: Active-low reset signal for the SPI domain.
+
+- **AXI Domain Configuration Inputs**
+  - `trig_lockout [31:0]`: Trigger lockout configuration.
+  - `integ_thresh_avg [14:0]`: Integration threshold average configuration.
+  - `integ_window [31:0]`: Integration window configuration.
+  - `integ_en`: Integration enable signal.
+  - `spi_en`: SPI enable signal.
+
+### Outputs
+
+- **SPI Domain Synchronized Outputs**
+  - `trig_lockout_stable [31:0]`: Synchronized and stable trigger lockout configuration.
+  - `integ_thresh_avg_stable [14:0]`: Synchronized and stable integration threshold average.
+  - `integ_window_stable [31:0]`: Synchronized and stable integration window configuration.
+  - `integ_en_stable`: Synchronized and stable integration enable signal.
+  - `spi_en_stable`: Synchronized and stable SPI enable signal.
+
+## Operation
+
+- Each input signal from the AXI domain is synchronized to the SPI clock domain using a 3-stage synchronizer with a stability check.
+- For each signal, a stability flag is generated to indicate when the synchronized value is stable.
+- When all stability flags are asserted and `spi_en_sync` is high, the synchronized values are latched into the corresponding stable output registers.
+- On SPI domain reset (`spi_resetn` low), all stable output registers are cleared to their default values (zeros).
