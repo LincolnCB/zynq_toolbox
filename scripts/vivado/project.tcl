@@ -62,24 +62,7 @@ update_ip_catalog
 
 ################################################################################
 ### Define a set of Tcl procedures to simplify the creation of block designs
-################################################################################
-
-# Procedure for looping the definition of a set of pins
-# Procedure to loop over a list and generate pin connection strings using expressions.
-# var_name: name of the loop variable (e.g. i)
-# var_list: list of values to loop over (e.g. {1 2 3 4 5 6 7 8})
-# pin_1_expr: Tcl code to generate the first pin, using $var_name (e.g. {In[expr {$i-1}]})
-# pin_2_expr: Tcl code to generate the second pin, using $var_name (e.g. {dac_ch${i}/n_cs})
-proc loop_pins {var_name var_list pin_1_expr pin_2_expr} {
-  set result {}
-  foreach $var_name $var_list {
-    set pin1 [subst $pin_1_expr]
-    set pin2 [subst $pin_2_expr]
-    lappend result "$pin1 $pin2"
-  }
-  return [join $result "\n"]
-}
-  
+################################################################################  
 
 # Procedure for connecting (wiring) two pins together
 # Can handle both regular and interface pins.
