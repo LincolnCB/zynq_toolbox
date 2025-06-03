@@ -29,7 +29,7 @@ module axi_shim_cfg #
   output reg  [31:0]         integ_window,
   output reg                 integ_en,
   output wire                sys_en,
-  output reg  [23:0]         buffer_reset,
+  output reg  [24:0]         buffer_reset,
 
   // Configuration bounds
   output wire  trig_lockout_oob,
@@ -82,7 +82,7 @@ module axi_shim_cfg #
   localparam integer TRIGGER_LOCKOUT_WIDTH = 32;
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_WIDTH = 15;
   localparam integer INTEGRATOR_WINDOW_WIDTH = 32;
-  localparam integer BUFFER_RESET_WIDTH = 24;
+  localparam integer BUFFER_RESET_WIDTH = 25;
 
   // Local capped default values
   localparam integer TRIGGER_LOCKOUT_DEFAULT_CAPPED = 
@@ -197,8 +197,8 @@ module axi_shim_cfg #
             trig_lockout != int_data_wire[TRIGGER_LOCKOUT_32_OFFSET*32+TRIGGER_LOCKOUT_WIDTH-1:TRIGGER_LOCKOUT_32_OFFSET*32] 
             || integ_thresh_avg != int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1:INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32]
             || integ_window != int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1:INTEGRATOR_WINDOW_32_OFFSET*32]
-            || integ_en != int_data_wire[INTEGRATOR_EN_32_OFFSET*32]
-            || buffer_reset != int_data_wire[BUFFER_RESET_32_OFFSET*32+BUFFER_RESET_WIDTH-1:BUFFER_RESET_32_OFFSET*32];
+            || integ_en != int_data_wire[INTEGRATOR_EN_32_OFFSET*32];
+            // Note: buffer_reset is not checked here, as it can be reset even if locked
 
   // Configuration register sanitization logic
   always @(posedge aclk)
@@ -224,6 +224,9 @@ module axi_shim_cfg #
       int_rvalid_reg <= int_rvalid_next;
       int_rdata_reg <= int_rdata_next;
 
+      // Reset the buffers if requested. Allow this even if locked
+      buffer_reset <= int_data_wire[BUFFER_RESET_32_OFFSET*32+BUFFER_RESET_WIDTH-1:BUFFER_RESET_32_OFFSET*32];
+
       // Lock the configuration registers
       if(sys_en) begin
         locked <= 1'b1;
@@ -241,13 +244,6 @@ module axi_shim_cfg #
         if(int_lock_viol_wire) begin
           lock_viol <= 1'b1;
         end
-      end
-
-      // Reset the buffers if requested
-      if (~sys_en && ~locked) begin
-        buffer_reset <= int_data_wire[BUFFER_RESET_32_OFFSET*32+BUFFER_RESET_WIDTH-1:BUFFER_RESET_32_OFFSET*32];
-      end else if (buffer_reset) begin
-        buffer_reset <= 0;
       end
 
     end
@@ -289,8 +285,8 @@ module axi_shim_cfg #
     end
   end
 
+  // Assign S_AXI signals
   assign s_axi_rresp = 2'd0;
-
   assign s_axi_awready = int_wvalid_wire;
   assign s_axi_wready = int_wvalid_wire;
   assign s_axi_bvalid = int_bvalid_reg;
