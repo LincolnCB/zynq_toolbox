@@ -5,3 +5,8 @@ out
 .vscode
 .Xil
 environment.sh
+
+# Ignore Verilator and cocotb generated files
+__pycache__
+sim_build
+dump.vcd
