@@ -1,1 +1,1 @@
-../../../shared_submodules/fifo_sync.v
+../../fifo_sync/fifo_sync.v
