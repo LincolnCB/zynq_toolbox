@@ -6,14 +6,12 @@ module spi_cfg_sync (
   input  wire        sync_resetn,         // Active low reset
 
   // Inputs from axi_shim_cfg (AXI domain)
-  input  wire [31:0] trig_lockout,
   input  wire [14:0] integ_thresh_avg,
   input  wire [31:0] integ_window,
   input  wire        integ_en,
   input  wire        spi_en,
 
   // Synchronized outputs to SPI domain
-  output reg  [31:0] trig_lockout_stable,
   output reg  [14:0] integ_thresh_avg_stable,
   output reg  [31:0] integ_window_stable,
   output reg         integ_en_stable,
@@ -21,32 +19,18 @@ module spi_cfg_sync (
 );
 
   // Intermediate wires for synchronized signals
-  wire [31:0] trig_lockout_sync;
   wire [14:0] integ_thresh_avg_sync;
   wire [31:0] integ_window_sync;
   wire        integ_en_sync;
   wire        spi_en_sync;
 
   // Stability signals for each synchronizer
-  wire trig_lockout_stable_flag;
   wire integ_thresh_avg_stable_flag;
   wire integ_window_stable_flag;
   wire integ_en_stable_flag;
   wire spi_en_stable_flag;
 
   // Synchronize each signal using the synchronizer module
-  synchronizer #(
-    .DEPTH(3),
-    .WIDTH(32),
-    .STABLE_COUNT(2)
-  ) sync_trig_lockout (
-    .clk(spi_clk),
-    .resetn(spi_resetn),
-    .din(trig_lockout),
-    .dout(trig_lockout_sync),
-    .stable(trig_lockout_stable_flag)
-  );
-
   synchronizer #(
     .DEPTH(3),
     .WIDTH(15),
@@ -98,15 +82,13 @@ module spi_cfg_sync (
   // Update stable registers when all signals are stable and spi_en_sync is high
   always @(posedge spi_clk) begin
     if (~sync_resetn) begin
-      trig_lockout_stable      <= 32'b0;
       integ_thresh_avg_stable  <= 15'b0;
       integ_window_stable      <= 32'b0;
       integ_en_stable          <= 1'b0;
       spi_en_stable            <= 1'b0;
-    end else if (spi_en_sync && trig_lockout_stable_flag &&
+    end else if (spi_en_sync &&
                  integ_thresh_avg_stable_flag &&
                  integ_window_stable_flag && integ_en_stable_flag && spi_en_stable_flag) begin
-      trig_lockout_stable      <= trig_lockout_sync;
       integ_thresh_avg_stable  <= integ_thresh_avg_sync;
       integ_window_stable      <= integ_window_sync;
       integ_en_stable          <= integ_en_sync;

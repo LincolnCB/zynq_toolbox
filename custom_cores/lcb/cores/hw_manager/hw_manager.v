@@ -30,7 +30,6 @@ module hw_manager #(
   input   wire  [ 7:0]  thresh_overflow,  // DAC threshold core FIFO overflow
   // Trigger buffer and commands
   input   wire          bad_trig_cmd,      // Bad trigger command
-  input   wire          trig_lockout_oob,  // Trigger lockout out of bounds
   input   wire          trig_buf_overflow, // Trigger buffer overflow
   // DAC buffers and commands (per board)
   input   wire  [ 7:0]  bad_dac_cmd,           // Bad DAC command
@@ -101,8 +100,7 @@ module hw_manager #(
               STATUS_THRESH_OVERFLOW        = 25'h0402;
   // Trigger buffer and commands
   localparam  STATUS_BAD_TRIG_CMD           = 25'h0500,
-              STATUS_TRIG_LOCKOUT_OOB       = 25'h0501,
-              STATUS_TRIG_BUF_OVERFLOW      = 25'h0502;
+              STATUS_TRIG_BUF_OVERFLOW      = 25'h0501;
   // DAC buffers and commands
   localparam  STATUS_BAD_DAC_CMD            = 25'h0600,
               STATUS_DAC_CAL_OOB            = 25'h0601,
@@ -143,11 +141,7 @@ module hw_manager #(
         IDLE: begin : idle_state
           if (sys_en) begin
             // Check for out of bounds configuration values
-            if (trig_lockout_oob) begin // Trigger lockout out of bounds
-              state <= HALTED;
-              status_code <= STATUS_TRIG_LOCKOUT_OOB;
-              ps_interrupt <= 1;
-            end else if (integ_thresh_avg_oob) begin // Integrator threshold average out of bounds
+            if (integ_thresh_avg_oob) begin // Integrator threshold average out of bounds
               state <= HALTED;
               status_code <= STATUS_INTEG_THRESH_AVG_OOB;
               ps_interrupt <= 1;
@@ -297,7 +291,6 @@ module hw_manager #(
               || thresh_overflow
               // Trigger buffer and commands
               || bad_trig_cmd
-              || trig_lockout_oob
               || trig_buf_overflow
               // DAC buffers and commands
               || bad_dac_cmd
@@ -340,7 +333,6 @@ module hw_manager #(
             end
             // Trigger buffer and commands
             else if (bad_trig_cmd) status_code <= STATUS_BAD_TRIG_CMD;
-            else if (trig_lockout_oob) status_code <= STATUS_TRIG_LOCKOUT_OOB;
             else if (trig_buf_overflow) status_code <= STATUS_TRIG_BUF_OVERFLOW;
             // DAC buffers and commands
             else if (bad_dac_cmd) begin

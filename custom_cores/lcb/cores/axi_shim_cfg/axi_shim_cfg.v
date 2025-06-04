@@ -4,16 +4,13 @@ module axi_shim_cfg #
 (
   parameter integer AXI_ADDR_WIDTH = 16,
 
-  // Trigger lockout (+0)
-  parameter integer TRIGGER_LOCKOUT_DEFAULT = 250000, // 1 ms at 250MHz
-
-  // Integrator threshold average (+4)
+  // Integrator threshold average (+0)
   parameter integer INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT = 16384,
   
-  // Integrator window (+8)
+  // Integrator window (+4)
   parameter integer INTEGRATOR_WINDOW_DEFAULT = 5000000, // 100 ms at 50MHz
 
-  // Integrator enable (+12)
+  // Integrator enable (+8)
   parameter integer INTEG_EN_DEFAULT = 1
 )
 (
@@ -24,7 +21,6 @@ module axi_shim_cfg #
   input  wire                       unlock,
 
   // Configuration outputs
-  output reg  [31:0]         trig_lockout,
   output reg  [14:0]         integ_thresh_avg,
   output reg  [31:0]         integ_window,
   output reg                 integ_en,
@@ -32,7 +28,6 @@ module axi_shim_cfg #
   output reg  [24:0]         buffer_reset,
 
   // Configuration bounds
-  output wire  trig_lockout_oob,
   output wire  integ_thresh_avg_oob,
   output wire  integ_window_oob,
   output wire  integ_en_oob,
@@ -64,32 +59,23 @@ module axi_shim_cfg #
   endfunction
 
   // Localparams for MIN/MAX values
-  localparam integer TRIGGER_LOCKOUT_MIN = 0;
-  localparam integer TRIGGER_LOCKOUT_MAX = 32'hFFFFFFFF; // 32-bit unsigned max
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_MIN = 1;
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_MAX = 15'h7FFF; // 15-bit unsigned max
   localparam integer INTEGRATOR_WINDOW_MIN = 2048;
   localparam integer INTEGRATOR_WINDOW_MAX = 32'hFFFFFFFF; // 32-bit unsigned max
 
   // Localparams for bit ranges (shifted after removing DAC divider)
-  localparam integer TRIGGER_LOCKOUT_32_OFFSET = 0;
-  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET = 1;
-  localparam integer INTEGRATOR_WINDOW_32_OFFSET = 2;
-  localparam integer INTEGRATOR_EN_32_OFFSET = 3;
-  localparam integer BUFFER_RESET_32_OFFSET = 4;
-  localparam integer SYS_EN_32_OFFSET = 5;
+  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET = 0;
+  localparam integer INTEGRATOR_WINDOW_32_OFFSET = 1;
+  localparam integer INTEGRATOR_EN_32_OFFSET = 2;
+  localparam integer BUFFER_RESET_32_OFFSET = 3;
+  localparam integer SYS_EN_32_OFFSET = 4;
 
-  localparam integer TRIGGER_LOCKOUT_WIDTH = 32;
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_WIDTH = 15;
   localparam integer INTEGRATOR_WINDOW_WIDTH = 32;
   localparam integer BUFFER_RESET_WIDTH = 25;
 
   // Local capped default values
-  localparam integer TRIGGER_LOCKOUT_DEFAULT_CAPPED = 
-    (TRIGGER_LOCKOUT_DEFAULT < TRIGGER_LOCKOUT_MIN) ? TRIGGER_LOCKOUT_MIN :
-    (TRIGGER_LOCKOUT_DEFAULT > TRIGGER_LOCKOUT_MAX) ? TRIGGER_LOCKOUT_MAX :
-    TRIGGER_LOCKOUT_DEFAULT;
-
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT_CAPPED = 
     (INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT < INTEGRATOR_THRESHOLD_AVERAGE_MIN) ? INTEGRATOR_THRESHOLD_AVERAGE_MIN :
     (INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT > INTEGRATOR_THRESHOLD_AVERAGE_MAX) ? INTEGRATOR_THRESHOLD_AVERAGE_MAX :
@@ -161,7 +147,6 @@ module axi_shim_cfg #
 
   // Initial values (shifted)
   assign int_data_wire = int_axi_data_wire | (~int_data_modified_wire & int_initial_data_wire);
-  assign int_initial_data_wire[TRIGGER_LOCKOUT_32_OFFSET*32+TRIGGER_LOCKOUT_WIDTH-1-:TRIGGER_LOCKOUT_WIDTH] = TRIGGER_LOCKOUT_DEFAULT_CAPPED;
   assign int_initial_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH] = INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT_CAPPED;
   assign int_initial_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1-:INTEGRATOR_WINDOW_WIDTH] = INTEGRATOR_WINDOW_DEFAULT_CAPPED;
   assign int_initial_data_wire[INTEGRATOR_EN_32_OFFSET*32] = INTEG_EN_DEFAULT;
@@ -169,8 +154,6 @@ module axi_shim_cfg #
   assign int_initial_data_wire[SYS_EN_32_OFFSET*32] = 0;
 
   // Out of bounds checks. Use the whole word for the check to avoid truncation
-  assign trig_lockout_oob = $unsigned(int_data_wire[TRIGGER_LOCKOUT_32_OFFSET*32+TRIGGER_LOCKOUT_WIDTH-1-:TRIGGER_LOCKOUT_WIDTH]) < $unsigned(TRIGGER_LOCKOUT_MIN) 
-                         || $unsigned(int_data_wire[TRIGGER_LOCKOUT_32_OFFSET*32+TRIGGER_LOCKOUT_WIDTH-1-:TRIGGER_LOCKOUT_WIDTH]) > $unsigned(TRIGGER_LOCKOUT_MAX);
   assign integ_thresh_avg_oob = $unsigned(int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH]) < $unsigned(INTEGRATOR_THRESHOLD_AVERAGE_MIN) 
                              || $unsigned(int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH]) > $unsigned(INTEGRATOR_THRESHOLD_AVERAGE_MAX)
                              || $unsigned(int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH]) > $unsigned(32767);
@@ -183,7 +166,6 @@ module axi_shim_cfg #
   // Send SLVERR if there are any violations
   assign int_bresp_wire = 
     locked ? 2'b10 :
-    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == TRIGGER_LOCKOUT_32_OFFSET) ? (trig_lockout_oob ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET) ? (integ_thresh_avg_oob ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_WINDOW_32_OFFSET) ? (integ_window_oob ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_EN_32_OFFSET) ? (integ_en_oob ? 2'b10 : 2'b00) :
@@ -194,8 +176,7 @@ module axi_shim_cfg #
 
   // Lock violation wire
   assign int_lock_viol_wire = 
-            trig_lockout != int_data_wire[TRIGGER_LOCKOUT_32_OFFSET*32+TRIGGER_LOCKOUT_WIDTH-1:TRIGGER_LOCKOUT_32_OFFSET*32] 
-            || integ_thresh_avg != int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1:INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32]
+            integ_thresh_avg != int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1:INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32]
             || integ_window != int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1:INTEGRATOR_WINDOW_32_OFFSET*32]
             || integ_en != int_data_wire[INTEGRATOR_EN_32_OFFSET*32];
             // Note: buffer_reset is not checked here, as it can be reset even if locked
@@ -209,7 +190,6 @@ module axi_shim_cfg #
       int_rvalid_reg <= 1'b0;
       int_rdata_reg <= {(AXI_DATA_WIDTH){1'b0}};
 
-      trig_lockout <= TRIGGER_LOCKOUT_DEFAULT_CAPPED;
       integ_thresh_avg <= INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT_CAPPED;
       integ_window <= INTEGRATOR_WINDOW_DEFAULT_CAPPED;
       integ_en <= INTEG_EN_DEFAULT;
@@ -230,7 +210,6 @@ module axi_shim_cfg #
       // Lock the configuration registers
       if(sys_en) begin
         locked <= 1'b1;
-        trig_lockout <= int_data_wire[TRIGGER_LOCKOUT_32_OFFSET*32+TRIGGER_LOCKOUT_WIDTH-1:TRIGGER_LOCKOUT_32_OFFSET*32];
         integ_thresh_avg <= int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1:INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32];
         integ_window <= int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1:INTEGRATOR_WINDOW_32_OFFSET*32];
         integ_en <= int_data_wire[INTEGRATOR_EN_32_OFFSET*32];
