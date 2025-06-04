@@ -1,6 +1,6 @@
 `timescale 1 ns / 1 ps
 
-module axi_shim_prestart_cfg #
+module shim_axi_prestart_cfg #
 (
   parameter integer AXI_ADDR_WIDTH = 16,
 

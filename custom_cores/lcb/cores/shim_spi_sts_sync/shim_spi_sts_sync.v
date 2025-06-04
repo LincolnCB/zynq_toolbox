@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 
-module spi_sts_sync (
+module shim_spi_sts_sync (
   input  wire        aclk,               // AXI clock
   input  wire        aresetn,            // Active low reset signal
   

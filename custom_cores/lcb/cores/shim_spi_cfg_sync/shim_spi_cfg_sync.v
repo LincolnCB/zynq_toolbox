@@ -1,7 +1,7 @@
 // filepath: /home/lcb-virt/Documents/rev_d_shim/cores/lcb/spi_cfg_sync.v
 `timescale 1ns/1ps
 
-module spi_cfg_sync (
+module shim_spi_cfg_sync (
   input  wire        spi_clk,             // SPI clock
   input  wire        sync_resetn,         // Active low reset
 
