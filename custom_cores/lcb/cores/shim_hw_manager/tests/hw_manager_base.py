@@ -4,7 +4,7 @@ from cocotb.triggers import RisingEdge, FallingEdge, Timer
 from cocotb.regression import TestFactory
 from cocotb.result import TestFailure
 
-class hw_manager_base:
+class shim_hw_manager_base:
     """
     Hardware Manager cocotb Base Class
     """

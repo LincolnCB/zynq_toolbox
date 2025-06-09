@@ -1,12 +1,13 @@
-// trigger_core.v
-module trigger_core #(
+`timescale 1 ns / 1 ps
+
+module shim_trigger_core #(
   parameter TRIGGER_LOCKOUT_DEFAULT = 5000
 ) (
   input  wire        clk,
   input  wire        resetn,
 
   // Command FIFO interface
-  output reg         cmd_word_rd_en,
+  output wire        cmd_word_rd_en,
   input  wire [31:0] cmd_word,
   input  wire        cmd_buf_empty,
 
@@ -17,7 +18,6 @@ module trigger_core #(
 
   // Outputs
   output reg         trigger_out,
-  output reg         sync_done,
   output reg         bad_cmd
 );
   // Command encoding
@@ -115,6 +115,6 @@ module trigger_core #(
   end
 
   //// Read enable
-  assign cmd_word_rd_en = next_cmd && !bad_cmd;
+  assign cmd_word_rd_en = next_cmd;
 
 endmodule

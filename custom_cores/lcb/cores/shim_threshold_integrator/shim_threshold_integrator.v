@@ -1,6 +1,6 @@
 `timescale 1 ns / 1 ps
 
-module threshold_integrator (
+module shim_threshold_integrator (
   // Inputs
   input   wire         clk              ,
   input   wire         resetn           ,
@@ -281,7 +281,7 @@ module threshold_integrator (
 
           //// Inflow logic
           // Only sample every 16th clock cycle
-          if (!|inflow_sample_timer) begin
+          if (inflow_sample_timer[3:0] == 0) begin
             // Inflow addition logic
             if (inflow_sample_timer != 0) begin // Add to sample sum
               inflow_sample_sum[i] <= inflow_sample_sum[i] + inflow_value[i];
@@ -306,7 +306,7 @@ module threshold_integrator (
 
           //// Sum logic
           // Pipeline the delta to the running total
-          if (!|outflow_timer) begin // Only add every 16th clock cycle
+          if (outflow_timer[3:0] == 0) begin // Only add every 16th clock cycle
             sum_delta[i] <= ((outflow_timer >> 4) < outflow_remainder[i])
                     ? $signed({2'b00, inflow_value[i]}) - $signed({1'b0, outflow_value_plus_one[i]})
                     : $signed({2'b00, inflow_value[i]}) - $signed({2'b00, outflow_value[i]});

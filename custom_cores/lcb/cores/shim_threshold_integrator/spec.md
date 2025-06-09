@@ -1,7 +1,7 @@
 # Threshold Integrator Core
 *Updated 2025-06-04*
 
-The `threshold_integrator` module is a safety core designed for the Rev D shim firmware. It captures the absolute values of DAC and ADC inputs/outputs and maintains a running sum over a user-defined window. If any channel's sum exceeds a user-defined threshold, it sends a fault signal to the system.
+The `shim_threshold_integrator` module is a safety core designed for the Rev D shim firmware. It captures the absolute values of DAC and ADC inputs/outputs and maintains a running sum over a user-defined window. If any channel's sum exceeds a user-defined threshold, it sends a fault signal to the system.
 
 ## Inputs and Outputs
 

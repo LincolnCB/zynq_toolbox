@@ -1,4 +1,6 @@
-module ad5676_dac_ctrl #(
+`timescale 1 ns / 1 ps
+
+module shim_ad5676_dac_ctrl #(
   parameter ABS_CAL_MAX = 16'd4096 // Maximum absolute calibration value
 )(
   input  wire        clk,
@@ -6,7 +8,7 @@ module ad5676_dac_ctrl #(
 
   output reg         setup_done,
 
-  output reg         cmd_word_rd_en,
+  output wire        cmd_word_rd_en,
   input  wire [31:0] cmd_word,
   input  wire        cmd_buf_empty,
 
@@ -132,10 +134,7 @@ module ad5676_dac_ctrl #(
     end
   end
   // Command word read enable logic
-  always @* begin
-    cmd_word_rd_en = state != S_ERROR && !cmd_buf_empty && 
-                     (read_next_dac_word || cmd_done);
-  end
+  assign cmd_word_rd_en = (state != S_ERROR) && !cmd_buf_empty && (read_next_dac_word || cmd_done);
 
 
   //// Timer logic

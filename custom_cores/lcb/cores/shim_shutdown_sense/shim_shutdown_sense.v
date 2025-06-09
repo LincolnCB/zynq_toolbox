@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module shutdown_sense (
+module shim_shutdown_sense (
   input wire clk,
   input wire shutdown_sense_en,
   input wire shutdown_sense_pin,

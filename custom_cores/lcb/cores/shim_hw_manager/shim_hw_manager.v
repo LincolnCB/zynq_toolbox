@@ -1,6 +1,6 @@
 `timescale 1 ns / 1 ps
 
-module hw_manager #(
+module shim_hw_manager #(
   // Delays for the various timeouts, default clock frequency is 250 MHz
   parameter integer SHUTDOWN_FORCE_DELAY = 25000000, // 100 ms, Delay after releasing "n_shutdown_force" before pulsing "n_shutdown_rst"
   parameter integer SHUTDOWN_RESET_PULSE = 25000,    // 100 us, Pulse width for "n_shutdown_rst"

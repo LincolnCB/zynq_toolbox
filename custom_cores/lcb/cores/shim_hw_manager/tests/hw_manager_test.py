@@ -1,12 +1,12 @@
 import cocotb
 from cocotb.triggers import RisingEdge , Timer
-from hw_manager_base import hw_manager_base
+from shim_hw_manager_base import shim_hw_manager_base
 
 
 # Create a setup function that can be called by each test
 async def setup_testbench(dut):
-    # Delay parameters should be the same with hw_manager.v
-    tb = hw_manager_base(dut, clk_period=4, time_unit="ns",
+    # Delay parameters should be the same with shim_hw_manager.v
+    tb = shim_hw_manager_base(dut, clk_period=4, time_unit="ns",
                         SHUTDOWN_FORCE_DELAY=250,
                         SHUTDOWN_RESET_PULSE=25,
                         SHUTDOWN_RESET_DELAY=250,

@@ -3,7 +3,7 @@
 # Arguments: <vendor> <core>
 # Usage: test_core.sh <vendor> <core>
 # Example:
-#   ./scripts/make/test_core.sh lcb hw_manager
+#   ./scripts/make/test_core.sh lcb shim_hw_manager
 #
 # What it does:
 #   1) cd into custom_cores/<vendor>/cores/<core>/tests/

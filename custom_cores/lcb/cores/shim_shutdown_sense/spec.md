@@ -1,7 +1,7 @@
 # Hardware Shutdown Sense Core
 *Updated 2025-06-04*
 
-The `shutdown_sense` module is responsible for monitoring the onboard shutdown mux and latching high if a shutdown is detected.
+The `shim_shutdown_sense` module is responsible for monitoring the onboard shutdown mux and latching high if a shutdown is detected.
 
 - **Inputs and Outputs**:
   - `clk`: Clock signal for synchronous operation.

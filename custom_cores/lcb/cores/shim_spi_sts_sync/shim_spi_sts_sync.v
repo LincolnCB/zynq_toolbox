@@ -11,6 +11,8 @@ module shim_spi_sts_sync (
   input  wire [7:0]  over_thresh,
   input  wire [7:0]  thresh_underflow,
   input  wire [7:0]  thresh_overflow,
+  // Trigger channel status
+  input  wire        bad_trig_cmd,
   // DAC channel status
   input  wire [7:0]  bad_dac_cmd,
   input  wire [7:0]  dac_cal_oob,
@@ -30,6 +32,8 @@ module shim_spi_sts_sync (
   output reg  [7:0]  over_thresh_stable,
   output reg  [7:0]  thresh_underflow_stable,
   output reg  [7:0]  thresh_overflow_stable,
+  // Trigger channel status
+  output reg         bad_trig_cmd_stable,
   // DAC channel status
   output reg  [7:0]  bad_dac_cmd_stable,
   output reg  [7:0]  dac_cal_oob_stable,
@@ -50,6 +54,8 @@ module shim_spi_sts_sync (
   wire [7:0] over_thresh_sync;
   wire [7:0] thresh_underflow_sync;
   wire [7:0] thresh_overflow_sync;
+  // Trigger channel status
+  wire       bad_trig_cmd_sync;
   // DAC channel status
   wire [7:0] bad_dac_cmd_sync;
   wire [7:0] dac_cal_oob_sync;
@@ -69,6 +75,8 @@ module shim_spi_sts_sync (
   wire over_thresh_stable_flag;
   wire thresh_underflow_stable_flag;
   wire thresh_overflow_stable_flag;
+  // Trigger channel status
+  wire bad_trig_cmd_stable_flag;
   // DAC channel status
   wire bad_dac_cmd_stable_flag;
   wire dac_cal_oob_stable_flag;
@@ -128,6 +136,19 @@ module shim_spi_sts_sync (
     .din(thresh_overflow),
     .dout(thresh_overflow_sync),
     .stable(thresh_overflow_stable_flag)
+  );
+
+  // Trigger channel status
+  synchronizer #(
+    .DEPTH(3),
+    .WIDTH(1),
+    .STABLE_COUNT(2)
+  ) sync_bad_trig_cmd (
+    .clk(aclk),
+    .resetn(aresetn),
+    .din(bad_trig_cmd),
+    .dout(bad_trig_cmd_sync),
+    .stable(bad_trig_cmd_stable_flag)
   );
 
   // DAC channel status
@@ -241,6 +262,8 @@ module shim_spi_sts_sync (
     over_thresh_stable           <= over_thresh_stable_flag           ? over_thresh_sync           : 8'b0;
     thresh_underflow_stable      <= thresh_underflow_stable_flag      ? thresh_underflow_sync      : 8'b0;
     thresh_overflow_stable       <= thresh_overflow_stable_flag       ? thresh_overflow_sync       : 8'b0;
+    // Trigger channel status
+    bad_trig_cmd_stable          <= bad_trig_cmd_stable_flag          ? bad_trig_cmd_sync          : 1'b0;
     // DAC channel status
     bad_adc_cmd_stable           <= bad_adc_cmd_stable_flag           ? bad_adc_cmd_sync           : 8'b0;
     bad_dac_cmd_stable           <= bad_dac_cmd_stable_flag           ? bad_dac_cmd_sync           : 8'b0;

@@ -48,7 +48,7 @@ fi
 
 # Verify that each extracted core path exists
 while IFS= read -r CORE_NAME; do
-  # Convert a core name (like lcb/hw_manager) to a core path (like custom_cores/lcb/cores/hw_manager)
+  # Convert a core name (like lcb/shim_hw_manager) to a core path (like custom_cores/lcb/cores/shim_hw_manager)
   CORE_PATH="custom_cores/${CORE_NAME//\//\/cores/}"
   if [ ! -d "$CORE_PATH" ]; then
     echo "[CHECK PROJECT SRC] ERROR: Core path does not exist: $CORE_PATH"
