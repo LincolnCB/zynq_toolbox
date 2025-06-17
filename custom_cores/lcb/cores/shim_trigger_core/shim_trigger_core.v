@@ -141,8 +141,8 @@ module shim_trigger_core #(
   //// Trigger timing tracking
   always @(posedge clk) begin
     if (!resetn) trig_timer <= 0;
-    else  if (do_trig) trig_timer <= 0; // Reset on trigger
-    else if (trig_timer < 64'hFFFFFFFFFFFFFFFF) trig_timer <= trig_timer + 1; // Increment timer without overflow
+    else if (trig_timer == 0 && do_trig) trig_timer <= 1; // Start timer on first trigger
+    else if (trig_timer > 0 && trig_timer < 64'hFFFFFFFFFFFFFFFF) trig_timer <= trig_timer + 1; // Increment timer without overflow
   end
 
   //// Data buffer write logic
