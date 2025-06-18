@@ -35,6 +35,7 @@ cell xilinx.com:ip:proc_sys_reset:5.0 fifo_rst {
   slowest_sync_clk aclk
 }
 
+## Custom FIFO to allow for extra status signals
 # AXI Stream interface
 cell lcb:user:axis_fifo_bridge axis_fifo_bridge {} {
   aclk aclk
