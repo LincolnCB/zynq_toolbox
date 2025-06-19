@@ -18,7 +18,7 @@ class fifo_async_base:
         self.FIFO_DEPTH = 2**self.ADDR_WIDTH
         self.MAX_DATA_VALUE = (2**self.DATA_WIDTH) - 1
 
-        self.dut._log.info(f"FIFO PARAMETERS: DATA_WIDTH={self.DATA_WIDTH}, ADDR_WIDTH={self.ADDR_WIDTH}, "
+        self.dut._log.info(f"STARTING FIFO PARAMETERS: DATA_WIDTH={self.DATA_WIDTH}, ADDR_WIDTH={self.ADDR_WIDTH}, "
                       f"DEPTH={self.FIFO_DEPTH}, ALMOST_FULL_THRESHOLD={self.ALMOST_FULL_THRESHOLD}, "
                       f"ALMOST_EMPTY_THRESHOLD={self.ALMOST_EMPTY_THRESHOLD}")
         self.dut._log.info(f"Read Clock Period: {rd_clk_period} {time_unit}") 
@@ -108,7 +108,7 @@ class fifo_async_base:
             fifo_full = False
 
             if self.dut.full.value == 1:
-                self.dut._log.info(f"Want to write 0x{data:X} but FIFO is full. Will try again.")
+                self.dut._log.info(f"Want to write 0x{data:X} but FIFO is full. Will try again in the next write cycle.")
                 fifo_full = True
 
             if not fifo_full:
@@ -125,7 +125,7 @@ class fifo_async_base:
     async def read(self):
         """
         Reads a single data item from the FWFT sync FIFO.
-        Will try to read if the FIFO is empty in the next clock cycle.
+        Will try to read in the next clock cycle if the FIFO is empty.
         Returns:
             tuple: (read_value, expected_value)
         """
@@ -135,7 +135,7 @@ class fifo_async_base:
             fifo_empty = False
 
             if self.dut.empty.value == 1:
-                self.dut._log.info("Want to read but FIFO is empty. Will try again.")
+                self.dut._log.info("Want to read but FIFO is empty. Will try again in the next read cycle.")
                 fifo_empty = True
             
             if not fifo_empty:
@@ -220,6 +220,72 @@ class fifo_async_base:
         self.dut._log.info(f"Burst read complete. Total items read: {len(read_items)}")
         return read_items
     
+    async def write_back_to_back(self, data_list):
+        """
+        Writes a list of data items to the FIFO back-to-back.
+        Will try to write again in the next cycle if the FIFO is full.
+        Args:
+            data_list (list): List of integers to write.
+        """
+        number_of_writes = len(data_list)
+        data_index = 0
+        while True:
+            await RisingEdge(self.dut.wr_clk)
+            await ReadWrite()
+            fifo_full = False
+            data = data_list[data_index]
+
+            if self.dut.full.value == 1:
+                self.dut._log.info(f"Want to write 0x{data:X} but FIFO is full. Will try again in the next write cycle.")
+                self.dut.wr_en.value = 0
+                fifo_full = True
+
+            if not fifo_full:
+                self.dut._log.info(f"Writing data: 0x{data:X}")
+                self.dut.wr_data.value = data
+                data_index += 1
+
+                if data_index < number_of_writes:
+                    self.dut.wr_en.value = 1
+                    self.expected_data_q.append(int(data))  # Add to expected queue immediately
+                else:
+                    self.dut.wr_en.value = 0
+                    break  # Exit loop after writing all data
+
+    async def read_back_to_back(self, count):
+        """
+        Reads a specified number of data items from the FIFO back-to-back.
+        Will try to read in the next clock cycle if the FIFO is empty.
+        Args:
+            count (int): Number of items to read.
+        Returns:
+            list: List of tuples (read_value, expected_value) for each read item.
+        """
+        read_index = 0
+        read_items = []
+        while True:
+            await RisingEdge(self.dut.rd_clk)
+            await ReadWrite()
+            fifo_empty = False
+
+            if self.dut.empty.value == 1:
+                self.dut._log.info("Want to read but FIFO is empty. Will try again in the next read cycle.")
+                self.dut.rd_en.value = 0
+                fifo_empty = True
+            
+            if not fifo_empty:
+                if read_index < count:
+                    self.dut.rd_en.value = 1
+                    await ReadOnly()  # Wait for combinational logic to settle
+                    read_val = self.dut.rd_data.value
+                    expected_val = self.expected_data_q.popleft() # Pop from expected queue before asserting rd_en
+                    read_items.append((int(read_val), int(expected_val)))
+                    self.dut._log.info(f"Reading data. Expected: 0x{expected_val:X}, Actual: 0x{int(read_val):X}")
+                    read_index += 1
+                else:
+                    self.dut.rd_en.value = 0
+                    return read_items  # Exit loop after reading the specified count
+
     async def print_fifo_status(self):
         """
         Prints the current status of the FIFO including full, empty, almost full, and almost empty flags.
