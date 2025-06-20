@@ -3,6 +3,7 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, ReadOnly, ReadWrite, Join
 import random
 from fifo_async_base import fifo_async_base
+from fifo_async_coverage import start_coverage_monitor
 
 async def setup_testbench(dut, rd_clk_period=4, wr_clk_period=4):
     tb = fifo_async_base(dut, rd_clk_period, wr_clk_period, time_unit="ns")
@@ -18,6 +19,7 @@ async def test_fifo_async_reset(dut):
         tb = await setup_testbench(dut, rd_clk_period, wr_clk_period)
         tb.dut._log.info(f"STARTING TEST: Async FIFO Reset Iteration: {i+1}")
         await tb.start_clocks()
+        start_coverage_monitor(dut)  # Start coverage monitoring
 
         # Perform reset
         wr_reset_task = cocotb.start_soon(tb.wr_reset())
@@ -47,6 +49,7 @@ async def test_fifo_async_basic_write_read(dut):
         tb = await setup_testbench(dut, rd_clk_period, wr_clk_period)
         tb.dut._log.info(f"STARTING TEST: Async FIFO Basic Write/Read Iteration: {i+1}")
         await tb.start_clocks()
+        start_coverage_monitor(dut)  # Start coverage monitoring
 
         # Perform reset
         wr_reset_task = cocotb.start_soon(tb.wr_reset())
@@ -85,6 +88,7 @@ async def test_full_and_empty_conditions(dut):
         tb = await setup_testbench(dut, rd_clk_period, wr_clk_period)
         tb.dut._log.info(f"STARTING TEST: Async FIFO Full and Empty Conditions Iteration: {i+1}")
         await tb.start_clocks()
+        start_coverage_monitor(dut)  # Start coverage monitoring
 
         # Perform reset
         wr_reset_task = cocotb.start_soon(tb.wr_reset())
@@ -136,6 +140,7 @@ async def test_almost_full_empty_conditions(dut):
         tb = await setup_testbench(dut, rd_clk_period, wr_clk_period)
         tb.dut._log.info(f"STARTING TEST: Async FIFO Almost Full and Almost Empty Conditions Iteration: {i+1}")
         await tb.start_clocks()
+        start_coverage_monitor(dut)  # Start coverage monitoring
 
         # Perform reset
         wr_reset_task = cocotb.start_soon(tb.wr_reset())
@@ -184,6 +189,7 @@ async def test_fifo_async_simultaneous_read_write(dut):
         tb = await setup_testbench(dut, rd_clk_period, wr_clk_period)
         tb.dut._log.info(f"STARTING TEST: Async FIFO Simultaneous Read/Write Iteration: {i+1}")
         await tb.start_clocks()
+        start_coverage_monitor(dut)  # Start coverage monitoring
 
         # Perform reset
         wr_reset_task = cocotb.start_soon(tb.wr_reset())
