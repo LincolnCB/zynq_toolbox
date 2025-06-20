@@ -231,7 +231,7 @@ custom_cores/%/tests/test_certificate: custom_cores/$$(VENDOR)/cores/$$(CORE)/$$
 #  as well as "secondary expansion" (GNU Make 3.9) to allow for their use in the prerequisite
 tmp/custom_cores/%: VENDOR = $(word 1,$(subst /, ,$*))
 tmp/custom_cores/%: CORE = $(word 2,$(subst /, ,$*))
-tmp/custom_cores/%: custom_cores/$$(VENDOR)/cores/$$(CORE)/$$(CORE).v $$(wildcard custom_cores/$$(VENDOR)/cores/$$(CORE)/submodules/*.v)
+tmp/custom_cores/%: custom_cores/$$(VENDOR)/cores/$$(CORE)/$$(CORE).v $$(wildcard custom_cores/$$(VENDOR)/cores/$$(CORE)/submodules/*.v) scripts/vivado/package_core.tcl
 	@./scripts/make/status.sh "MAKING USER CORE: '$(CORE)' by '$(VENDOR)'"
 	mkdir -p $(@D)
 	$(VIVADO) -source scripts/vivado/package_core.tcl -tclargs $(VENDOR) $(CORE) $(PART)
@@ -240,7 +240,7 @@ tmp/custom_cores/%: custom_cores/$$(VENDOR)/cores/$$(CORE)/$$(CORE).v $$(wildcar
 # Requires all the cores
 # Built using the `scripts/vivado/project.tcl` script, which uses
 # 	the block design and ports files from the project
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr: scripts/vivado/project.tcl projects/$(PROJECT)/block_design.tcl projects/$(PROJECT)/ports.tcl $(BOARD_XDC) $(addprefix tmp/custom_cores/, $(PROJECT_CORES)) $(wildcard projects/$(PROJECT)/modules/*.tcl)
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr: scripts/vivado/project.tcl projects/$(PROJECT)/block_design.tcl projects/$(PROJECT)/ports.tcl $(BOARD_XDC) $(addprefix tmp/custom_cores/, $(PROJECT_CORES)) $(wildcard projects/$(PROJECT)/modules/*.tcl) scripts/vivado/project.tcl
 	@./scripts/make/status.sh "MAKING PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr"
 	mkdir -p $(@D)
 	$(VIVADO) -source scripts/vivado/project.tcl -tclargs $(BOARD) $(BOARD_VER) $(PROJECT)
@@ -248,7 +248,7 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr: scripts/vivado/project.tcl pro
 # The bitstream file (.bit)
 # Requires the project file
 # Built using the `scripts/vivado/bitstream.tcl` script, with bitstream compression set to false
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr scripts/vivado/bitstream.tcl
 	@./scripts/make/status.sh "MAKING BITSTREAM: $(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit"
 	$(VIVADO) -source scripts/vivado/bitstream.tcl -tclargs $(BOARD)/$(BOARD_VER)/$(PROJECT) false
 
@@ -259,7 +259,7 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit: tmp/$(BOARD)/$(BOARD_VER)/$(
 #   then tracks if there was actually an error. This allows the second script to run,
 #   logging the utilization, but still exit with an error at the end if the first command failed.
 #   Note the `;` and `\` that make these steps a single command line, as make runs each line separately.
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr scripts/vivado/hw_def.tcl scripts/vivado/utilization.tcl
 	@./scripts/make/status.sh "MAKING HW DEF: $(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa"
 	-$(VIVADO) -source scripts/vivado/hw_def.tcl -tclargs $(BOARD)/$(BOARD_VER)/$(PROJECT); \
 		RESULT=$$?; \
@@ -270,7 +270,7 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PRO
 # The PetaLinux project
 # Requires the hardware definition file
 # Built using the scripts/petalinux/project.sh script
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION)/config.patch projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION)/rootfs_config.patch
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION)/config.patch projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION)/rootfs_config.patch scripts/petalinux/project.sh scripts/petalinux/software.sh scripts/petalinux/kernel_modules.sh scripts/petalinux/make_offline.sh
 	@./scripts/make/status.sh "MAKING CONFIGURED PETALINUX PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	@if [ $(OFFLINE) = "true" ]; then scripts/make/status.sh "PetaLinux OFFLINE build"; fi
 	scripts/petalinux/project.sh $(BOARD) $(BOARD_VER) $(PROJECT)
@@ -281,7 +281,7 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux: tmp/$(BOARD)/$(BOARD_VER)/$(PROJ
 
 # The compressed root filesystem
 # Requires the PetaLinux project
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux 
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux scripts/petalinux/package_rootfs_files.sh
 	@./scripts/make/status.sh "MAKING LINUX SYSTEM FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && \
 		source $(PETALINUX_PATH)/settings.sh && \
@@ -292,6 +292,6 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$
 # The compressed boot files
 # Requires the root filesystem
 # Built using the petalinux package boot command
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz scripts/petalinux/package_boot.sh
 	@./scripts/make/status.sh "PACKAGING BOOT FILES FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	scripts/petalinux/package_boot.sh $(BOARD) $(BOARD_VER) $(PROJECT)
