@@ -49,7 +49,7 @@ module fifo_sync #(
     end
 
     // Read logic
-    always @* rd_ptr_bin_nxt = rd_ptr_bin + (rd_en & ~empty);
+    always @* rd_ptr_bin_nxt = rd_ptr_bin + {{(ADDR_WIDTH){1'b0}}, (rd_en & ~empty)};
     // Update read pointer on clock edge
     always @(posedge clk) begin
         if (!resetn) begin
@@ -68,8 +68,8 @@ module fifo_sync #(
     assign fifo_count = wr_ptr_bin - rd_ptr_bin;
 
     // Almost full/empty
-    assign almost_full  = (fifo_count >= ((1 << ADDR_WIDTH) - ALMOST_FULL_THRESHOLD));
-    assign almost_empty = (fifo_count <= ALMOST_EMPTY_THRESHOLD);
+    assign almost_full  = (fifo_count >= ((1 << ADDR_WIDTH) - ALMOST_FULL_THRESHOLD[ADDR_WIDTH:0]));
+    assign almost_empty = (fifo_count <= ALMOST_EMPTY_THRESHOLD[ADDR_WIDTH:0]);
 
 endmodule
 

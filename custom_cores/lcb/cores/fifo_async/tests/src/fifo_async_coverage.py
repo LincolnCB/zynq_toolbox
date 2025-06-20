@@ -106,7 +106,7 @@ def start_coverage_monitor(dut):
     cocotb.start_soon(_coverage_monitor_wr_domain(dut))
 
 def write_report():
-    results_dir = os.getenv("RESULTS_ROOT_DIR", ".") # Default to current dir if not set
+    results_dir = os.getenv("RESULTS_DIR", ".") # Default to current dir if not set
 
     original_cwd = os.getcwd() # Store the original working directory
 

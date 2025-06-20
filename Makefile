@@ -110,7 +110,7 @@ RM = rm -rf
 .PRECIOUS: tmp/cores/% tmp/%.xpr tmp/%.bit
 
 # Targets that aren't real files (GNU Make 4.9)
-.PHONY: all clean clean_project clean_all bit sd rootfs boot cores xpr xsa petalinux petalinux_build
+.PHONY: all clean clean_project clean_all bit sd rootfs boot tests cores xpr xsa petalinux petalinux_build
 
 # Enable secondary expansion (GNU Make 3.9) to allow for more complex pattern matching (see cores target)
 .SECONDEXPANSION:
@@ -173,6 +173,12 @@ boot: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz
 ## Custom intermediate targets (could be used directly for testing)
 #############################################
 
+# Tests for all the custom cores necessary for the project
+# The necessary cores for the specific project are extracted
+# 	from `block_design.tcl` (recursively by sub-modules)
+#		by `scripts/make/get_cores_from_tcl.sh`
+tests: $(addprefix custom_cores/, $(addsuffix /tests/test_certificate, $(PROJECT_CORES)))
+
 # All the cores necessary for the project
 # Separated in `tmp/cores` by vendor
 # The necessary cores for the specific project are extracted
@@ -214,7 +220,7 @@ petalinux_build: petalinux
 #  as well as "secondary expansion" (GNU Make 3.9) to allow for their use in the prerequisite
 custom_cores/%/tests/test_certificate: VENDOR = $(word 1,$(subst /, ,$*))
 custom_cores/%/tests/test_certificate: CORE = $(word 3,$(subst /, ,$*))
-custom_cores/%/tests/test_certificate: custom_cores/$$(VENDOR)/cores/$$(CORE)/$$(CORE).v $$(wildcard custom_cores/$$(VENDOR)/cores/$$(CORE)/tests/*.py) $$(wildcard custom_cores/$$(VENDOR)/cores/$$(CORE)/submodules/*.v)
+custom_cores/%/tests/test_certificate: custom_cores/$$(VENDOR)/cores/$$(CORE)/$$(CORE).v $$(wildcard custom_cores/$$(VENDOR)/cores/$$(CORE)/tests/*.py) $$(wildcard custom_cores/$$(VENDOR)/cores/$$(CORE)/submodules/*.v) scripts/make/test_core.sh
 	@./scripts/make/status.sh "MAKING TEST CERTIFICATE FOR CORE: '$(CORE)' by '$(VENDOR)'"
 	mkdir -p $(@D)
 	scripts/make/test_core.sh $(VENDOR) $(CORE)
@@ -275,7 +281,7 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux: tmp/$(BOARD)/$(BOARD_VER)/$(PROJ
 
 # The compressed root filesystem
 # Requires the PetaLinux project
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux 
 	@./scripts/make/status.sh "MAKING LINUX SYSTEM FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && \
 		source $(PETALINUX_PATH)/settings.sh && \

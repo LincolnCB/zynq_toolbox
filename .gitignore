@@ -10,6 +10,7 @@ environment.sh
 __pycache__
 sim_build
 dump.vcd
+**/tests/results
 results.xml
 *coverage.xml
 *coverage.yaml
