@@ -1,6 +1,6 @@
 SIM ?= verilator
 TOPLEVEL_LANG ?= verilog
-TEST_DIR := $(PWD)/..
+TEST_DIR := $(shell pwd)/..
 
 CORE_NAME := $(notdir $(abspath $(TEST_DIR)/..))
 VERILOG_SOURCES += $(abspath $(TEST_DIR)/../$(CORE_NAME).v)
@@ -9,6 +9,7 @@ VERILOG_SOURCES += $(abspath $(wildcard $(TEST_DIR)/../submodules/*.v))
 $(info --------------------------)
 $(info Core name: $(CORE_NAME))
 $(info Using Verilog sources: $(VERILOG_SOURCES))
+$(info $(TEST_DIR) is the test directory)
 $(info --------------------------)
 
 EXTRA_ARGS += --trace --trace-structs -Wno-fatal --timing 

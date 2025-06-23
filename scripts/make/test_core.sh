@@ -12,8 +12,8 @@
 #      else, check results.xml: (if tests are run by default, cocotb will create results.xml) 
 #        – if results.xml contains any <failure tags, mark “failed tests”
 #        – otherwise mark “passed tests”
-#   4) write the one‐line certificate into
-#      custom_cores/<vendor>/cores/<core>/tests/test_certificate
+#   4) write the one‐line status file into
+#      custom_cores/<vendor>/cores/<core>/tests/test_status
 #
 
 if [ $# -ne 2 ]; then
@@ -27,7 +27,6 @@ VENDOR=${1}
 CORE=${2}
 set --
 
-
 TEST_DIR="custom_cores/${VENDOR}/cores/${CORE}/tests"
 
 # Verify that the tests directory exists
@@ -36,69 +35,57 @@ if [ ! -d "${TEST_DIR}" ]; then
   exit 1
 fi
 
-# Enter the tests directory (pushd saves the current directory on a stack)
-pushd "${TEST_DIR}" >/dev/null
-
-CERT_FILE="test_certificate"
+STS_FILE="${TEST_DIR}/test_status"
 
 # Remove any old results.xml for a clean start
-rm -f results/results.xml
+rm -f "${TEST_DIR}/results/results.xml"
 
 # Enter the src directory where the Makefile is expected
-if [ ! -d "src" ]; then
+if [ ! -d "${TEST_DIR}/src" ]; then
   echo "[CORE TESTS]: src directory not found in ${TEST_DIR} -- assuming no tests to run."
 
-  # Write a skip on the certificate line (overwriting old one)
-  echo "Tests skipped due to no src directory on $(date +"%Y/%m/%d at %H:%M %Z") " > "${CERT_FILE}"
-  echo "[CORE TESTS] ${CORE}: Tests SKIPPED (see ${TEST_DIR}/${CERT_FILE} details)"
+  # Write a skip on the status file line (overwriting old one)
+  echo "NO TESTS (no src directory) as of $(date +"%Y/%m/%d at %H:%M %Z") " > "${STS_FILE}"
+  echo "[CORE TESTS] ${CORE}: Tests SKIPPED (see ${TEST_DIR}/${STS_FILE} details)"
 
-  popd >/dev/null
   exit 0
 fi
 
 echo "[CORE TESTS] Running tests for ${CORE} in ${TEST_DIR}"
-pushd src >/dev/null
 
 # Run “make test_custom_core”
 # Makefile inside tests/src defines a target "test_custom_core"
-mkdir -p ../results  # Ensure results directory exists
-if ! make "test_custom_core" > ../results/log.txt; then
+mkdir -p "${TEST_DIR}/results"  # Ensure results directory exists
+
+if ! make --directory="${TEST_DIR}/src" --file="$(realpath scripts/make/cocotb.mk)" "test_custom_core" > "${TEST_DIR}/results/log.txt"; then
   # Makefile itself failed (e.g. Verilator compile error). Mark as failure.
   echo "[CORE TESTS] ERROR: Makefile failed for ${CORE} tests."
-  STATUS="failed tests"
+  echo "See log.txt for details: ${TEST_DIR}/results/log.txt"
+  exit 1
 else
   # Make succeeded. Now look for results.xml in the results directory.
-  if [ -f ../results/results.xml ]; then
+  if [ -f "${TEST_DIR}/results/results.xml" ]; then
     # If there's any tag starting with "<failure" in results.xml, mark as failure
-    if grep -q "<failure" ../results/results.xml; then
+    if grep -q "<failure" "${TEST_DIR}/results/results.xml"; then
       echo "[CORE TESTS] ERROR: Found failure tags in results.xml for ${CORE} tests."
-      STATUS="failed tests"
+      STATUS="FAILED tests"
     else
-      STATUS="passed tests"
+      STATUS="PASSED tests"
     fi
   else
     # Failure if results.xml is not found
     echo "[CORE TESTS] ERROR: No results.xml found in ${TEST_DIR}/results" 
-    STATUS="failed tests"
+    STATUS="FAILED tests"
   fi
 fi
 
-if [ "${STATUS}" == "failed tests" ]; then
-  echo "[CORE TESTS] ERROR: ${CORE} tests FAILED."
-  echo "See log.txt for details: ${TEST_DIR}/results/log.txt"
-  popd >/dev/null
-  popd >/dev/null
-  exit 1
+# Write the status file line (overwriting old one)
+echo "${STATUS} on $(date +"%Y/%m/%d at %H:%M %Z")" > "${STS_FILE}"
+
+# Put extra info if failed
+if [ "${STATUS}" == "FAILED tests" ]; then
+  echo "See log.txt for details: ${TEST_DIR}/results/log.txt" >> "${STS_FILE}"
 fi
 
-# Go back up to the tests directory
-popd >/dev/null
-
-# Write the certificate line (overwriting old one)
-echo "Tests passed on $(date +"%Y/%m/%d at %H:%M %Z")" > "${CERT_FILE}"
-
-# Return to the original directory
-popd >/dev/null
-
-echo "[CORE TESTS] ${CORE}: Tests PASSED (see ${TEST_DIR}/${CERT_FILE} and ${TEST_DIR}/results/log.txt for details)"
+echo "[CORE TESTS] ${CORE}: ${STATUS} (see ${TEST_DIR}/${STS_FILE} and ${TEST_DIR}/results/log.txt for details)"
 exit 0

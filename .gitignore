@@ -14,3 +14,7 @@ dump.vcd
 results.xml
 *coverage.xml
 *coverage.yaml
+
+# Ignore test status files (e.g. from cocotb) so the history doesn't get cluttered
+core_tests_summary
+test_status
