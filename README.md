@@ -1,47 +1,70 @@
-Based on Pavel Demin's Notes on the Red Pitaya Open Source Instrument
+Forked off of and based originally on Pavel Demin's Notes on the Red Pitaya Open Source Instrument
 [http://pavel-demin.github.io/red-pitaya-notes/]
-as well as the Open-MRI OCRA project (also based off of Pavel Demin's repo)
+
+Also heavily informed by the Open-MRI OCRA project (which was forked off of Pavel Demin's repo as well)
 [https://github.com/OpenMRI/ocra]
 
 
-# Rev D Shim
+# Getting Started
 
-***TODO OUT OF DATE -- IN PROGRESS***
+## Required Tools
 
-## Getting Started
+This repo uses the AMD/Xilinx FPGA toolchain to build projects for the chips in the Zynq 7000 SoC series family. Below are some instructions on how to set up the tools. The versions listed are the ones that are primarily used, but other versions may work as well. If you use other versions of tools, you may need to add configuration files for them to projects (PetaLinux, in particular, changes its configuration files meaningfully between versions) -- this will be explained later in the section on configuring PetaLinux for a project.
 
-### Required Tools
+I recommend using a VM for these tools, as the installation can be large and messy, and the tools' supported OSes are slightly limited. For the recommended versions listed below, I used a VM running [Ubuntu 20.04.6 (Desktop image)](https://www.releases.ubuntu.com/focal/) with 200 GB of storage(/disk space), 16 GB of RAM(/memory), and 8 CPU cores. If you're running on a Mac with a M1/M2 or other non-x86 chip, you may need to be picky with your VM to do this ([UTM](https://mac.getutm.app/) seems to be the recommended option. Make sure to select "iso image" when selecting the downloaded Ubuntu ISO). My process is explained below, but is definitely not the only way to do this.
 
-To build the system, you'll need the following tools. The versions listed are the ones that have been tested and are known to work. Other versions may work, but are not guaranteed to. I recommend using a VM for this, as the installation can be large and messy. For the recommended versions listed below, I used a Ubuntu 22.04.4 VM with 160 GB of storage, 16 GB of RAM, and 8 CPU cores. My process is explained below, but is definitely not the only way to do this.
+- PetaLinux (2024.2)
+- Vivado (2024.2)
 
-- PetaLinux (2024.1)
-- Vivado (2024.1)
+These can be installed together from the AMD unified installer (2024.2 version [here](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/vivado-design-tools/2024-2.html) -- select "AMD Unified Installer for FPGAs & Adaptive SoCs 2024.2: Linux Self Extracting Web Installer", do this and everything else on the system you want these tools installed to, which is recommended to be a VM). You will need to create an AMD account to download and use the installer, but it should be free to do so. 
 
-These can be installed together from the AMD unified installer (2024.1 version [here](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/vivado-design-tools/2024-1.html)).
 
+### Unified Installer
+
+Follow the documentation [here](https://docs.amd.com/r/en-US/ug1144-petalinux-tools-reference-guide/Installation-Steps) -- make sure the dropdown version at the top of the documentation matches the version you're using. 
+
+You should make sure the system had the required libraries. From the stock Ubuntu 20.04.6 install, I needed to install the following packages with `sudo apt install` to make PetaLinux and Vivado install successfully:
+```shell
+sudo apt install gcc xterm autoconf libtool texinfo zlib1g-dev gcc-multilib build-essential libncurses5-dev libtinfo5
+```
+
+To run the unified installer, you will likely need to make it executable first. This is done by running (from the folder containing the installer, which will likely be your Downloads folder):
+```shell
+chmod +x FPGAs_AdaptiveSoCs_Unified_2024.2_1113_1001_Lin64.bin
+```
+
+From there, you can run the installer (this will need `sudo` permissions to write to the recommended default installation directory, which is `/tools/Xilinx/`).
+```shell
+sudo ./FPGAs_AdaptiveSoCs_Unified_2024.2_1113_1001_Lin64.bin
+```
+
+This will open a GUI installer. You will need to log in with your AMD account again. This will take you to the "**Select Product to Install**" page. You will need to run this installer twice, once for each of the two tools (PetaLinux and Vivado). I recommend starting with PetaLinux, as it is smaller and quicker to install.
 
 ### Installing PetaLinux
 
-Follow the documentation [here](https://docs.amd.com/r/2024.1-English/ug1144-petalinux-tools-reference-guide/Installation-Steps). 
-
-For my system, I had to first make sure the VM had the required libraries. From the stock Ubuntu install, I installed the following packages:
-```
-libtools texinfo ncurses-term libtinfo5 libncurses5 python3-pip libgtk2.0-0 gawk gcc netstat libncurses5-dev openssl xterm zlib1g-dev gcc-multilib build-essential automake screen libstdc++6 g++ xz-utils cpp patch python3-jinja2 python3-pexpect diffutils debianutils iputils-ping python3 cpio gnupg
-```
-
-After that, installation went smoothly. Installation was a 4 GB download, 8 GB required disk space, and 4 GB final install size. I selected only PetaLinux ARM, as that's what has the Zynq 7000 series Cortex A9 support.
-
-Note that PetaLinux requires bash to be your shell.
+On the "**Select Product to Install**" page, scroll to the bottom and select "**PetaLinux**" and click Next. This repo is primarily focused on the Zynq7000 series SoCs, so you can select "**PetaLinux arm**" under "**Select Edition to Install**" and click Next. Accept the License Agreements and click Next. You can leave everything as default under "**Select Destination Directory**" (the default will be `/tools/Xilinx/` and will create a `PetaLinux/2024.2` directory). Click Next and then Install.
 
 
 ### Installing Vivado
 
-I installed Vivado using the Vitis installation process, and installed Vitis as well. I don't believe you need Vitis, currently. I used the default options for Vitis and Vivado, and only selected the Zynq 7000 series and Artix-7 FPGA. The installation was a 20 GB download, 100 GB required disk space, and 50 GB final install size.
+Running the unified installer again, back on the "**Select Product to Install**" page, "**Vivado**" should be the second option. Select it and click Next. Under "**Select Edition to Install**", select "**Vivado ML Standard**" and click Next. The next section, "**Vivado ML Standard**", allows you to trim the installation size to only the components needed. First, I recommend unchecking everything you can. You can then check the following options:
+- **DocNav** (optional) for looking at documentation in the Vivado GUI. Documentation can also be found online.
+- Under **Devices** -> **Production Devices** -> **SoCs** check **Zynq-7000**  (you may need to expand the sections to see this. It's fine that it says "limited support").
 
-Relative to the Xilinx installation directory, I ran `Xilinx/Vitis/2024.1/scripts/installLibs.sh` with sudo.
+Click Next. Accept the Licence Agreements and click Next. Just like with PetaLinux, you can leave everything as default under "**Select Destination Directory**" (the default will be `/tools/Xilinx/` and will create a `Vivado/2024.2` directory). Click Next and then Install.
 
 
 ## Profile Setup
+
+With this repository cloned into your VM (e.g. `/home/username/rev_d_shim` or something similar), you will need to set up some environment variables and modify the Vivado init script to use this repo's scripts. At the top level of this repository, you will find a file named `environment.sh.example`. This is a template file for the environment variables that you need to set up. Copy this file and name the copy `environment.sh`. You will need to edit the following variables in this file to match your setup:
+- `REV_D_DIR`: The path to the repository root directory (e.g. `/home/username/rev_d_shim`, as above)
+- `PETALINUX_PATH`: The path to the PetaLinux installation directory (by default, this will be `/tools/Xilinx/PetaLinux/2024.2/tool`)
+- `PETALINUX_VERSION`: The version of PetaLinux you are using (e.g. `2024.2`)
+- `VIVADO_PATH`: The path to the Vivado installation directory (by default, this will be `/tools/Xilinx/Vivado/2024.2`)
+
+
+---
+# WORK IN PROGRESS BELOW THIS POINT
 
 Your shell needs to have environment variables set up for the tools to work. The following three are needed:
 - `PETALINUX_PATH`: The path to the PetaLinux installation directory (e.g. `/tools/Xilinx/PetaLinux/2024.1/tool`)

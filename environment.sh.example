@@ -21,6 +21,14 @@ export PETALINUX_PATH="/tools/Xilinx/PetaLinux/2024.2/tool"
 # export PETALINUX_VERSION="2024.2"
 export PETALINUX_VERSION="2024.2"
 
+# Path to Vivado installation
+# Example:
+# export VIVADO_PATH="/tools/Xilinx/Vivado/2024.2"
+export VIVADO_PATH="/tools/Xilinx/Vivado/2024.2"
+
+# Source Vivado settings script
+source $VIVADO_PATH/settings64.sh
+
 ## PetaLinux source files for offline builds
 ## https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-design-tools.html
 ## You need the "Downloads" and "arm sstate-cache" from the "PetaLinux Tools sstate-cache Artifacts" section
@@ -32,11 +40,3 @@ export PETALINUX_DOWNLOADS_PATH="/home/lcb-virt/petalinux_downloads/downloads_20
 # Example:
 # export PETALINUX_SSTATE_PATH="/home/lcb-virt/petalinux_downloads/sstate_arm_2024.2_11061705/arm"
 export PETALINUX_SSTATE_PATH="/home/lcb-virt/petalinux_downloads/sstate_arm_2024.2_11061705/arm"
-
-# Path to Vivado installation
-# Example:
-# export VIVADO_PATH="/tools/Xilinx/Vivado/2024.2"
-export VIVADO_PATH="/tools/Xilinx/Vivado/2024.2"
-
-# Source Vivado settings script
-source $VIVADO_PATH/settings64.sh
