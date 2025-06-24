@@ -1,3 +1,6 @@
+## Initialize the ports
+create_bd_port -dir O -from 0 -to 0 fclk0
+
 ## Instantiate the processing system and connect it to fixed IO and DDR
 
 # Create the PS (processing_system7)

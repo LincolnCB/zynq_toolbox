@@ -47,14 +47,6 @@ if [ ! -f "projects/${PRJ}/block_design.tcl" ]; then
   exit 1
 fi
 
-# Check that the ports TCL file exists
-if [ ! -f "projects/${PRJ}/ports.tcl" ]; then
-  echo "[CHECK PROJECT DIR] ERROR:"
-  echo "Ports TCL file not found for project \"${PRJ}\""
-  echo " Path: projects/${PRJ}/ports.tcl"
-  exit 1
-fi
-
 # Check that the configuration folder for the board exists
 if [ ! -d "projects/${PRJ}/cfg/${BRD}" ]; then
   echo "[CHECK PROJECT DIR] ERROR:"

@@ -212,7 +212,6 @@ proc module_get_upvar {varname} {
 create_bd_design system
 
 # Execute the port definition and block design scripts for the project, by board
-source projects/$project_name/ports.tcl
 source projects/$project_name/block_design.tcl
 
 # Clear out the processes defined above to avoid conflicts, now that the block design is complete

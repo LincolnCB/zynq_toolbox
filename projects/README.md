@@ -9,32 +9,33 @@ A project directory should follow the following structure:
 ```
 [project_name]/
 ├── cfg/                                - Configuration files for the project
-│   └── [board_name]/                   - Board-specific configuration files
-│       ├── xdc/                        - Vivado XDC (Xilinx Design Constraint) files for the project.
-│       │   └── [file_name].xdc         - XDC file for the project. Require .xdc extension.
-│       │                                 These files define the hardware interface for the project and board.
-│       │                                 They must include handling of the project's ports defined in ports.tcl.
-│       └── petalinux/                  - PetaLinux configuration files for the project
-│           │                             These files are patches to the default PetaLinux configuration.
-│           │                             They can be created with the scripts in the scripts/ directory.
-│           ├── config.patch            - Patch file for the PetaLinux project configuration
-│           └── rootfs_config.patch     - Patch file for the PetaLinux filesystem configuration
+│   └── [board_name]/[board_version]    - Board- and board-version-specific configuration files
+│       ├── petalinux/[version]/        - PetaLinux configuration files for the project
+│       │   │                               These files are patches to the default PetaLinux configuration.
+│       │   │                               They can be created with the scripts in the scripts/petalinux directory.
+│       │   │                               Multiple versions can be supported.
+│       │   ├── config.patch            - Patch file for the PetaLinux project configuration
+│       │   └── rootfs_config.patch     - Patch file for the PetaLinux filesystem configuration
+│       └── xdc/                        - Vivado XDC (Xilinx Design Constraint) files for the project.
+│           └── [file_name].xdc         - XDC file for the project. Require .xdc extension.
+│                                           These files define the hardware interface for the project and board.
+│                                           They must match the ports defined in the block design.
 ├── modules/                            - [OPTIONAL] TCL scripts for block-design modules used in the project.
 │   └── [module_name].tcl               - [OPTIONAL] TCL script for a module used in the block design
-│                                         Modules are included using the "module" procedure, either in 
-│                                         block_design.tcl or in another module script.
-├── software/                           - [OPTIONAL] Software source files for the project (e.g. C, C++, Rust, Python)
+│                                           Modules are included using the "module" procedure, either in 
+│                                           block_design.tcl or in another module script.
+├── rootfs_include/                     - [OPTIONAL] Files to be included in the PetaLinux root filesystem when built.
+├── software/                           - [OPTIONAL] Software source files for the project (e.g. C, C++, Rust, Python).
 ├── block_design.tcl                    - TCL script that constructs the programmable logic for the project.
-│                                         This script can use procedures defined in scripts/vivado/project.tcl
-│                                         like `cell`, `module`, `init_ps` etc. to easily build the block design.
-├── ports.tcl                           - TCL script that defines the ports for the project. This script should be  
-│                                         the only place top-level block design ports are defined.
+│                                           This script can use procedures defined in scripts/vivado/project.tcl
+│                                           like `cell`, `module`, `init_ps` etc. to easily build the block design.
+│                                           It includes any port definitions of the block design.
 └── README.md                           - README file for the project, explaining the project's purpose and usage
 ```
 
 ## Programmable Logic (PL) Design
 
-The main definition of the PL functionality is done in `block_design.tcl`. This script should use the procedures defined in `scripts/vivado/project.tcl` to build the block design (see the comments in that file, starting around line 50). The `ports.tcl` file defines the ports for the project, and should be the only place where top-level block design ports are defined.
+The main definition of the PL functionality is done in `block_design.tcl`, including the port defintion. This script should use the procedures defined in `scripts/vivado/project.tcl` to build the block design (see the comments in that file, starting around line 50).
 
 *Syntax notes:* 
 - *"Cell" and "core" are used somewhat interchangeably here, referring to objects in the block design*

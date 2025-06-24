@@ -1,4 +1,4 @@
-############# General setup #############
+# No external FPGA ports are used in this project.
 
 ## Instantiate the processing system
 

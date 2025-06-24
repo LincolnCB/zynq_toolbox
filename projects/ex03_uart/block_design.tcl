@@ -1,3 +1,5 @@
+# No external FPGA ports are used in this project.
+
 ## Instantiate the processing system and connect it to fixed IO and DDR
 
 # Create the PS (processing_system7)

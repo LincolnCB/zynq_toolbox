@@ -8,8 +8,8 @@
 
 # Path to the git directory
 # Example:
-# export REV_D_DIR="/home/lcb-virt/rev_d_shim"
-export REV_D_DIR="/home/lcb-virt/rev_d_shim"
+# export REV_D_DIR="$HOME/rev_d_shim"
+export REV_D_DIR="$HOME/rev_d_shim"
 
 # Path to PetaLinux installation
 # Example:
@@ -34,9 +34,9 @@ source $VIVADO_PATH/settings64.sh
 ## You need the "Downloads" and "arm sstate-cache" from the "PetaLinux Tools sstate-cache Artifacts" section
 # Downloads "downloads" folder
 # Example:
-# export PETALINUX_DOWNLOADS_PATH="/home/lcb-virt/petalinux_downloads/downloads_2024.2_11061705/downloads"
-export PETALINUX_DOWNLOADS_PATH="/home/lcb-virt/petalinux_downloads/downloads_2024.2_11061705/downloads"
+# export PETALINUX_DOWNLOADS_PATH="$HOME/petalinux_downloads/downloads_2024.2_11061705/downloads"
+export PETALINUX_DOWNLOADS_PATH="$HOME/petalinux_downloads/downloads_2024.2_11061705/downloads"
 # Sstate "arm" folder
 # Example:
-# export PETALINUX_SSTATE_PATH="/home/lcb-virt/petalinux_downloads/sstate_arm_2024.2_11061705/arm"
-export PETALINUX_SSTATE_PATH="/home/lcb-virt/petalinux_downloads/sstate_arm_2024.2_11061705/arm"
+# export PETALINUX_SSTATE_PATH="$HOME/petalinux_downloads/sstate_arm_2024.2_11061705/arm"
+export PETALINUX_SSTATE_PATH="$HOME/petalinux_downloads/sstate_arm_2024.2_11061705/arm"
