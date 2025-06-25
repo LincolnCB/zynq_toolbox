@@ -15,6 +15,7 @@ This repository contains the source code and documentation for the Revision D Sh
 - [Overview](#overview)
 - [Getting Started](#getting-started)
 - [Building an SD card](#building-an-sd-card)
+- [Using the Rev D Shim Amplifier](#using-the-rev-d-shim-amplifier)
 - [Example Projects](#example-projects)
 - [Testing](#testing)
 
@@ -297,11 +298,54 @@ make -j `nproc`  # Build Verilator itself (if error, try just 'make')
 sudo make install
 ```
 
+# Building an SD card
+
+This section will walk you through the build process of a fully formed bootable Micro SD card for the Snickerdoodle Black containing the Rev D Shim firmware, Linux operating system, and FPGA bitstream. If you want to understand the steps in more detail, go through the [Example Projects](#example-projects) section, which progressively build up the components and techniques used for the Rev D Shim firmware.
+
+The entire build process is scripted by the `Makefile` and various shell and TCL scripts in the `scripts/` directory. The main entry point is the `Makefile`, which will call the appropriate scripts to build the project. The default target and variables for the `Makefile` is the Rev D Shim firmware for the Snickerdoodle Black. As such, you can simply run the following command from the root of this repository to build the SD card:
+```bash
+make
+```
+
+This will output two compressed files in the `out/snickerdoodle_black/1.0/rev_d_shim/` directory:
+- `BOOT.tar.gz`: The compressed boot partition, which contains the Linux kernel, device tree, and boot scripts.
+- `rootfs.tar.gz`: The compressed root filesystem, which contains all of the Linux files.
+
+To load these files onto the Micro SD card, you'll first need one with the proper partitioning scheme. This follows the instructions given in the [PetaLinux Tools Documentation (UG1144)](https://docs.amd.com/r/en-US/ug1144-petalinux-tools-reference-guide/Preparing-the-SD-Card). You can use any disk partitioning tool to do this, but Linux ones are generally better/easier to use. Writing the files to the SD card is already easiest if your VM has access to your SD card reader / USB port, so I'd recommend doing the partitioning through your VM as well -- GParted is a good graphical tool for this, which you can install with:
+```bash
+sudo apt install gparted
+```
+if it isn't already.
+
+Use GParted to partition the SD card as follows:
+- One partition of type `fat32` with a size of 1 GiB, labeled `BOOT`. Make sure this has 4MiB of unallocated free space before it.
+- One partition of type `ext4` with a size of whatever is left on the SD card, labeled `RootFS`.
+
+Once the SD card is partitioned, you can uncompress the `BOOT.tar.gz` and `rootfs.tar.gz` files into the respective partitions. If you're using the same Ubuntu system on a VM that I was, you can do this with the following script (may need to eject and re-insert the SD card after partitioning):
+```bash
+./scripts/make/write_sd.sh snickerdoodle_black 1.0 rev_d_shim
+```
+which will attempt to find the SD card partitions automatically at `/media/username/BOOT` and `/media/username/RootFS`, where `username` is your username on the system. If the partitions are mounted somewhere else, you can specify the mount folder as an additional argument:
+```bash
+./scripts/make/write_sd.sh snickerdoodle_black 1.0 rev_d_shim [mountpoint]
+```
+where `[mountpoint]` is the folder containing the mounted `BOOT` and `RootFS` directories.
+
+If you have some other mounting scheme, you'll need to manually uncompress the files into the appropriate partitions with `tar`:
+```bash
+tar -xzf out/snickerdoodle_black/1.0/BOOT.tar.gz -C [BOOT_mountpoint]
+tar -xzf out/snickerdoodle_black/1.0/rootfs.tar.gz -C [RootFS_mountpoint]
+```
+
+If your board isn't the Snickerdoodle Black, or you want to modify the project or build your own, you should read the [Example Projects](#example-projects) section to get a sense of how everything works.
+
+# Using the Rev D Shim Amplifier
+
+TODO
 
 WORK IN PROGRESS BELOW THIS POINT
 ---
 
-# Building an SD card
 
 # Example Projects
 
