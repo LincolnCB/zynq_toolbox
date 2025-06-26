@@ -1,5 +1,7 @@
 # Board files
 
+***TODO OUT OF DATE -- IN PROGRESS***
+
 Board support can be added here by creating a folder named after the board. A board folder should follow the following structure:
 
 ```
