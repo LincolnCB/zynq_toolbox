@@ -1,5 +1,5 @@
+***Updated 2025-06-18***
 # Hardware Manager Core
-*Updated 2025-06-18*
 
 The `shim_hw_manager` module manages the hardware system's startup, operation, and shutdown processes. It implements a state machine to sequence power-up, configuration, SPI subsystem enable, and error/shutdown handling.
 

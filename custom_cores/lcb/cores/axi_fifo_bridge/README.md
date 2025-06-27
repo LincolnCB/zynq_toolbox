@@ -1,5 +1,5 @@
+***Updated 2025-06-17***
 # AXI FIFO Bridge Core
-*Updated 2025-06-17*
 
 The `axi_fifo_bridge` module bridges an AXI4-Lite subordinate interface and a simple FIFO interface. It allows AXI-based systems to write data to and read data from a FIFO, with configurable support for write and read operations.
 

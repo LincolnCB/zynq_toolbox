@@ -1,3 +1,5 @@
+***Updated 2025-06-27***
+
 # Check
 
 These scripts are used to check required files, directories, and environment variables as part of the build process, giving the user feedback on what is missing or misconfigured.They're typically run by the Makefile or other scripts to ensure that the environment is set up correctly before proceeding with the build.

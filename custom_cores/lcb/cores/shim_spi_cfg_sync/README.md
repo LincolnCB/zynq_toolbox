@@ -1,5 +1,5 @@
+***Updated 2025-06-18***
 # SPI Configuration Synchronization Core
-*Updated 2025-06-18*
 
 The `shim_spi_cfg_sync` module synchronizes configuration signals from the AXI clock domain to the SPI clock domain, ensuring reliable transfer and stable updates of configuration values.
 

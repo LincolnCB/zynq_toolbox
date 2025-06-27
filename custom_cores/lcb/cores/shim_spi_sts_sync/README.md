@@ -1,5 +1,5 @@
+***Updated 2025-06-18***
 # SPI System Status Synchronization Core
-*Updated 2025-06-18*
 
 The `shim_spi_sts_sync` module synchronizes a variety of status signals from the SPI domain into the AXI (PS) clock domain, ensuring reliable and glitch-free transfer of asynchronous status information.
 

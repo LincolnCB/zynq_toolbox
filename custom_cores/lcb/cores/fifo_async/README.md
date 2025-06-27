@@ -1,5 +1,5 @@
+***Updated 2025-06-04***
 # FIFO Async Count Core
-*Updated 2025-06-04*
 
 The `fifo_async_count` module implements an asynchronous FIFO with independent read and write clock domains, Gray code pointer synchronization, and programmable almost-full/almost-empty thresholds. It is suitable for safe data transfer between different clock domains.
 

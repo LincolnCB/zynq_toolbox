@@ -1,5 +1,5 @@
+***Updated 2025-06-20***
 # AXIS FIFO Bridge Core
-*Updated 2025-06-20*
 
 The `axis_fifo_bridge` module bridges an AXI4-Stream (AXIS) subordinate/manager interface and a simple FIFO interface. It allows AXIS-based systems to write data to and read data from a FIFO, with configurable support for write and read operations, and flexible handshake behavior.
 

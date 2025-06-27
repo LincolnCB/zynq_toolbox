@@ -1,5 +1,5 @@
+***Updated 2025-06-04***
 # FIFO Sync Core
-*Updated 2025-06-04*
 
 The `fifo_sync` module implements a synchronous FIFO with programmable almost-full and almost-empty thresholds. It is designed for high-throughput data buffering within a single clock domain.
 
