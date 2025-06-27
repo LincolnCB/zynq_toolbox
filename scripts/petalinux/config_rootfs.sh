@@ -1,25 +1,14 @@
 #!/bin/bash
 # Create a patch file for the PetaLinux filesystem configuration
-# Arguments: <board_name> <board_version> <project_name> ['update' (optional)]
-if [ $# -ne 3 ] && [ $# -ne 4 ]; then
-    echo "Usage: $0 <board_name> <board_version> <project_name> ['update' (optional)]"
+# Requires a terminal of at least 80 columns and 19 lines
+# Arguments: <board_name> <board_version> <project_name>
+if [ $# -ne 3 ]; then
+    echo "Usage: $0 <board_name> <board_version> <project_name>"
     exit 1
 fi
 
-# Exit if "update" is not the fourth argument
-if [ $# -eq 4 ] && [ "${4}" != "update" ]; then
-    echo "Usage: $0 <board_name> <board_version> <project_name> ['update' (optional)]"
-    exit 1
-fi
-
-# Update is the fourth argument or there is none
-if [ $# -eq 4 ] ; then
-    UPDATE=1
-else
-    UPDATE=0
-fi
-
-# Check if terminal width is at least 80 columns
+# Check if terminal is at least 80 columns wide and 19 lines tall
+# This is required to display the PetaLinux configuration menu properly
 if [ $(tput cols) -lt 80 ] || [ $(tput lines) -lt 19 ]; then
     echo "Terminal must be at least 80 columns wide and 19 lines tall to use the PetaLinux configuration menu"
     exit 1
@@ -39,34 +28,26 @@ echo "[PTLNX ROOTFS CFG] Checking XSA file and PetaLinux system config file for 
 ./scripts/check/xsa_file.sh ${BRD} ${VER} ${PRJ} || exit 1
 ./scripts/check/petalinux_sys_cfg_file.sh ${BRD} ${VER} ${PRJ} || exit 1
 
-# Check that the PetaLinux root filesystem configuration patch does not already exist if not updating
-if [ -f "projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/rootfs_config.patch" ] && [ $UPDATE -ne 1 ]; then
-    echo "[PTLNX ROOTFS CFG] ERROR:"
-    echo "PetaLinux version ${PETALINUX_VERSION} root filesystem configuration patch already exists for ${PBV}"
-    echo "  projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/rootfs_config.patch"
-    echo "If you want to use that patch as the start point, use the following command:"
-    echo
-    echo "  ${CMD} ${BRD} ${VER} ${PRJ} update"
-    exit 1
-fi
-
-# Check that the PetaLinux root filesystem configuration patch DOES exist if updating
-if [ ! -f "projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/rootfs_config.patch" ] && [ $UPDATE -eq 1 ]; then
-    echo "[PTLNX ROOTFS CFG] ERROR:"
-    echo "Missing PetaLinux version ${PETALINUX_VERSION} root filesystem configuration patch for ${PBV}"
-    echo "  projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/rootfs_config.patch"
-    echo "If you want to create a new patch, copy one in or use the following command:"
-    echo
-    echo "  ${CMD} ${BRD} ${VER} ${PRJ}"
-    exit 1
-fi
-
 # Extract the PetaLinux year from the version string
 if [[ "$PETALINUX_VERSION" =~ ^([0-9]{4}) ]]; then
     PETALINUX_YEAR=${BASH_REMATCH[1]}
 else
     echo "[PTLNX ROOTFS CFG] ERROR: Invalid PetaLinux version format (${PETALINUX_VERSION}). Expected format: YYYY.X"
     exit 1
+fi
+
+# Verify the user wants to proceed with updating the PetaLinux root filesystem configuration if the patch file exists
+ROOTFS_CONFIG_PATH="projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/rootfs_config.patch"
+if [ -f "${ROOTFS_CONFIG_PATH}" ]; then
+    echo "[PTLNX ROOTFS CFG] PetaLinux root filesystem configuration patch file already exists at ${ROOTFS_CONFIG_PATH}"
+    read -p "Do you want to update the PetaLinux root filesystem configuration? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "[PTLNX ROOTFS CFG] Cancelling PetaLinux root filesystem configuration update"
+        exit 0
+    fi
+else
+    echo "[PTLNX ROOTFS CFG] Creating new PetaLinux root filesystem configuration patch file at ${ROOTFS_CONFIG_PATH}"
 fi
 
 # Source the PetaLinux settings script (make sure to clear positional parameters first)
@@ -120,9 +101,9 @@ echo "[PTLNX ROOTFS CFG] Saving default PetaLinux root filesystem configuration"
 cp project-spec/configs/rootfs_config project-spec/configs/rootfs_config.default
 
 # If updating, apply the existing patch
-if [ $UPDATE -eq 1 ]; then
+if [ -f "../../../${ROOTFS_CONFIG_PATH}" ]; then
     echo "[PTLNX ROOTFS CFG] Applying existing PetaLinux root filesystem configuration patch"
-    patch project-spec/configs/rootfs_config ../../../projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/rootfs_config.patch
+    patch project-spec/configs/rootfs_config ../../../${ROOTFS_CONFIG_PATH}
 fi
 
 # Manually configure the root filesystem

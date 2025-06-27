@@ -111,19 +111,18 @@ RM = rm -rf
 .PRECIOUS: tmp/cores/% tmp/%.xpr tmp/%.bit
 
 # Targets that aren't real files (GNU Make 4.9)
-.PHONY: all tests write_sd clean_sd clean_project clean_build clean_tests clean_test_results clean_all bit sd rootfs boot cores xpr xsa petalinux petalinux_build
+.PHONY: all tests write_sd petalinux_cfg petalinux_rootfs_cfg clean_sd clean_project clean_build clean_tests clean_test_results clean_all bit sd rootfs boot cores xpr xsa petalinux petalinux_build
 
 # Enable secondary expansion (GNU Make 3.9) to allow for more complex pattern matching (see cores target)
 .SECONDEXPANSION:
 
 # Default target is the first listed (GNU Make 2.3)
-all: sd tests
+all: sd
 
 
 #############################################
-## Script targets (tests, clean- targets)
+## Script targets (tests, sd management, clean, etc. targets)
 #############################################
-
 
 # Test summary for all the custom cores necessary for the project
 tests: projects/${PROJECT}/tests/core_tests_summary
@@ -132,6 +131,16 @@ tests: projects/${PROJECT}/tests/core_tests_summary
 write_sd: sd
 	@./scripts/make/status.sh "WRITING SD CARD IMAGE"
 	./scripts/make/write_sd.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(MOUNT_DIR)
+
+# Write or update the PetaLinux system configuration file
+petalinux_cfg:
+	@./scripts/make/status.sh "CONFIGURING PETALINUX PROJECT"
+	./scripts/petalinux/config_system.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+
+# Write or update the PetaLinux root filesystem configuration file
+petalinux_rootfs_cfg:
+	@./scripts/make/status.sh "CONFIGURING PETALINUX ROOTFS"
+	./scripts/petalinux/config_rootfs.sh $(BOARD) $(BOARD_VER) $(PROJECT)
 
 # Clean the SD card image at the mount point
 clean_sd:

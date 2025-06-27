@@ -1,25 +1,14 @@
 #!/bin/bash
 # Create a patch file for the PetaLinux system configuration
-# Arguments: <board_name> <board_version> <project_name> ['update' (optional)]
-if [ $# -ne 3 ] && [ $# -ne 4 ]; then
-  echo "Usage: $0 <board_name> <board_version> <project_name> ['update' (optional)]"
+# Requires a terminal of at least 80 columns and 19 lines
+# Arguments: <board_name> <board_version> <project_name>
+if [ $# -ne 3 ]; then
+  echo "Usage: $0 <board_name> <board_version> <project_name>"
   exit 1
 fi
 
-# Exit if "update" is not the fourth argument
-if [ $# -eq 4 ] && [ "${4}" != "update" ]; then
-  echo "Usage: $0 <board_name> <board_version> <project_name> ['update' (optional)]"
-  exit 1
-fi
-
-# Update is the fourth argument or there is none
-if [ $# -eq 4 ]; then
-  UPDATE=1
-else
-  UPDATE=0
-fi
-
-# Check if terminal width is at least 80 columns
+# Check if terminal is at least 80 columns wide and 19 lines tall
+# This is required to display the PetaLinux configuration menu properly
 if [ $(tput cols) -lt 80 ] || [ $(tput lines) -lt 19 ]; then
   echo "[PTLNX SYS CFG] ERROR:"
   echo "Terminal must be at least 80 columns wide and 19 lines tall to use the PetaLinux configuration menu."
@@ -40,34 +29,26 @@ echo "[PTLNX SYS CFG] Checking XSA file and PetaLinux config directory for ${PBV
 ./scripts/check/xsa_file.sh ${BRD} ${VER} ${PRJ} || exit 1
 ./scripts/check/petalinux_cfg_dir.sh ${BRD} ${VER} ${PRJ} || exit 1
 
-# Check that the project configuration patch does not already exist if not updating
-if [ -f "projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch" ] && [ $UPDATE -ne 1 ]; then
-  echo "[PTLNX SYS CFG] ERROR:"
-  echo "PetaLinux version ${PETALINUX_VERSION} project configuration patch already exists for ${PBV}"
-  echo "  projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch"
-  echo "If you want to use that patch as the start point, use the following command:"
-  echo
-  echo "  ${CMD} ${BRD} ${VER} ${PRJ} update"
-  exit 1
-fi
-
-# Check that the project configuration patch DOES exist if updating
-if [ ! -f "projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch" ] && [ $UPDATE -eq 1 ]; then
-  echo "[PTLNX SYS CFG] ERROR:"
-  echo "Missing PetaLinux version ${PETALINUX_VERSION} project configuration patch for ${PBV}"
-  echo "  projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch"
-  echo "If you want to create a new patch, copy one in or use the following command:"
-  echo
-  echo "  ${CMD} ${BRD} ${VER} ${PRJ}"
-  exit 1
-fi
-
 # Extract the PetaLinux year from the version string
 if [[ "$PETALINUX_VERSION" =~ ^([0-9]{4}) ]]; then
   PETALINUX_YEAR=${BASH_REMATCH[1]}
 else
   echo "[PTLNX SYS CFG] ERROR: Invalid PetaLinux version format (${PETALINUX_VERSION}). Expected format: YYYY.X"
   exit 1
+fi
+
+# Check if the config patch file exists and prompt user for update
+CONFIG_PATCH_PATH="projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch"
+if [ -f "${CONFIG_PATCH_PATH}" ]; then
+  echo "[PTLNX SYS CFG] PetaLinux system configuration patch file already exists at ${CONFIG_PATCH_PATH}"
+  read -p "Do you want to update the PetaLinux system configuration? (y/N) " -n 1 -r
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "[PTLNX SYS CFG] Cancelling PetaLinux system configuration update"
+    exit 0
+  fi
+else
+  echo "[PTLNX SYS CFG] Creating new PetaLinux system configuration patch file at ${CONFIG_PATCH_PATH}"
 fi
 
 # Source the PetaLinux settings script (make sure to clear positional parameters first)
@@ -111,9 +92,9 @@ echo "[PTLNX SYS CFG] Saving default PetaLinux system configuration"
 cp project-spec/configs/config project-spec/configs/config.default
 
 # If updating, apply the existing patch
-if [ $UPDATE -eq 1 ]; then
+if [ -f "../../../${CONFIG_PATCH_PATH}" ]; then
   echo "[PTLNX SYS CFG] Applying existing PetaLinux system configuration patch"
-  patch project-spec/configs/config ../../../projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch
+  patch project-spec/configs/config ../../../${CONFIG_PATCH_PATH}
 fi
 
 # Manually configure the project
