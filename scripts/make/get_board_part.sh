@@ -1,4 +1,3 @@
-# filepath: /home/lcb-virt/Documents/rev_d_shim/scripts/make/get_board_part.sh
 #!/bin/bash
 # Get the vendor, board name, component name, and file version from the XML file for the given board and version
 # Arguments: <board_name> <board_version>

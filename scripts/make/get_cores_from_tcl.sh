@@ -1,5 +1,5 @@
 #!/bin/bash
-# This script reads a tcl block design file and extracts the paths of user cores instantiated with the "cell" procedure.
+# This script reads a tcl block design file and extracts the paths of custom cores instantiated with the "cell" procedure.
 # The script can recurse into tcl files sourced by the "module" procedure.
 
 # Check if two arguments are provided
@@ -109,7 +109,7 @@ for path in "${paths[@]}"; do
   for other_path in "${paths[@]}"; do
     other_tail=$(basename "$other_path")
     if [ "$path" != "$other_path" ] && [ "$tail" == "$other_tail" ]; then
-      echo "ERROR -- Duplicate user core name: $tail"
+      echo "ERROR -- Duplicate custom core name: $tail"
       echo "      -- Paths: $path, $other_path"
       echo "      -- Please rename one of the cores"
       exit 1

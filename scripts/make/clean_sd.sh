@@ -1,5 +1,5 @@
 #!/bin/bash
-# Clean the BOOT and RootFS directories for the given board and project
+# Clean the BOOT and RootFS directories on the mounted SD card.
 # Argument: [<mount_directory>]
 if [ $# -gt 1 ]; then
   echo "[CLEAR SD] ERROR:"

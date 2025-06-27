@@ -322,15 +322,21 @@ Use GParted to partition the SD card as follows:
 - One partition of type `fat32` with a size of 1 GiB, labeled `BOOT`. Make sure this has 4MiB of unallocated free space before it.
 - One partition of type `ext4` with a size of whatever is left on the SD card, labeled `RootFS`.
 
-Once the SD card is partitioned, you can uncompress the `BOOT.tar.gz` and `rootfs.tar.gz` files into the respective partitions. If you're using the same Ubuntu system on a VM that I was, you can do this with the following script (may need to eject and re-insert the SD card after partitioning):
+Once the SD card is partitioned, you can uncompress the `BOOT.tar.gz` and `rootfs.tar.gz` files into the respective partitions. If you're using the same Ubuntu system on a VM that I was, and are using the default `BOARD`, `BOARD_VER`, and `PROJECT` (`snickerdoodle_black`, `1.0`, `rev_d_shim`) you can do this with the following [target](#script-targets) (may need to eject and re-insert the SD card after partitioning):
 ```bash
-./scripts/make/write_sd.sh snickerdoodle_black 1.0 rev_d_shim
+make write_sd 
 ```
 which will attempt to find the SD card partitions automatically at `/media/username/BOOT` and `/media/username/RootFS`, where `username` is your username on the system. If the partitions are mounted somewhere else, you can specify the mount folder as an additional argument:
 ```bash
-./scripts/make/write_sd.sh snickerdoodle_black 1.0 rev_d_shim [mountpoint]
+make write_sd MOUNT_DIR=[mountpoint]
 ```
-where `[mountpoint]` is the folder containing the mounted `BOOT` and `RootFS` directories.
+where `[mountpoint]` is the folder containing the mounted `BOOT` and `RootFS` directories. As with any `make` targets, you can modify the `BOARD`, `BOARD_VER`, and `PROJECT` variables to build for a different board, board version, or project (see the [Building a different board, board version, or project](#building-a-different-board-board-version-or-project) section below).
+
+You can similarly clean the SD card files from the mounted SD card with:
+```bash
+make clean_sd
+```
+again with an optional `MOUNT_DIR` argument to specify the mount point of the SD card partitions.
 
 If you have some other mounting scheme, you'll need to manually uncompress the files into the appropriate partitions with `tar`:
 ```bash
@@ -348,6 +354,13 @@ make BOARD=sdrlab_122_16 BOARD_VER=1.0 PROJECT=shim_controller_v0
 ```
 
 Boards and board versions are defined in the `boards/` directory, where the board files for a given board are given under `boards/[BOARD]/board_files/[BOARD_VER]/`. Projects are defined based on folders in the `projects/` directory, where each project has its own folder. Note that projects need to be configured to work with a specific board and board version -- this is done under `projects/[PROJECT]/cfg/[BOARD]/[BOARD_VER]/`, and requires configuration files for `petalinux` and the Vivado Xilinx Design Constraint `xdc` files. You can read more about the requirements for this configuration in the `projects/` directory's README file.
+
+## Building PetaLinux Offline
+
+If you set up [Optional: Building PetaLinux Offline](#optional-building-petalinux-offline) above, you can include the `OFFLINE=true` variable in the `make` command to use the local files instead of downloading them. For example, to build the Rev D Shim firmware for the Snickerdoodle Black with offline PetaLinux, you can run:
+```bash
+make OFFLINE=true
+```
 
 ## Intermediate build files and targets
 
