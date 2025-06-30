@@ -19,9 +19,9 @@ module shim_threshold_integrator (
 
   //// Internal signals
   reg [43:0] max_value           ;
-  reg [ 4:0] sample_size         ;
-  reg [24:0] sample_mask         ;
-  reg [24:0] inflow_sample_timer ;
+  reg [ 4:0] chunk_width         ;
+  reg [24:0] chunk_size          ;
+  reg [24:0] inflow_chunk_timer  ;
   reg [31:0] outflow_timer       ;
   reg [ 3:0] fifo_in_queue_count ;
   reg [35:0] fifo_din            ;
@@ -33,15 +33,15 @@ module shim_threshold_integrator (
   wire       rd_en               ;
   wire[ 7:0] channel_over_thresh ;
   reg [ 2:0] state               ;
-  wire[14:0] inflow_value               [0:7];
-  reg [35:0] inflow_sample_sum          [0:7];
-  reg [35:0] queued_fifo_in_sample_sum  [0:7];
-  reg [35:0] queued_fifo_out_sample_sum [0:7];
-  reg [14:0] outflow_value              [0:7];
-  reg [15:0] outflow_value_plus_one     [0:7];
-  reg [19:0] outflow_remainder          [0:7];
-  reg signed [16:0] sum_delta           [0:7];
-  reg signed [44:0] total_sum           [0:7];
+  wire[14:0] inflow_value              [0:7];
+  reg [35:0] inflow_chunk_sum          [0:7];
+  reg [35:0] queued_fifo_in_chunk_sum  [0:7];
+  reg [35:0] queued_fifo_out_chunk_sum [0:7];
+  reg [14:0] outflow_value             [0:7];
+  reg [15:0] outflow_value_plus_one    [0:7];
+  reg [19:0] outflow_remainder         [0:7];
+  reg signed [16:0] sum_delta          [0:7];
+  reg signed [44:0] total_sum          [0:7];
 
   // Registers for shift-add multiplication
   reg [43:0] window_reg;
@@ -75,7 +75,7 @@ module shim_threshold_integrator (
   //// FIFO I/O
   always @* begin
     if (fifo_in_queue_count != 0) begin
-      fifo_din = queued_fifo_in_sample_sum[fifo_in_queue_count - 1];
+      fifo_din = queued_fifo_in_chunk_sum[fifo_in_queue_count - 1];
     end else begin
       fifo_din = 36'b0;
     end
@@ -89,9 +89,9 @@ module shim_threshold_integrator (
     if (!resetn) begin : reset_logic
       // Zero all individual signals
       max_value <= 0;
-      sample_size <= 0;
-      sample_mask <= 0;
-      inflow_sample_timer <= 0;
+      chunk_width <= 0;
+      chunk_size <= 0;
+      inflow_chunk_timer <= 0;
       outflow_timer <= 0;
       fifo_in_queue_count <= 0;
       fifo_out_queue_count <= 0;
@@ -117,47 +117,47 @@ module shim_threshold_integrator (
           if (enable) begin
             // Calculate chunk_size (MSB of window - 6)
             if (window[31]) begin
-              sample_size <= 21;
+              chunk_width <= 21;
             end else if (window[30]) begin
-              sample_size <= 20;
+              chunk_width <= 20;
             end else if (window[29]) begin
-              sample_size <= 19;
+              chunk_width <= 19;
             end else if (window[28]) begin
-              sample_size <= 18;
+              chunk_width <= 18;
             end else if (window[27]) begin
-              sample_size <= 17;
+              chunk_width <= 17;
             end else if (window[26]) begin
-              sample_size <= 16;
+              chunk_width <= 16;
             end else if (window[25]) begin
-              sample_size <= 15;
+              chunk_width <= 15;
             end else if (window[24]) begin
-              sample_size <= 14;
+              chunk_width <= 14;
             end else if (window[23]) begin
-              sample_size <= 13;
+              chunk_width <= 13;
             end else if (window[22]) begin
-              sample_size <= 12;
+              chunk_width <= 12;
             end else if (window[21]) begin
-              sample_size <= 11;
+              chunk_width <= 11;
             end else if (window[20]) begin
-              sample_size <= 10;
+              chunk_width <= 10;
             end else if (window[19]) begin
-              sample_size <= 9;
+              chunk_width <= 9;
             end else if (window[18]) begin
-              sample_size <= 8;
+              chunk_width <= 8;
             end else if (window[17]) begin
-              sample_size <= 7;
+              chunk_width <= 7;
             end else if (window[16]) begin
-              sample_size <= 6;
+              chunk_width <= 6;
             end else if (window[15]) begin
-              sample_size <= 5;
+              chunk_width <= 5;
             end else if (window[14]) begin
-              sample_size <= 4;
+              chunk_width <= 4;
             end else if (window[13]) begin
-              sample_size <= 3;
+              chunk_width <= 3;
             end else if (window[12]) begin
-              sample_size <= 2;
+              chunk_width <= 2;
             end else if (window[11]) begin
-              sample_size <= 1;
+              chunk_width <= 1;
             end else begin // Disallowed size of window
               over_thresh <= 1;
               state <= OUT_OF_BOUNDS;
@@ -172,7 +172,7 @@ module shim_threshold_integrator (
           end
         end // IDLE
 
-        // SETUP state, calculating max_value and sample size
+        // SETUP state, calculating max_value and chunk size
         SETUP: begin
           // Shift-add multiplication for max_value = threshold_average * window
           if (|threshold_average_shift) begin
@@ -181,8 +181,8 @@ module shim_threshold_integrator (
             end
             threshold_average_shift <= threshold_average_shift >> 1;
             max_value_mult_cnt <= max_value_mult_cnt + 1;
-          end else begin // Finished shift-add multiplication, set sample size mask and go to WAIT for sample core
-            sample_mask <= (25'b1 << sample_size) - 1;
+          end else begin // Finished shift-add multiplication, set chunk size from chunk width and go to WAIT for sample core
+            chunk_size <= (25'b1 << chunk_width) - 1;
             state <= WAIT;
           end
         end // SETUP
@@ -191,7 +191,7 @@ module shim_threshold_integrator (
         WAIT: begin
           if (sample_core_done) begin
             // Initialize timers
-            inflow_sample_timer <= sample_mask << 4;
+            inflow_chunk_timer <= chunk_size << 4;
             outflow_timer <= window - 1;
             setup_done <= 1;
             state <= RUNNING;
@@ -218,8 +218,8 @@ module shim_threshold_integrator (
           end
 
           // Inflow timers
-          if (inflow_sample_timer == 0) begin // Reset inflow sample timer
-            inflow_sample_timer <= sample_mask << 4;
+          if (inflow_chunk_timer == 0) begin // Reset inflow chunk timer
+            inflow_chunk_timer <= chunk_size << 4;
             fifo_in_queue_count <= 8;
           end
 
@@ -236,7 +236,7 @@ module shim_threshold_integrator (
             end
             outflow_timer <= outflow_timer - 1;
           end else begin
-            outflow_timer <= sample_mask << 4;
+            outflow_timer <= chunk_size << 4;
           end // Outflow timer
 
           // Outflow FIFO counter
@@ -269,9 +269,9 @@ module shim_threshold_integrator (
       always @(posedge clk) begin : channel_logic
         if (!resetn) begin : channel_reset
           // Zero all per-channel signals
-          inflow_sample_sum[i] = 0;
-          queued_fifo_in_sample_sum[i] = 0;
-          queued_fifo_out_sample_sum[i] = 0;
+          inflow_chunk_sum[i] = 0;
+          queued_fifo_in_chunk_sum[i] = 0;
+          queued_fifo_out_chunk_sum[i] = 0;
           outflow_value[i] = 0;
           outflow_value_plus_one[i] = 0;
           outflow_remainder[i] = 0;
@@ -281,27 +281,28 @@ module shim_threshold_integrator (
 
           //// Inflow logic
           // Only sample every 16th clock cycle
-          if (inflow_sample_timer[3:0] == 0) begin
+          if (inflow_chunk_timer[3:0] == 0) begin
             // Inflow addition logic
-            if (inflow_sample_timer != 0) begin // Add to sample sum
-              inflow_sample_sum[i] <= inflow_sample_sum[i] + inflow_value[i];
-            end else begin // Add to sample sum and move into FIFO queue. Reset sample sum
-              queued_fifo_in_sample_sum[i] <= inflow_sample_sum[i] + inflow_value[i];
-              inflow_sample_sum[i] <= 0;
+            if (inflow_chunk_timer != 0) begin // Add to chunk sum
+              inflow_chunk_sum[i] <= inflow_chunk_sum[i] + inflow_value[i];
+            end else begin // Add to chunk sum and move into FIFO queue. Reset chunk sum
+              queued_fifo_in_chunk_sum[i] <= inflow_chunk_sum[i] + inflow_value[i];
+              inflow_chunk_sum[i] <= 0;
             end
           end
 
           //// Outflow logic
           // Outflow FIFO logic
           if (fifo_out_queue_count == i + 1) begin
-            queued_fifo_out_sample_sum[i] <= fifo_dout;
+            queued_fifo_out_chunk_sum[i] <= fifo_dout;
           end // Outflow FIFO logic
 
-          // Move queued samples in to outflow value and remainder
+          // Move queued chunks in to outflow value and remainder
           if (outflow_timer == 0) begin
-            outflow_value[i] <= queued_fifo_out_sample_sum[i] >> sample_size;
-            outflow_value_plus_one[i] <= (queued_fifo_out_sample_sum[i] >> sample_size) + 1;
-            outflow_remainder[i] <= queued_fifo_out_sample_sum[i] & sample_mask;
+            outflow_value[i] <= queued_fifo_out_chunk_sum[i] >> chunk_width;
+            outflow_value_plus_one[i] <= (queued_fifo_out_chunk_sum[i] >> chunk_width) + 1;
+            // Calculate remainder: Note that chunk_size is (25'b1 << chunk_width) - 1, so it can be used to mask out the remainder
+            outflow_remainder[i] <= queued_fifo_out_chunk_sum[i] & chunk_size;
           end // FIFO out queue
 
           //// Sum logic
