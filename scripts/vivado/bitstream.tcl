@@ -1,5 +1,4 @@
 # Create the bitstream file for the project
-# Expects that `tmp/$project_dir/project.xpr` exists
 # Arguments:
 #   0: project_dir
 #   1: compress
@@ -7,6 +6,13 @@
 set project_dir [lindex $argv 0]
 set compress [lindex $argv 1]
 
+# Check the project
+if {![file exists "tmp/$project_dir/project.xpr"]} {
+  puts "Error: Project file tmp/$project_dir/project.xpr does not exist."
+  exit 1
+}
+
+# Open the project
 open_project tmp/$project_dir/project.xpr
 
 # If the implementation is not complete, run the implementation to completion

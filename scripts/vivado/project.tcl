@@ -9,37 +9,50 @@ set board_ver [lindex $argv 1]
 set project_name [lindex $argv 2]
 
 # Set the temporary directory for the project
-set tmp_dir tmp/${board_name}/${board_ver}/${project_name}
+set tmp_dir tmp/$board_name/$board_ver/$project_name
 
-## Extract the part information from the board name
-# Read the json config for the board into a dict
-set board_cfg_fname boards/${board_name}/board_config.json
-if {[file exists $board_cfg_fname]} {
-    set board_cfg_fd [open $board_cfg_fname "r"]
-} else {
-    error "Board configuration file ${board_cfg_fname} missing."
+## Extract the part information from the board name and version using the provided scripts
+# Define the paths to the scripts
+set get_part_script [file join [pwd] scripts/make/get_part.sh]
+set get_board_part_script [file join [pwd] scripts/make/get_board_part.sh]
+
+# Ensure the scripts exist
+if {![file exists $get_part_script]} {
+  error "Script $get_part_script missing."
 }
-set board_cfg_str [read $board_cfg_fd]
-close $board_cfg_fd
-set board_cfg_dict [json::json2dict $board_cfg_str]
+if {![file exists $get_board_part_script]} {
+  error "Script $get_board_part_script missing."
+}
 
-# Get the part name from the config dict
-set part_name [dict get $board_cfg_dict part]
-set board_part [dict get $board_cfg_dict board_part]
+# Get the part name
+set part_name [exec bash $get_part_script $board_name $board_ver]
+if {$part_name eq ""} {
+  error "Failed to retrieve part name using $get_part_script for board $board_name version $board_ver."
+} else {
+  puts "Part name: $part_name"
+}
+
+# Get the board part
+set board_part [exec bash $get_board_part_script $board_name $board_ver]
+if {$board_part eq ""} {
+  error "Failed to retrieve board part using $get_board_part_script for board $board_name version $board_ver."
+} else {
+  puts "Board part: $board_part"
+}
 
 
 ## Initialize the project and dependencies
 # Clear out old build files
-file delete -force ${tmp_dir}/project.cache ${tmp_dir}/project.gen ${tmp_dir}/project.hw ${tmp_dir}/project.ip_user_files ${tmp_dir}/project.runs ${tmp_dir}/project.sim ${tmp_dir}/project.srcs ${tmp_dir}/project.xpr
+file delete -force $tmp_dir/project.cache $tmp_dir/project.gen $tmp_dir/project.hw $tmp_dir/project.ip_user_files $tmp_dir/project.runs $tmp_dir/project.sim $tmp_dir/project.srcs $tmp_dir/project.xpr
 
 # Create the project
-create_project -part $part_name project ${tmp_dir}
+create_project -part $part_name project $tmp_dir
 
 # Set the board part
 set_property BOARD_PART $board_part [current_project]
 
 # Add the path to the custom IP core packages, if they exist
-set cores_list [glob -type d -nocomplain tmp/cores/*]
+set cores_list [glob -type d -nocomplain tmp/custom_cores/*]
 if {[llength $cores_list] > 0} {
   set_property IP_REPO_PATHS $cores_list [current_project]
 }
@@ -49,7 +62,7 @@ update_ip_catalog
 
 ################################################################################
 ### Define a set of Tcl procedures to simplify the creation of block designs
-################################################################################
+################################################################################  
 
 # Procedure for connecting (wiring) two pins together
 # Can handle both regular and interface pins.
@@ -70,10 +83,40 @@ proc wire {name1 name2} {
   error "** ERROR: can't connect $name1 and $name2"
 }
 
+
+# Procedure for assigning an address for a connected AXI interface pin
+#  offset: offset of the address
+#  range: range of the address
+#  target_intf_pin: name of the interface pin which will be assigned an address
+#  addr_space_intf_pin: name of the pin containing the address space
+proc addr {offset range target_intf_pin addr_space_intf_pin} {
+  set addr_space_intf [get_bd_intf_pins $addr_space_intf_pin]
+  set addr_space [get_bd_addr_spaces -of_objects $addr_space_intf]
+  set target_intf [get_bd_intf_pins $target_intf_pin]
+  set segment [get_bd_addr_segs -of_objects $target_intf]
+  assign_bd_address -target_address_space $addr_space -offset $offset -range $range $segment
+}
+
+
+# Automate the creation of an AXI interconnect. This creates an intermediary AXI core.
+#  offset: offset of the address
+#  range: range of the address
+#  intf_pin: name of the interface pin to connect to the AXI interconnect
+#  master: name of the master to connect to the AXI interconnect
+#   Note: "master" needs to be an absolute path with a "/" prefix, "intf_pin" does not
+proc auto_connect_axi {offset range intf_pin master} {
+  set object [get_bd_intf_pins $intf_pin]
+  set config [list Master $master Clk Auto]
+  apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config $config $object
+  addr $offset $range $intf_pin $master
+}
+
+
 # Procedure for creating a cell
 #  cell_vlnv: VLNV of the cell (vendor:library:name:version)
-#    For repository IP defined in cores, the format is:
-#      [directory (e.g. pavel-demin)]:user:[filename (e.g. axi_hub)]:1.0
+#    Version is optional, usually omitted for custom cores and included for Xilinx cores.
+#    For repository IP defined in custom_cores, the format is:
+#      [directory (e.g. lcb)]:user:[filename (e.g. fifo_async)]
 #  cell_name: name of the cell
 #  cell_props: dictionary of properties to set
 #  cell_conn: dictionary of pins to wire (local_name / remote_name)
@@ -90,6 +133,7 @@ proc cell {cell_vlnv cell_name {cell_props {}} {cell_conn {}}} {
     wire $cell_name/$local_name $remote_name
   }
 }
+
 
 # Procedure for initializing the processing system
 # Initialize the processing system from the preset defined in
@@ -125,15 +169,25 @@ proc init_ps {ps_name {ps_props {}} {ps_conn {}}} {
   }
 }
 
+
 # Procedure for creating a module from a tcl section
+#  module_src:  name of the Tcl source file to include
 #  module_name: name of the module
-#  module_body: body of the module (can just be a source command to another tcl file)
 #  module_conn: dictionary of pins to wire (put the local name first)
-proc module {module_name module_body {module_conn {}}} {
-  set instance [current_bd_instance .]
+proc module {module_src module_name {module_conn {}}} {
+  global project_name
+  set upper_instance [current_bd_instance .]
   current_bd_instance [create_bd_cell -type hier $module_name]
-  eval $module_body
-  current_bd_instance $instance
+  
+  # Check if the module source file exists
+  if {![file exists projects/${project_name}/modules/${module_src}.tcl]} {
+    error "Module source file projects/${project_name}/modules/${module_src}.tcl does not exist."
+  }
+  
+  # Include the module source file
+  source projects/$project_name/modules/${module_src}.tcl
+
+  current_bd_instance $upper_instance
 
   # Wire the local pins externally
   foreach {local_name remote_name} [uplevel 1 [list subst $module_conn]] {
@@ -141,28 +195,14 @@ proc module {module_name module_body {module_conn {}}} {
   }
 }
 
-# Procedure for assigning an address for an already-connected AXI interface pin
-#  offset: offset of the address
-#  range: range of the address
-#  intf_pin: name of the interface pin to assign the address to
-proc addr {offset range intf_pin} {
-  set object [get_bd_intf_pins $intf_pin]
-  set segment [get_bd_addr_segs -of_objects $object]
-  assign_bd_address -offset $offset -range $range $segment
+# Procedure for bringing a variable from the module calling context to the module context
+proc module_get_upvar {varname} {
+  if {[uplevel 2 [list info exists $varname]]} {
+    return [uplevel 2 [list set $varname]]
+  }
+  error "Variable $varname does not exist in the context calling the module."
 }
 
-# Automate the creation of an AXI interconnect. This creates an intermediary AXI core.
-#  offset: offset of the address
-#  range: range of the address
-#  intf_pin: name of the interface pin to connect to the AXI interconnect
-#  master: name of the master to connect to the AXI interconnect
-#   Note: "master" needs to be an absolute path with a "/" prefix, "intf_pin" does not
-proc auto_connect_axi {offset range intf_pin master} {
-  set object [get_bd_intf_pins $intf_pin]
-  set config [list Master $master Clk Auto]
-  apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config $config $object
-  addr $offset $range $intf_pin
-}
 
 ##############################################################################
 ## End of block design helper procedures
@@ -172,7 +212,6 @@ proc auto_connect_axi {offset range intf_pin master} {
 create_bd_design system
 
 # Execute the port definition and block design scripts for the project, by board
-source projects/$project_name/ports.tcl
 source projects/$project_name/block_design.tcl
 
 # Clear out the processes defined above to avoid conflicts, now that the block design is complete
@@ -192,7 +231,7 @@ generate_target all $system
 make_wrapper -files $system -top
 
 # Store the wrapper file name
-set wrapper [fileutil::findByPattern ${tmp_dir}/project.gen system_wrapper.v]
+set wrapper [fileutil::findByPattern $tmp_dir/project.gen system_wrapper.v]
 
 # Add the wrapper to the project and make it the top module
 add_files -norecurse $wrapper
@@ -205,7 +244,7 @@ if {[llength $files] > 0} {
 }
 
 # Load all XDC constraint files specific to the board from the project folder
-set files [glob -nocomplain projects/$project_name/cfg/{$board_name}/xdc/*.xdc]
+set files [glob -nocomplain projects/$project_name/cfg/$board_name/$board_ver/xdc/*.xdc]
 if {[llength $files] > 0} {
   add_files -norecurse -fileset constrs_1 $files
 }

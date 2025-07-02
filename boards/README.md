@@ -1,38 +1,14 @@
-# Board files
+***Updated 2025-07-02***
+# Boards
 
-Board support can be added here by creating a folder named after the board. A board folder should follow the following structure (all of these files except for board_config.json and ports.tcl.example will be available for download somewhere for other boards. Example files are just that, examples you can start from when manually adding board compatability to projects, and are not necessary for the board to be used in a project):
+This directory contains the necessary board files for any boards supported in this repo. These files are used by Vivado to build the hardware design used in creating the bitstream and PetaLinux OS. Currently, these boards all use a chip in the AMD/Xilinx Zynq-7000 series SoC family, primarily the Zynq-7020 and Zynq-7010. However, this should be extensible to the Zynq UltraScale+ MPSoC family as well with some configuration.
 
-```
-[board_name]/
-├── board_files/1.0/                      - Board files for the board
-│   ├── board.xml                         - Board description file for Vivado
-│   ├── part0_pins.xml                    - Pinout file for the board
-│   └── preset.xml                        - Processing system preset file for the board
-├── examples/                             - [OPTIONAL] Example or default design constraints
-│   │                                       and port definitions for the board
-│   ├── xdc/                              - [OPTIONAL] Example XDC files for the board, suffixed with .example
-│   │                                       (includes a ports.xdc.example defining the port design constraints)
-│   └── ports.tcl.example                 - [OPTIONAL] Example block design ports for the board
-│                                           (matching the ports in xdc/ports.xdc.example)
-└── board_config.json                     - Configuration information for Vivado that covers the SoC and board parts
-```
+The files are organized by board name, and each board folder contains a `board_files` directory with the Vivado board files (per board version) that will be shared by the board distributors. The `board_files` directory can contain multiple versions of the board files if needed.
 
-To add a new board, you should have all the files except for `board_config.json` and `ports.tcl.example`. The example `ports.tcl.example` can be constructed to match an existing example `ports.xdc` or some equivalent XDC file for the board. The `board_config.json` file should contain the following information:
+Each board folder also optionally contains an `examples` directory with suggested `.xdc` design constraint files (likely shared by the board distributor) and an example block design `.tcl` file that declares block design ports that match the ports defined in the `.xdc` files. These example files are not required for the board to be used in a project, but they can be helpful references when manually adding board compatibility to projects.
 
-```json
-{
-    "part": "[FPGA part, e.g. xc7z020clg400-1]",
-    "proc": "[Processor part, e.g. ps7_cortexa9_0]",
-    "board_part": "[vendor:name:part0:version, e.g. redpitaya.com:sdrlab_122_16:part0:1.0]"
-}
-```
+Board folders are named in lowercase and underscores (snakecase) to maintain consistency and ease of use. They are included in the Vivado path by the `scripts/vivado/repo_paths.tcl` script, which is sourced by the Vivado init Tcl script (see the **Profile setup** section in the main README for more information on the Vivado init script).
 
-You can find the necessary vendor, name, and version information in the `board.xml` file (under the `board` and `file_version` attributes). These need to match, or the board will not be recognized by Vivado.
+To add a new board, create a new folder with the board's name (lowercase and underscores, a.k.a. snakecase). You will likely be able to find the board files online, which can be copied directly in. There will also likely be an example file with a `.xdc` extension, which can be used for the `examples/xdc` file. You may also find a `.tcl` file with the port definitions to be used as an `examples/block_design.tcl`, although you may create your own to define the block design interface with the XDC-defined ports in that example. 
 
-To use a board for a project, you'll need to add its compatibility to the project's `cfg` directory. This will require creating a directory with the board's name, containing the necessary board-specific XDC files constraining the project's ports (which are defined in `ports.tcl`) and PetaLinux configuration for the processing system. See the README in the `projects/` directory for more information.
-
-The current boards are:
-- `snickerdoodle_black` - The Snickerdoodle Black, the target board for the Rev D Shim
-- `stemlab_125_14` - The Red Pitaya STEMlab 125-14, used in many of Pavel Demin's projects
-- `sdrlab_122_16` - The Red Pitaya SDRLab 122-16, which the OCRA project supports
-- `zybo_z7_10` - The Digilent Zybo Z7-10, which uses the Zynq-7010 SoC
+To use a board for a project, you'll need to add its compatibility to the project's `cfg` directory. This will require creating a directory with the board's name, containing the necessary board-specific XDC files constraining the project's block design ports (which are defined in `block_design.tcl`) and PetaLinux configuration for the processing system. See the README in the `projects/` directory for more information.

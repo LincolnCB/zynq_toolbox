@@ -1,8 +1,33 @@
+# Single-ended clock (for scanner sync)
+create_bd_port -dir I ext_clk_i
+# Single-ended trigger
+create_bd_port -dir I trigger_i
+
+# Differential ports
+create_bd_port -dir O cs_o_p
+create_bd_port -dir O cs_o_n
+create_bd_port -dir O spi_clk_o_n
+create_bd_port -dir O spi_clk_o_p
+create_bd_port -dir O ldac_o_p
+create_bd_port -dir O ldac_o_n
+create_bd_port -dir O -from 3 -to 0 dac_mosi_o_p
+create_bd_port -dir O -from 3 -to 0 dac_mosi_o_n
+
+# # AXI clock out (DEBUG)
+# create_bd_port -dir O axi_clk_out
+
+# (~Shutdown_Force)
+create_bd_port -dir O n_Shutdown_Force
+# (~Shutdown_Reset)
+create_bd_port -dir O n_Shutdown_Reset
+
+
 # Create processing system
 init_ps ps_0 {
   PCW_USE_S_AXI_ACP 0
   PCW_UART1_PERIPHERAL_ENABLE 1
   PCW_UART1_UART1_IO {MIO 36 .. 37}
+  PCW_UART1_BAUD_RATE 921600
   PCW_MIO_36_PULLUP enabled
   PCW_MIO_37_PULLUP enabled
 } {
@@ -61,10 +86,8 @@ auto_connect_axi 0x40000000 256K gradient_writer_0/S_AXI /ps_0/M_AXI_GP0
 
 
 # Create the shim_dac controller (spi sequencer)
-module shim_dac_0 {
-    source projects/shim_controller_v0/modules/shim_dacs.tcl
-} {
-    spi_sequencer_0/BRAM_PORT0 gradient_memory_0/BRAM_PORTB
+module shim_dacs shim_dac_0 {
+  spi_sequencer_0/BRAM_PORT0 gradient_memory_0/BRAM_PORTB
 }
 # Create all required interconnections on AXI bus for shim_dac controller
 auto_connect_axi 0x40201000 4K shim_dac_0/spi_sequencer_0/S_AXI /ps_0/M_AXI_GP0
@@ -74,12 +97,34 @@ auto_connect_axi 0x40201000 4K shim_dac_0/spi_sequencer_0/S_AXI /ps_0/M_AXI_GP0
 # this should not be needed at all, but makes it easy right now to provide some
 # triggers
 cell pavel-demin:user:axi_cfg_register:1.0 cfg_0 {
-  CFG_DATA_WIDTH 32
+  CFG_DATA_WIDTH 64
   AXI_ADDR_WIDTH 32
   AXI_DATA_WIDTH 32
 }
 # Create all required interconnections
 auto_connect_axi 0x40200000 4K cfg_0/S_AXI /ps_0/M_AXI_GP0
+
+# LCB: Slice off bits 0 and 32 from the config register
+cell xilinx.com:ip:xlslice:1.0 n_shutdown_force_slice {
+  DIN_WIDTH 64 DIN_FROM 0 DIN_TO 0
+} {
+  din cfg_0/cfg_data
+  dout n_Shutdown_Force
+}
+cell xilinx.com:ip:xlslice:1.0 shutdown_reset_slice {
+  DIN_WIDTH 64 DIN_FROM 32 DIN_TO 32
+} {
+  din cfg_0/cfg_data
+}
+# Invert just the reset signal, so the initial 0s in the cfg register mean shutdown and no reset
+cell xilinx.com:ip:util_vector_logic shutdown_reset_inv {
+  C_SIZE 1
+  C_OPERATION not
+} {
+  Op1 shutdown_reset_slice/dout
+  Res n_Shutdown_Reset
+}
+
 
 # # Manually connect the MMCM to the PS
 # apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config {

@@ -1,5 +1,20 @@
 # Ignore Vivado generated files
 tmp
+tmp_reports
 out
 .vscode
 .Xil
+environment.sh
+
+# Ignore Verilator and cocotb generated files
+__pycache__
+sim_build
+dump.vcd
+**/tests/results
+results.xml
+*coverage.xml
+*coverage.yaml
+
+# Ignore test status files (e.g. from cocotb) so the history doesn't get cluttered
+core_tests_summary
+test_status
