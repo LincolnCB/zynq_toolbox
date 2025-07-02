@@ -157,9 +157,26 @@ This directory contains the project's configuration files for different boards a
 ### `petalinux/[petalinux_version]/`
 This directory contains the PetaLinux configuration files for the project. These files are loaded as part of the PetaLinux build process, particularly by scripts in the `scripts/petalinux` directory. PetaLinux's configuration files are slightly more version-sensitive than Vivado, and so need to be configured for each version. The files are:
 
-- `config.patch`: A patch file for the PetaLinux project configuration. This file contains changes to the default PetaLinux configuration for the project's system. It's stored in a patch format both for density and clarity -- it's much easier to see what options need to be changed from the default to make everything work than it is to parse the fairly large configuration files. If you want to make or update this file, you can run `make` in the top-level directory with the `petalinux_cfg` target (with the `PROJECT`, `BOARD`, and `VERSION` variables set to the appropriate values). If you're using a different version of PetaLinux than is currently supported, the recommended approach to create your own configuration file is to use the above `make petalinux_cfg` approach to manually set the listed non-default options read directly from the text of another version's `config.patch` file (e.g., to create a new `config.patch` file for your computer's PetaLinux 2023.2, you would open `projects/[project_name]/cfg/[board_name]/[board_version]/petalinux/2024.2/config.patch` for reference, then run `make PROJECT=[project_name] BOARD=[board_name] VERSION=[board_version] petalinux_cfg` and manually look through the `2024.2` version as a guide to set the equivalent options in the `2023.2` version).
-- `rootfs_config.patch`: A patch file for the PetaLinux filesystem configuration. Similar to the `config.patch` file, this file contains changes to the default PetaLinux filesystem configuration for the project's system. It can be created or edited with the `make petalinux_rootfs_cfg` target in the top-level directory. Follow the same advice as above for creating a new version of this file.
-- `kernel_modules` (**OPTIONAL**): A simple text file that lists the kernel modules that should be included in the PetaLinux build. This is used by the `scripts/petalinux/kernel_modules.sh` script to automatically include the specified custom kernel modules from the top-level directory `kernel_modules/` in your PetaLinux build. This file is optional, and if it is not present, no custom kernel modules will be included in the PetaLinux build.
+#### `config.patch`
+A patch file for the PetaLinux project configuration. This file contains changes to the default PetaLinux configuration for the project's system. It's stored in a patch format both for density and clarity -- it's much easier to see what options need to be changed from the default to make everything work than it is to parse the fairly large configuration files. 
+
+If you want to make or update this file, you can run `make` in the top-level directory with the `petalinux_cfg` target (with the `PROJECT`, `BOARD`, and `VERSION` variables set to the appropriate values). If you're using a different version of PetaLinux than is currently supported, the recommended approach to create your own configuration file is to use the above `make petalinux_cfg` approach to manually set the listed non-default options read directly from the text of another version's `config.patch` file 
+
+For example, to create a new `config.patch` file for your computer's PetaLinux 2023.2, you would open 
+```
+projects/[project_name]/cfg/[board_name]/[board_version]/petalinux/2024.2/config.patch
+```
+for reference, then run (with a sufficiently large terminal window for the GUI -- the script will tell you if the terminal is too small):
+```bash
+make PROJECT=[project_name] BOARD=[board_name] VERSION=[board_version] petalinux_cfg
+```
+and manually look through the `2024.2` version as a guide to set the equivalent options in the `2023.2` version.
+
+#### `rootfs_config.patch`
+A patch file for the PetaLinux filesystem configuration. Similar to the `config.patch` file, this file contains changes to the default PetaLinux filesystem configuration for the project's system. It can be created or edited with the `make petalinux_rootfs_cfg` target in the top-level directory. Follow the same advice as above for creating a new version of this file.
+
+#### `kernel_modules` (**OPTIONAL**)
+A simple text file that lists the kernel modules that should be included in the PetaLinux build. This is used by the `scripts/petalinux/kernel_modules.sh` script to automatically include the specified custom kernel modules from the top-level directory `kernel_modules/` in your PetaLinux build. This file is optional, and if it is not present, no custom kernel modules will be included in the PetaLinux build.
 
 ### `xdc/`
 

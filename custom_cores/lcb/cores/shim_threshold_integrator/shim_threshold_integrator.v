@@ -313,7 +313,7 @@ module shim_threshold_integrator (
             sum_delta[i] <= ((outflow_timer >> 4) < outflow_remainder[i])
                     ? $signed({2'b00, inflow_value[i]}) - $signed({1'b0, outflow_value_plus_one[i]})
                     : $signed({2'b00, inflow_value[i]}) - $signed({2'b00, outflow_value[i]});
-          end else if (&outflow_timer) begin
+          end else if (outflow_timer[3:0] == 4'd15) begin // Add the sum delta to the total sum one cyle after it's calculated
             total_sum[i] <= total_sum[i] + sum_delta[i];
           end // Sum logic
         end // RUNNING

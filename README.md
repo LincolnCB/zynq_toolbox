@@ -1,10 +1,8 @@
 ***Updated 2025-06-27***
 
-Forked off of and based originally on Pavel Demin's Notes on the Red Pitaya Open Source Instrument
-[http://pavel-demin.github.io/red-pitaya-notes/]
+Forked off of and based originally on Pavel Demin's [Red Pitaya Notes](http://pavel-demin.github.io/red-pitaya-notes/).
 
-Also heavily informed by the Open-MRI OCRA project (which was forked off of Pavel Demin's repo as well)
-[https://github.com/OpenMRI/ocra]
+Also heavily informed by and related to the Open-MRI [OCRA project](https://github.com/OpenMRI/ocra) (which was forked off of Pavel Demin's repo as well).
 
 Primarily written by Lincoln Craven-Brightman, with contributions from Kutay Bulun, Thomas Witzel, and H. Fatih Uǧurdag. The Revision D Shim firmware is designed to work with Don Straney's [Linear Shim hardware (GitHub)](https://github.com/stockmann-lab/shim_amp_hardware_linear). The project is at the request and funding of Jason Stockmann, and is a continuation of the work done by Nick Arango and Irene Kuang on previous revisions of the Shim Amplifier system.
 
