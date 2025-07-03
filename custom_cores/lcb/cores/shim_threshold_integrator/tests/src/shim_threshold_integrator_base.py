@@ -241,14 +241,23 @@ class shim_threshold_integrator_base:
 
         # Initiliaze previous values for scoreboard
         previous_inflow_chunk_timer_value = int(self.dut.chunk_size.value) << 4
-        previous_outflow_timer_value = int(self.dut.window.value) - 1
+        previous_outflow_timer_value = int(self.dut.window.value) - 1 
         previous_inflow_value = [0] * 8
 
         # Initialize expected values for scoreboard
         expected_inflow_chunk_sum = [0] * 8
+        expected_outflow_value = [0] * 8
+        expected_outflow_value_plus_one = [0] * 8
+        expected_outflow_remainder = [0] * 8
+        expected_fifo_out_chunk_sum= [0] * 8
+        expected_float_outflow_value = [0] * 8
+        expected_sum_delta = [0] * 8
+        expected_float_sum_delta = [0] * 8
+        expected_total_sum = [0] * 8
+        expected_float_total_sum = [0] * 8
 
         #while True:
-        for _ in range(1000):  # Run for a fixed number of cycles for testing
+        for _ in range((int(self.dut.window.value)-1)*2):  # Run for a fixed number of cycles for testing
             
             self.dut._log.info(f"CURRENT CYCLE COUNT IN RUNNING STATE: {cycle_count}")
             cycle_count += 1
@@ -273,7 +282,7 @@ class shim_threshold_integrator_base:
             # Drive the abs_sample_concat value every cycle
             self.dut.abs_sample_concat.value = constructed_abs_sample_concat
             
-            # Inflow Logic Scoreboard
+            ## Inflow Logic Scoreboard
             if previous_inflow_chunk_timer_value % 16 == 0:
 
                 self.dut._log.info(f"Previous inflow_chunk_timer: {previous_inflow_chunk_timer_value}")
@@ -291,7 +300,8 @@ class shim_threshold_integrator_base:
                         # Check if the inflow chunk sum matches the expected value
                         assert int(self.dut.inflow_chunk_sum[i].value) == expected_inflow_chunk_sum[i], \
                             f"Expected inflow_chunk_sum[{i}]: {expected_inflow_chunk_sum[i]}, got: {int(self.dut.inflow_chunk_sum[i].value)}"
-                        
+
+                # This is when chunks sums will start getting in to the FIFO  
                 else:
                     for i in range(8):
                         expected_inflow_chunk_sum[i] += previous_inflow_value[i]
@@ -323,9 +333,94 @@ class shim_threshold_integrator_base:
                     assert int(self.dut.fifo_in_queue_count.value) == 8, \
                         f"Expected fifo_in_queue_count: 8, got: {int(self.dut.fifo_in_queue_count.value)}"
 
+            ## Outflow Logic Scoreboard
+
+            # When previous_outflow_timer_value is 0, outflow_timer should be set to chunk_size << 4
+            # And outflow_value[i], outflow_value_plus_one[i] and outflow_remainder[i] should be available with correct values
+            # This is when chunk sums will have exited the FIFO   
+            if previous_outflow_timer_value == 0:
+                assert int(self.dut.outflow_timer.value) == int(self.dut.chunk_size.value) << 4, \
+                    f"Expected outflow_timer: {int(self.dut.chunk_size.value) << 4}, got: {int(self.dut.outflow_timer.value)}"
+                
+                for i in range(8):
+                    # Model the outflow values based on DUT
+                    expected_fifo_out_chunk_sum[i] = self.channel_queues[i].popleft()
+                    expected_outflow_value[i] = expected_fifo_out_chunk_sum[i] >> int(self.dut.chunk_width.value)
+                    expected_outflow_value_plus_one[i] = (expected_fifo_out_chunk_sum[i] >> int(self.dut.chunk_width.value)) + 1
+                    expected_outflow_remainder[i] = expected_fifo_out_chunk_sum[i] % int(self.dut.chunk_size.value)
+
+                    # Real average of outflow value
+                    expected_float_outflow_value[i] = expected_fifo_out_chunk_sum[i] / (2**int(self.dut.chunk_width.value))
+
+                    self.dut._log.info(f"Expected fifo_out_chunk_sum[{i}]: {expected_fifo_out_chunk_sum[i]}")
+                    self.dut._log.info(f"Current fifo_out_chunk_sum[{i}]: {int(self.dut.queued_fifo_out_chunk_sum[i].value)}")
+
+                    self.dut._log.info(f"Expected float_outflow_value[{i}]: {expected_float_outflow_value[i]}")
+
+                    self.dut._log.info(f"Expected outflow_value[{i}]: {expected_outflow_value[i]}")
+                    self.dut._log.info(f"Current outflow_value[{i}]: {int(self.dut.outflow_value[i].value)}")
+
+                    self.dut._log.info(f"Expected outflow_value_plus_one[{i}]: {expected_outflow_value_plus_one[i]}")
+                    self.dut._log.info(f"Current outflow_value_plus_one[{i}]: {int(self.dut.outflow_value_plus_one[i].value)}")
+
+                    self.dut._log.info(f"Expected outflow_remainder[{i}]: {expected_outflow_remainder[i]}")
+                    self.dut._log.info(f"Current outflow_remainder[{i}]: {int(self.dut.outflow_remainder[i].value)}")
+
+                    # Check if outflow_value, outflow_value_plus_one and outflow_remainder matches the expected values
+                    assert int(self.dut.outflow_value[i].value) == expected_outflow_value[i], \
+                        f"Expected outflow_value[{i}]: {expected_outflow_value[i]}, got: {int(self.dut.outflow_value[i].value)}"
+                    
+                    assert int(self.dut.outflow_value_plus_one[i].value) == expected_outflow_value_plus_one[i], \
+                        f"Expected outflow_value_plus_one[{i}]: {expected_outflow_value_plus_one[i]}, got: {int(self.dut.outflow_value_plus_one[i].value)}"
+
+                    assert int(self.dut.outflow_remainder[i].value) == expected_outflow_remainder[i], \
+                        f"Expected outflow_remainder[{i}]: {expected_outflow_remainder[i]}, got: {int(self.dut.outflow_remainder[i].value)}"
+
+                    # Check if queued_fifo_out_chunk_sum matches the expected_fifo_out_chunk_sum[i], they should be available when outflow_timer is 0
+                    assert int(self.dut.queued_fifo_out_chunk_sum[i].value) == expected_fifo_out_chunk_sum[i], \
+                        f"Expected queued_fifo_out_chunk_sum[{i}]: {expected_fifo_out_chunk_sum[i]}, got: {int(self.dut.queued_fifo_out_chunk_sum[i].value)}"
+                    
+            # Sum Logic Scoreboard
+            if previous_outflow_timer_value % 16 == 0:
+                for i in range(8):
+                    if (int(previous_outflow_timer_value) >> 4) < expected_outflow_remainder[i]:
+                        expected_sum_delta[i] = previous_inflow_value[i] - expected_outflow_value_plus_one[i]
+                    else:
+                        expected_sum_delta[i] = previous_inflow_value[i] - expected_outflow_value[i]
+
+                    expected_float_sum_delta[i] = previous_inflow_value[i] - expected_float_outflow_value[i]
+
+                    self.dut._log.info(f"Previous inflow_value[{i}] that should reflect to this cycle: {previous_inflow_value[i]}")
+                    self.dut._log.info(f"Expected sum_delta[{i}] this cycle: {expected_sum_delta[i]}")
+                    self.dut._log.info(f"Current sum_delta[{i}] this cycle: {int(self.dut.sum_delta[i].value)}")
+                    self.dut._log.info(f"Expected float_sum_delta[{i}] this cycle: {expected_float_sum_delta[i]}")
+
+                    # Check if sum_delta matches the expected value
+                    assert int(self.dut.sum_delta[i].value) == expected_sum_delta[i], \
+                        f"Expected sum_delta[{i}]: {expected_sum_delta[i]}, got: {int(self.dut.sum_delta[i].value)}"
+                    
+            elif (previous_outflow_timer_value & 0xF) == 15:
+                for i in range(8):
+                    expected_total_sum[i] = expected_total_sum[i] + expected_sum_delta[i]
+                    expected_float_total_sum[i] = expected_float_total_sum[i] + expected_float_sum_delta[i]
+
+                    self.dut._log.info(f"Expected total_sum[{i}] this cycle: {expected_total_sum[i]}")
+                    self.dut._log.info(f"Current total_sum[{i}] this cycle: {int(self.dut.total_sum[i].value)}")
+                    self.dut._log.info(f"Expected float_total_sum[{i}] this cycle: {expected_float_total_sum[i]}")
+
+                    # Check if total_sum matches the expected value
+                    assert int(self.dut.total_sum[i].value) == expected_total_sum[i], \
+                        f"Expected total_sum[{i}]: {expected_total_sum[i]}, got: {int(self.dut.total_sum[i].value)}"
+
+            # When previous_outflow_timer_value is 16, fifo_out_queue_count should be set to 8
+            if previous_outflow_timer_value == 16:
+                assert int(self.dut.fifo_out_queue_count.value) == 8, \
+                    f"Expected fifo_out_queue_count: 8, got: {int(self.dut.fifo_out_queue_count.value)}"
+
             await RisingEdge(self.dut.clk)
             previous_inflow_chunk_timer_value = int(self.dut.inflow_chunk_timer.value)
             previous_outflow_timer_value = int(self.dut.outflow_timer.value)
+            #previous_outflow_timer_lsb4_value = self.dut.outflow_timer.value & 0xF
             previous_inflow_value = inflow_value.copy()
             await ReadWrite()
 
