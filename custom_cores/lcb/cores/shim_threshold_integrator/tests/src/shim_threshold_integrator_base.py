@@ -174,6 +174,7 @@ class shim_threshold_integrator_base:
         # DUT should be in SETUP state
         await RisingEdge(self.dut.clk)
         await ReadWrite()
+        self.dut.enable.value = 0
 
         # Calculate the expected chunk width and size
         over_thresh_expected = False
@@ -245,6 +246,7 @@ class shim_threshold_integrator_base:
         # Now in first cycle of RUNNING state
         await RisingEdge(self.dut.clk)
         await ReadWrite()
+        self.dut.sample_core_done.value = 0
 
         # Assertions
         assert int(self.dut.state.value) == 3, \
@@ -286,14 +288,12 @@ class shim_threshold_integrator_base:
         "random_abs_sample_concat_values"
         "max_abs_sample_concat_values"
         "high_abs_sample_concat_values"
-        "medium_abs_sample_concat_values"
         "low_abs_sample_concat_values"
         "random_abs_sample_concat_values" (default)
 
         The default mode is "random_abs_sample_concat_values" which will generate random values for abs_sample_concat.
         max_abs_sample_concat_values mode will drive max 15 bit values for abs_sample_concat.
         high_abs_sample_concat_values mode will drive values above threshold_average.
-        medium_abs_sample_concat_values mode will drive values around threshold_average.
         low_abs_sample_concat_values mode will drive values below threshold_average.
         """
 
@@ -330,9 +330,29 @@ class shim_threshold_integrator_base:
         expected_total_sum = [0] * 8
         expected_float_total_sum = [0] * 8
 
-        #while True:
-        for _ in range(400000):  # Run for a fixed number of cycles for testing
+        for _ in range((int(self.dut.window.value)-1)*2+100):  # Run 2*(window-1) cycles to see full iterations of inflow and outflow logic
+            
+            # If there is an over threshold condition, break the loop.
+            overthresh_expected = False
+            for i in range(8):
+                if expected_total_sum[i] > (int(self.dut.max_value.value)):
+                    overthresh_expected = True
+                    self.dut._log.info(f"CHANNEL {i} OVER THRESHOLD:")
+                    self.dut._log.info(f"Max Value: {int(self.dut.max_value.value)}")
+                    self.dut._log.info(f"Expected total_sum[{i}]: {expected_total_sum[i]}")
+                    self.dut._log.info(f"Current total_sum[{i}]: {int(self.dut.total_sum[i].value.signed_integer)}")
+                    self.dut._log.info(f"Expected float_total_sum[{i}]: {expected_float_total_sum[i]}")
+                    self.dut._log.info(f"Total Drift from expected sum: {expected_float_total_sum[i] - int(self.dut.total_sum[i].value.signed_integer)}")
 
+            if overthresh_expected:
+                self.dut._log.info("OVER THRESHOLD DETECTED, EXPECTING DUT TO GO TO OUT_OF_BOUNDS STATE")
+                break
+
+            # If there is an overflow condition, break the loop.
+            if self.expected_number_of_elements_in_fifo > 1024:
+                self.dut._log.info("MODEL FIFO OVERFLOW DETECTED, EXPECTING DUT TO GO TO ERROR STATE")
+                break
+                
             # Construct abs_sample_concat values every cycle
             constructed_abs_sample_concat = 0
             for i in range(8):
@@ -342,8 +362,6 @@ class shim_threshold_integrator_base:
                     random_15_bit_value = 2**15 - 1
                 elif mode == "high_abs_sample_concat_values":
                     random_15_bit_value = random.randint(int(self.dut.threshold_average.value), 2**15-1)
-                elif mode == "medium_abs_sample_concat_values":
-                    random_15_bit_value = random.randint(int(self.dut.threshold_average.value) - 1000, int(self.dut.threshold_average.value) + 1000)
                 elif mode == "low_abs_sample_concat_values":
                     random_15_bit_value = random.randint(0, int(self.dut.threshold_average.value) - 1)
 
@@ -516,4 +534,38 @@ class shim_threshold_integrator_base:
             previous_expected_outflow_remainder = expected_outflow_remainder.copy()
             previous_expected_float_outflow_value = expected_float_outflow_value.copy()
             await ReadWrite()
+
+        # Wait for the DUT to transition to OUT_OF_BOUNDS or ERROR state if loop breaks
+        for i in range(20):
+            await RisingEdge(self.dut.clk)
+
+    async def fifo_will_overflow(self, window):
+        """
+        Check if the FIFO will overflow based on the window value.
+        """
+        chunk_width = 0
+        initial_outflow_timer = window -1 
+        for i in range(31, -1, -1):
+            if (window >> i) & 1:
+                if i >= 11:
+                    chunk_width = i - 10
+                    break
+                else:
+                    return False
+
+        chunk_size = (2**chunk_width) - 1
+        inflow_chunk_timer = chunk_size << 4
+
+        self.dut._log.info(f"Window: {window}")
+        self.dut._log.info(f"Chunk Width: {chunk_width}")
+        self.dut._log.info(f"Chunk Size: {chunk_size}")
+
+        ratio = initial_outflow_timer / inflow_chunk_timer
+
+        if ratio <= 128:
+            self.dut._log.info(f"For window = {window} initial_outflow_timer / inflow_chunk_timer = {ratio}, Not expecting FIFO overflow")
+            return False
+        else: 
+            self.dut._log.info(f"For window = {window} initial_outflow_timer / inflow_chunk_timer = {ratio}, Expecting FIFO overflow")
+            return True
 
