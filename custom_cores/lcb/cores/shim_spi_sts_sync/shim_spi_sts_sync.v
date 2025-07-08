@@ -88,14 +88,14 @@ module shim_spi_sts_sync (
   wire bad_trig_cmd_stable_flag;
   wire trig_data_buf_overflow_stable_flag;
   // DAC channel status
-  wire [7:0] dac_boot_fail_stable;
+  wire dac_boot_fail_stable_flag;
   wire bad_dac_cmd_stable_flag;
   wire dac_cal_oob_stable_flag;
   wire dac_val_oob_stable_flag;
   wire dac_cmd_buf_underflow_stable_flag;
   wire unexp_dac_trig_stable_flag;
   // ADC channel status
-  wire [7:0] adc_boot_fail_stable;
+  wire adc_boot_fail_stable_flag;
   wire bad_adc_cmd_stable_flag;
   wire adc_cmd_buf_underflow_stable_flag;
   wire adc_data_buf_overflow_stable_flag;
@@ -184,7 +184,7 @@ module shim_spi_sts_sync (
     .resetn(aresetn),
     .din(dac_boot_fail),
     .dout(dac_boot_fail_sync),
-    .stable(dac_boot_fail_stable)
+    .stable(dac_boot_fail_stable_flag)
   );
   synchronizer #(
     .DEPTH(3),
@@ -252,7 +252,7 @@ module shim_spi_sts_sync (
     .resetn(aresetn),
     .din(adc_boot_fail),
     .dout(adc_boot_fail_sync),
-    .stable(adc_boot_fail_stable)
+    .stable(adc_boot_fail_stable_flag)
   );
   synchronizer #(
     .DEPTH(3),
@@ -311,7 +311,7 @@ module shim_spi_sts_sync (
     bad_trig_cmd_stable           <= bad_trig_cmd_stable_flag           ? bad_trig_cmd_sync           : 1'b0;
     trig_data_buf_overflow_stable <= trig_data_buf_overflow_stable_flag ? trig_data_buf_overflow_sync : 1'b0;
     // DAC channel status
-    dac_boot_fail_stable          <= dac_boot_fail_stable               ? dac_boot_fail_sync          : 8'b0;
+    dac_boot_fail_stable          <= dac_boot_fail_stable_flag          ? dac_boot_fail_sync          : 8'b0;
     bad_adc_cmd_stable            <= bad_adc_cmd_stable_flag            ? bad_adc_cmd_sync            : 8'b0;
     bad_dac_cmd_stable            <= bad_dac_cmd_stable_flag            ? bad_dac_cmd_sync            : 8'b0;
     dac_cal_oob_stable            <= dac_cal_oob_stable_flag            ? dac_cal_oob_sync            : 8'b0;
@@ -319,7 +319,7 @@ module shim_spi_sts_sync (
     dac_cmd_buf_underflow_stable  <= dac_cmd_buf_underflow_stable_flag  ? dac_cmd_buf_underflow_sync  : 8'b0;
     unexp_dac_trig_stable         <= unexp_dac_trig_stable_flag         ? unexp_dac_trig_sync         : 8'b0;
     // ADC channel status
-    adc_boot_fail_stable          <= adc_boot_fail_stable               ? adc_boot_fail_sync          : 8'b0;
+    adc_boot_fail_stable          <= adc_boot_fail_stable_flag          ? adc_boot_fail_sync          : 8'b0;
     bad_adc_cmd_stable            <= bad_adc_cmd_stable_flag            ? bad_adc_cmd_sync            : 8'b0;
     adc_cmd_buf_underflow_stable  <= adc_cmd_buf_underflow_stable_flag  ? adc_cmd_buf_underflow_sync  : 8'b0;
     adc_data_buf_overflow_stable  <= adc_data_buf_overflow_stable_flag  ? adc_data_buf_overflow_sync  : 8'b0;

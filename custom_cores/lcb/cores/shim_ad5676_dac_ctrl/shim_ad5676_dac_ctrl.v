@@ -33,7 +33,15 @@ module shim_ad5676_dac_ctrl #(
 );
 
   // Internal constants
-  localparam N_CS_HIGH_TIME = 5'd18; // Minimum time for the CS signal to be high (in clock cycles)
+  // Minimum time for the n_cs signal to be high (in clock cycles)
+  // Calculation: 
+  //  - 50 MHz maximum SPI clock frequency
+  //  - 830 ns minimum time between n_cs rising edges
+  //  - 42 clock cycles needed
+  //  - 24 bits per SPI command
+  //  - 42 - 24 = 18 clock cycles for n_cs to be high
+  //  - Requires a minimum of 3 clock cycles for DAC word loading
+  localparam N_CS_HIGH_TIME = 5'd18;
 
   // DAC SPI command
   localparam SPI_CMD_REG_WRITE = 4'b0001; // DAC SPI command for register write to be later loaded with LDAC
@@ -43,11 +51,11 @@ module shim_ad5676_dac_ctrl #(
   localparam S_RESET      = 4'd0; // Reset state
   localparam S_INIT       = 4'd1; // Initialization state, starting a test write to the DAC
   localparam S_TEST_WR    = 4'd2; // Setup -- Write test value
-  localparam S_REQ_RD     = 4'd3; // Setup -- Request read state
+  localparam S_REQ_RD     = 4'd3; // Setup -- Request read of the written test value
   localparam S_TEST_RD    = 4'd4; // Setup -- Read test value
   localparam S_IDLE       = 4'd5; // Idle state, waiting for commands
   localparam S_DELAY      = 4'd6; // Delay state, waiting for delay timer to expire
-  localparam S_TRIG_WAIT  = 4'd7; // Waiting for trigger state
+  localparam S_TRIG_WAIT  = 4'd7; // Trigger wait state, waiting for a trigger signal
   localparam S_DAC_WR     = 4'd8; // DAC write state
   localparam S_ERROR      = 4'd9; // Error state, invalid command or unexpected condition
 
@@ -180,8 +188,8 @@ module shim_ad5676_dac_ctrl #(
                  || (state == S_DAC_WR && ldac_shared) // Unexpected LDAC assertion
                  || (next_cmd && next_cmd_state == S_ERROR) // Bad command
                  || (((cmd_done && expect_next) || read_next_dac_val_pair) && cmd_buf_empty) // Command buffer underflow
-                 || cal_oob; // Calibration value out of bounds
-                 || dac_val_oob; // DAC value out of bounds
+                 || cal_oob // Calibration value out of bounds
+                 || dac_val_oob // DAC value out of bounds
                  || boot_fail; // Boot fail flag
   // Unexpected trigger
   always @(posedge clk) begin
@@ -257,12 +265,13 @@ module shim_ad5676_dac_ctrl #(
   end
 
   //// DAC boot-up SPI sequence
-  // TODO: Implement boot-up sequence
   // Boot fail flag
   always @(posedge clk) begin
+    // TODO: Needs to check the MISO readback on boot
     if (!resetn) boot_fail <= 1'b0; // Reset boot fail on reset
   end
-  // n_cs_high_time (minum value of 3 clock cycles)
+  // n_cs_high_time (minimum of 3 clock cycles)
+  // TODO: Calculate this from the clock dividers
   assign n_cs_high_time = (N_CS_HIGH_TIME > 5'd3) ? N_CS_HIGH_TIME : 5'd3;
 
   //// DAC word sequencing
@@ -273,7 +282,7 @@ module shim_ad5676_dac_ctrl #(
                                  || (state == S_TEST_WR)
                                  || (state == S_REQ_RD)
                                  || (state == S_TEST_RD))
-                                && !n_cs && spi_bit == 0; // SPI command is done when CS is deasserted and SPI bit counter is zero
+                                && !n_cs && !running_n_cs_timer && spi_bit == 0; // SPI command is done when CS is deasserted and SPI bit counter is zero
   // Read next DAC word from command buffer
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) read_next_dac_val_pair <= 1'b0;
@@ -346,23 +355,22 @@ module shim_ad5676_dac_ctrl #(
   //// SPI MOSI control
   // Start the next SPI command
   assign start_spi_command = (next_cmd && cmd_word[31:30] == CMD_DAC_WR) 
-                             || (state == S_DAC_WR && dac_spi_command_done && !last_dac_channel)
-                             || (state != S_DAC_WR && dac_spi_command_done)
+                             || (dac_spi_command_done && (state != S_DAC_WR || !last_dac_channel))
                              || (state == S_INIT);
   // ~(Chip Select) timer
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) n_cs_timer <= 5'd0;
-    else if (start_spi_command) n_cs_timer <= n_cs_high_time; // Load CS timer with high time when starting a new command
+    else if (start_spi_command) n_cs_timer <= n_cs_high_time;
     else if (n_cs_timer > 0) n_cs_timer <= n_cs_timer - 1;
     running_n_cs_timer <= (n_cs_timer > 0); // Flag to indicate if CS timer is running
   end
-  // ~(Chip Select) (n_cs) has been high for the required time
-  assign cs_wait_done = (state == DAC_WR && running_n_cs_timer && n_cs_timer == 0);
+  // ~(Chip Select) (n_cs) has been high for the required time (timer went from nonzero to zero)
+  assign cs_wait_done = (running_n_cs_timer && n_cs_timer == 0);
   // ~(Chip Select) (n_cs) signal
   always @(posedge clk) begin
-    if (!resetn || state != S_DAC_WR) n_cs <= 1'b1; // Reset n_CS on reset or if not in DAC write state
+    if (!resetn || state == S_ERROR) n_cs <= 1'b1; // Reset n_CS on reset or error
     else if (cs_wait_done) n_cs <= 1'b0; // Assert CS when timer is done
-    else if (dac_spi_command_done) n_cs <= 1'b1; // Deassert CS when SPI command is done
+    else if (dac_spi_command_done || state == S_IDLE) n_cs <= 1'b1; // Deassert CS when SPI command is done
   end
   // DAC word SPI bit
   always @(posedge clk) begin
@@ -376,13 +384,13 @@ module shim_ad5676_dac_ctrl #(
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) dac_shift_reg <= 48'd0; // Reset shift register on reset or error
     else if (spi_bit > 0) dac_shift_reg <= {dac_shift_reg[46:0], 1'b0}; // Shift bits out
-    else if (state == S_INIT) begin
+    else if (state == S_INIT) begin // If just exiting reset:
       // Load the shift register with the test value for boot-up sequence
       dac_shift_reg <= {spi_write_cmd(3'b101, 16'b1000000000001010), 24'b0}; // Load test value for channel 5
-    end else if (state == S_TEST_WR && dac_spi_command_done) begin
+    end else if (state == S_TEST_WR && dac_spi_command_done) begin // If finished with the test write:
       // Load the shift register with the read request and a write to reset the test value
       dac_shift_reg <= {spi_read_cmd(3'b101), spi_write_cmd(3'b101, {1'b1, 15'b0})}; // Read channel 5 and write midrange to reset test value
-    end else if (state == S_DAC_WR && dac_load_stage == 2'b10) begin
+    end else if (state == S_DAC_WR && dac_load_stage == DAC_LOAD_STAGE_CONV) begin
       // Load the shift register with the first DAC value and the second DAC value
       dac_shift_reg <= {spi_write_cmd(dac_channel, signed_to_offset(first_dac_val_cal_signed)), 
                         spi_write_cmd(dac_channel + 1, signed_to_offset(second_dac_val_cal_signed))};
