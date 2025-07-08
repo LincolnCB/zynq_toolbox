@@ -115,60 +115,63 @@ module shim_threshold_integrator (
         // IDLE state, waiting for enable signal
         IDLE: begin
           if (enable) begin
-            // Calculate chunk_size (MSB of window - 6)
-            if (window[31]) begin
-              chunk_width <= 21;
-            end else if (window[30]) begin
-              chunk_width <= 20;
-            end else if (window[29]) begin
-              chunk_width <= 19;
-            end else if (window[28]) begin
-              chunk_width <= 18;
-            end else if (window[27]) begin
-              chunk_width <= 17;
-            end else if (window[26]) begin
-              chunk_width <= 16;
-            end else if (window[25]) begin
-              chunk_width <= 15;
-            end else if (window[24]) begin
-              chunk_width <= 14;
-            end else if (window[23]) begin
-              chunk_width <= 13;
-            end else if (window[22]) begin
-              chunk_width <= 12;
-            end else if (window[21]) begin
-              chunk_width <= 11;
-            end else if (window[20]) begin
-              chunk_width <= 10;
-            end else if (window[19]) begin
-              chunk_width <= 9;
-            end else if (window[18]) begin
-              chunk_width <= 8;
-            end else if (window[17]) begin
-              chunk_width <= 7;
-            end else if (window[16]) begin
-              chunk_width <= 6;
-            end else if (window[15]) begin
-              chunk_width <= 5;
-            end else if (window[14]) begin
-              chunk_width <= 4;
-            end else if (window[13]) begin
-              chunk_width <= 3;
-            end else if (window[12]) begin
-              chunk_width <= 2;
-            end else if (window[11]) begin
-              chunk_width <= 1;
-            end else begin // Disallowed size of window
+            // Calculate chunk_size: (MSB index of window) - 10
+            if (window < 32'd2048) begin // window is too small, disallowed
               over_thresh <= 1;
               state <= OUT_OF_BOUNDS;
+            end else begin
+              // Calculate chunk width based on the window size
+              if (window[31]) begin
+                chunk_width <= 21;
+              end else if (window[30]) begin
+                chunk_width <= 20;
+              end else if (window[29]) begin
+                chunk_width <= 19;
+              end else if (window[28]) begin
+                chunk_width <= 18;
+              end else if (window[27]) begin
+                chunk_width <= 17;
+              end else if (window[26]) begin
+                chunk_width <= 16;
+              end else if (window[25]) begin
+                chunk_width <= 15;
+              end else if (window[24]) begin
+                chunk_width <= 14;
+              end else if (window[23]) begin
+                chunk_width <= 13;
+              end else if (window[22]) begin
+                chunk_width <= 12;
+              end else if (window[21]) begin
+                chunk_width <= 11;
+              end else if (window[20]) begin
+                chunk_width <= 10;
+              end else if (window[19]) begin
+                chunk_width <= 9;
+              end else if (window[18]) begin
+                chunk_width <= 8;
+              end else if (window[17]) begin
+                chunk_width <= 7;
+              end else if (window[16]) begin
+                chunk_width <= 6;
+              end else if (window[15]) begin
+                chunk_width <= 5;
+              end else if (window[14]) begin
+                chunk_width <= 4;
+              end else if (window[13]) begin
+                chunk_width <= 3;
+              end else if (window[12]) begin
+                chunk_width <= 2;
+              end else begin // window[11] must be 1 here if we already know window >= 2048
+                chunk_width <= 1;
+              end
+
+              // Prepare for shift-add multiplication in SETUP
+              window_reg <= window >> 4; // Only adding every 16th clock cycle
+              threshold_average_shift <= threshold_average;
+              max_value_mult_cnt <= 0;
+
+              state <= SETUP;
             end
-
-            // Prepare for shift-add multiplication in SETUP
-            window_reg <= window >> 4; // Only adding every 16th clock cycle
-            threshold_average_shift <= threshold_average;
-            max_value_mult_cnt <= 0;
-
-            state <= SETUP;
           end
         end // IDLE
 
