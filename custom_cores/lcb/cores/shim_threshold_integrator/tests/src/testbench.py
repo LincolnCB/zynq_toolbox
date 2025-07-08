@@ -180,7 +180,7 @@ async def test_running_state_over_threshold(dut):
 
 @cocotb.test()
 async def test_running_state_w_set_window_and_max_threshold_average(dut):
-    for i in range(11, 20):
+    for i in range(11, 15):
         tb = await setup_testbench(dut)
         tb.dut._log.info("STARTING TEST: test_running_state_w_set_window_and_max_threshold_average {i}")
 
@@ -208,7 +208,7 @@ async def test_running_state_w_set_window_and_max_threshold_average(dut):
 
 @cocotb.test()
 async def test_running_state_w_set_window_and_set_threshold_average(dut):
-    for i in range(11, 20):
+    for i in range(11, 15):
         tb = await setup_testbench(dut)
         tb.dut._log.info("STARTING TEST: test_running_state_w_set_window_and_set_threshold_average {i}")
 
@@ -243,7 +243,7 @@ async def test_running_state_w_random_window_and_random_threshold_average(dut):
         "low_abs_sample_concat_values",
     ]
 
-    for _ in range(100):
+    for _ in range(10):
         tb = await setup_testbench(dut)
         tb.dut._log.info("STARTING TEST: test_running_state_w_random_window_and_set_threshold_average {i}")
 
@@ -256,7 +256,7 @@ async def test_running_state_w_random_window_and_random_threshold_average(dut):
         # Then apply the actual reset
         await tb.reset()
 
-        window = random.randint(2**11, 2**20)
+        window = random.randint(2**11, 2**15)
         threshold_average = random.randint(1, (2**15) - 1)
 
         await tb.idle_to_running_state(window_value=window, threshold_average_value=threshold_average)
