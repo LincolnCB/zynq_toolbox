@@ -165,7 +165,7 @@ module shim_ads816x_adc_ctrl #(
   // Setup done
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) setup_done <= 1'b0;
-    else if ((state == S_TEST_RD) && ~n_miso_data_ready_mosi_clk && readout_match) setup_done <= 1'b1;
+    else if ((state == S_TEST_RD) && ~n_miso_data_ready_mosi_clk && boot_readback_match) setup_done <= 1'b1;
   end
 
   //// Command bits processing
@@ -328,7 +328,7 @@ module shim_ads816x_adc_ctrl #(
     .resetn(miso_resetn), // Reset for MISO clock domain
     .din(start_miso_mosi_clk), // Start MISO read signal in MOSI clock domain
     .dout(start_miso) // Start MISO read signal in MISO clock domain
-  )
+  );
   // MISO FIFO
   fifo_async #(
     .DATA_WIDTH  (16), // MISO data width

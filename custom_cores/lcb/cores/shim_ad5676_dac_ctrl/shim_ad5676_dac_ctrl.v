@@ -161,7 +161,7 @@ module shim_ad5676_dac_ctrl #(
   // Setup done
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) setup_done <= 1'b0; // Reset setup done on reset or error
-    else if ((state == S_TEST_RD) && ~n_miso_data_ready_mosi_clk && readout_match) setup_done <= 1'b1;
+    else if ((state == S_TEST_RD) && ~n_miso_data_ready_mosi_clk && boot_readback_match) setup_done <= 1'b1;
   end
 
 
@@ -202,7 +202,7 @@ module shim_ad5676_dac_ctrl #(
                  || (next_cmd && next_cmd_state == S_ERROR) // Bad command
                  || (((cmd_done && expect_next) || read_next_dac_val_pair) && cmd_buf_empty) // Command buffer underflow
                  || cal_oob // Calibration value out of bounds
-                 || dac_val_oob // DAC value out of bounds
+                 || dac_val_oob; // DAC value out of bounds
   // Boot check fail
   assign boot_readback_match = (miso_data_mosi_clk == DAC_TEST_VAL); // Readback matches the test value
   always @(posedge clk) begin
@@ -418,7 +418,7 @@ module shim_ad5676_dac_ctrl #(
     .resetn(miso_resetn), // Reset for MISO clock domain
     .din(start_miso_mosi_clk), // Start MISO read signal in MOSI clock domain
     .dout(start_miso) // Start MISO read signal in MISO clock domain
-  )
+  );
   // MISO FIFO
   fifo_async #(
     .DATA_WIDTH  (16), // MISO data width
