@@ -7,8 +7,6 @@
 #include <sys/ioctl.h>
 #include <inttypes.h>
 
-#define CMA_ALLOC _IOWR('Z', 0, uint32_t)
-
 // Addresses are defined in the hardware design Tcl file
 #define AXI_CFG 0x40000000
 #define AXI_STS 0x41000000
