@@ -64,7 +64,7 @@ uint32_t nand_32bit_32bit_write(uint32_t a, uint32_t b, volatile void *cfg, vola
 
 int main()
 {
-  int fd, i; // File descriptor, loop counter
+  int fd; // File descriptor
   volatile void *cfg; // CFG register AXI interface (using the first 64 bits)
   volatile void *sts; // STS register AXI interface (using the first 32 bits)
 
@@ -92,17 +92,17 @@ int main()
   // Do some example writes and reads
   printf("\nExample writes\n");
   printf("\n---- 8-bit writes ----\n");
-  for (i = 0; i < 5; i++) {
+  for(int i = 0; i < 5; i++) {
     test_write_8(cfg, i, 0x12);
     printf("----\n");
   }
   printf("\n---- 16-bit writes ----\n");
-  for (i = 0; i < 5; i++) {
+  for(int i = 0; i < 5; i++) {
     test_write_16(cfg, i, 0x1234);
     printf("----\n");
   }
   printf("\n---- 32-bit writes ----\n");
-  for (i = 0; i < 5; i++) {
+  for(int i = 0; i < 5; i++) {
     test_write_32(cfg, i, 0x12345678);
     printf("----\n");
   }

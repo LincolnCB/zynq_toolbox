@@ -55,7 +55,7 @@ int main()
   printf("Test program for AXI FIFO and BRAM interfaces\n");
   printf("Setup:\n");
 
-  int fd, i; // File descriptor, loop counter
+  int fd; // File descriptor
   volatile void *cfg; // CFG register AXI interface
   volatile void *sts; // STS register AXI interface
   volatile void *fifo; // FIFO AXI interface
@@ -147,7 +147,7 @@ int main()
       int num = strtoul(token, &num_endptr, 10); // Convert string to unsigned long
       if(num_endptr == token) { printf("Invalid number specified: %s\n", token); continue; } // Check for valid number
       printf("Reading %d words from FIFO...\n", num);
-      for(i = 0; i < num; i++) { // Read specified number of words
+      for (int i = 0; i < num; i++) { // Read specified number of words
         uint32_t value = *((volatile uint32_t *)fifo);
         printf("Read value: %u\n", value);
       }
@@ -167,7 +167,7 @@ int main()
       } else { // Write repeatedly incremeted values otherwise
         uint32_t incr_num = strtoul(token, &num_endptr, 10); // Convert string to unsigned long
         if(num_endptr == token) { printf("Invalid increment number specified: %s\n", token); continue; } // Check for valid increment number
-        for(i = 0; i < incr_num; i++) { // Write repeatedly incremented values
+        for (int i = 0; i < incr_num; i++) { // Write repeatedly incremented values
           *((volatile uint32_t *)fifo) = value + i;
           printf("Wrote value: %u\n", value + i);
         }
