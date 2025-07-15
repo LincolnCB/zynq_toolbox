@@ -4,11 +4,21 @@
 ## Required environment variable inputs to the Makefile
 #############################################
 
-# You need to set PROJECT, BOARD, and BOARD_VERto the project and board you want to build
+# You need to set PROJECT, BOARD, and BOARD_VER to the project and board you want to build
 # These can be set on the command line:
 # - e.g. 'make PROJECT=ex02_axi_interface BOARD=snickerdoodle_black BOARD_VER=1.0'
 
-# Default values for PROJECT and BOARD
+#   --------------------------------------------------------------------
+#   ------>                                                      <------
+#   ------> To set your personal defaults, edit make_defaults.mk <------
+#   ------>   which you can copy from make_defaults.mk.example   <------
+#   ------>                                                      <------
+#   --------------------------------------------------------------------
+
+# Include the defaults file
+include make_defaults.mk
+
+# Master default values for variables:
 PROJECT ?= rev_d_shim
 BOARD ?= snickerdoodle_black
 BOARD_VER ?= 1.0

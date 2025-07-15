@@ -1,10 +1,13 @@
+# Ignore user-specific environment configuration files
+environment.sh
+make_defaults.mk
+
 # Ignore Vivado generated files
 tmp
 tmp_reports
 out
 .vscode
 .Xil
-environment.sh
 
 # Ignore Verilator and cocotb generated files
 __pycache__

@@ -16,7 +16,7 @@ init_ps ps {
 ## Create the reset manager
 # Create proc_sys_reset
 # - Resetn is constant low (active high)
-cell xilinx.com:ip:proc_sys_reset rst_0 {} {
+cell xilinx.com:ip:proc_sys_reset ps_rst {} {
   ext_reset_in ps/FCLK_RESET0_N
   slowest_sync_clk ps/FCLK_CLK0
 }
@@ -43,14 +43,17 @@ cell pavel-demin:user:axi_cfg_register axi_irq {
   S_AXI axi_smc/M00_AXI
 }
 # Assign the address of the axi_irq in the PS address space
-addr 0x40000000 128 axi_cfg/S_AXI ps/M_AXI_GP0
+addr 0x40000000 128 axi_irq/S_AXI ps/M_AXI_GP0
 
 # IRQ concat (necessary for the IRQ to work properly)
 cell xilinx.com:ip:xlconcat:2.1 irq_concat {
   NUM_PORTS 8
-} {
-  dout ps/IRQ_F2P
-}
+} {}
+# cell xilinx.com:ip:xlconcat:2.1 irq_concat {
+#   NUM_PORTS 8
+# } {
+#   dout ps/IRQ_F2P
+# }
 
 # Slice 4 bits of the first 32 bits of the CFG register, 4 of the second
 for {set i 0} {$i < 4} {incr i} {
