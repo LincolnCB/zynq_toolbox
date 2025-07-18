@@ -7,8 +7,8 @@ if [ $# -ne 4 ]; then
 fi
 
 # Check terminal size
-if [ $(tput cols) -lt 80 ] || [ $(tput lines) -lt 23 ]; then
-  echo "[PTLNX KERNEL CFG] ERROR: Terminal must be at least 80 columns wide and 23 lines tall."
+if [ $(tput cols) -lt 80 ] || [ $(tput lines) -lt 21 ]; then
+  echo "[PTLNX KERNEL CFG] ERROR: Terminal must be at least 80 columns wide and 21 lines tall."
   exit 1
 fi
 
