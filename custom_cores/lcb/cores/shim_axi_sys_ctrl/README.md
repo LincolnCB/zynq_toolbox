@@ -1,7 +1,7 @@
 ***Updated 2025-06-04***
 # AXI Shim Config Core
 
-The `shim_axi_prestart_cfg` module provides a configurable interface for managing system parameters via an AXI4-Lite interface.
+The `shim_axi_sys_ctrl` module provides a configurable interface for managing system parameters and operation via an AXI4-Lite interface.
 
 - **Inputs and Outputs**:
   - **Inputs**:

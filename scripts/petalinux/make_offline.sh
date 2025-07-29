@@ -1,29 +1,32 @@
 #!/bin/bash
-# Build PetaLinux software for the given board and project
-# Arguments: <board_name> <board_version> <project_name>
-if [ $# -ne 3 ]; then
+# Build PetaLinux software for the given project
+# Arguments: <petalinux_project>
+if [ $# -ne 1 ]; then
   echo "[PTLNX OFFLINE] ERROR:"
-  echo "Usage: $0 <board_name> <board_version> <project_name>"
+  echo "Usage: $0 <petalinux_project>"
   exit 1
 fi
 
-# Store the positional parameters in named variables and clear them
-BRD=${1}
-VER=${2}
-PRJ=${3}
-PBV="project \"${PRJ}\" and board \"${BRD}\" v${VER}"
+# Store the positional parameter in a named variable and clear it
+PTLNX_PROJECT=${1}
 set --
 
 # If any subsequent command fails, exit immediately
 set -e
 
-echo "[PTLNX OFFLINE] Setting PetaLinux project for ${PBV} up for offline build"
+echo "[PTLNX OFFLINE] Setting PetaLinux project ${PTLNX_PROJECT} up for offline build"
 # Check that the PetaLinux project exists
-./scripts/check/petalinux_project.sh ${BRD} ${VER} ${PRJ}
-./scripts/check/petalinux_offline.sh ${BRD} ${VER} ${PRJ}
+# Check that the necessary PetaLinux project exists
+if [ ! -d "tmp/${PTLNX_PROJECT}/petalinux" ]; then
+  echo "[CHECK PTLNX PROJECT] ERROR:"
+  echo "Missing PetaLinux project directory for ${PTLNX_PROJECT}"
+  echo " Path: tmp/${PTLNX_PROJECT}/petalinux"
+  exit 1
+fi
+./scripts/check/petalinux_offline.sh
 
 # Set config file path
-cfg_file="tmp/$BRD/$VER/$PRJ/petalinux/project-spec/configs/config"
+cfg_file="tmp/${PTLNX_PROJECT}/petalinux/project-spec/configs/config"
 
 
 # Get the first line with CONFIG_PRE_MIRROR_URL=".*"

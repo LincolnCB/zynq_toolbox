@@ -1,10 +1,10 @@
 ***Updated 2025-06-27***
 
-Forked off of and based originally on Pavel Demin's [Red Pitaya Notes](http://pavel-demin.github.io/red-pitaya-notes/).
+Forked off of and based originally on [Pavel Demin](https://github.com/pavel-demin)'s [Red Pitaya Notes](http://pavel-demin.github.io/red-pitaya-notes/).
 
 Also heavily informed by and related to the Open-MRI [OCRA project](https://github.com/OpenMRI/ocra) (which was forked off of Pavel Demin's repo as well).
 
-Primarily written by Lincoln Craven-Brightman, with contributions from Kutay Bulun, Thomas Witzel, and H. Fatih Uǧurdag. The Revision D Shim firmware is designed to work with Don Straney's [Linear Shim hardware (GitHub)](https://github.com/stockmann-lab/shim_amp_hardware_linear). The project is at the request and funding of Jason Stockmann, and is a continuation of the work done by Nick Arango and Irene Kuang on previous revisions of the Shim Amplifier system.
+Primarily written by [Lincoln Craven-Brightman](https://scholar.google.com/citations?user=be3yqVEAAAAJ&hl=en&oi=ao), with contributions from Kutay Bulun, [Thomas Witzel](https://scholar.google.com/citations?hl=en&user=Pgc_3HwAAAAJ), and [H. Fatih Uǧurdag](https://scholar.google.com/citations?user=IdZE034AAAAJ&hl=en&oi=sra). The Revision D Shim firmware is designed to work with [Don Straney](https://dcstraney.wordpress.com/)'s [Linear Shim hardware (GitHub)](https://github.com/stockmann-lab/shim_amp_hardware_linear). The project is at the request and funding of [Jason Stockmann](https://scholar.google.com/citations?user=PxfOa-0AAAAJ&hl=en), and is a continuation of the work done by Nick Arango and [Irene Kuang](https://www.irenekuang.com/) on previous revisions of the Shim Amplifier system.
 
 # Overview
 
@@ -40,8 +40,9 @@ The top-level directory contains the following folders (which each contain their
 There are some temporary, untracked folders that contain the intermediate and final build results: `out` and `tmp`. In addition, there's a temporary `tmp_reports` folder that contains Vivado reports for resource utilization.
 
 Finally, there's some files:
-- `environment.sh.example`: Needs to be copied as explained in [Profile Setup](#profile-setup) 
-- `Makefile`: The main Makefile that is used to build everything.
+- `environment.sh.example`: Needs to be copied as explained in [Profile Setup](#profile-setup)
+- `make_defaults.mk.example`: Can optionally be copied as explained in [Optional: Makefile variable defaults](#optional-makefile-variable-defaults)
+- `Makefile`: The main Makefile that is used to build everything, see [Building an SD card](#building-an-sd-card).
 
 
 # Getting started
@@ -119,7 +120,17 @@ lrwxrwxrwx 1 root root 9 Apr 29 01:13 /bin/sh -> /bin/bash
 
 ## Profile setup
 
-With this repository cloned into your VM (e.g. `/home/username/rev_d_shim` or something similar), you will need to set up some environment variables and modify the Vivado init script to use this repo's scripts. At the top level of this repository, you will find a file named `environment.sh.example`. This is a template file for the environment variables that you need to set up. Copy this file and name the copy `environment.sh`. You will need to edit the following variables in this file to match your setup:
+With this repository cloned into your VM (e.g. `/home/username/rev_d_shim` or something similar), you will need to set up some environment variables and modify the Vivado init script to use this repo's scripts. At the top level of this repository, you will find a file named
+```
+environment.sh.example
+```
+This is a template file for the environment variables that you need to set up. Copy this file and name the copy 
+```
+environment.sh
+```
+This file will be used by the repo, but is not tracked by git, so you can modify it without worrying about it being overwritten by a `git pull` or similar command.
+
+You will need to edit the following variables in this file to match your setup:
 - `REV_D_DIR`: The path to the repository root directory (e.g. `/home/username/rev_d_shim`, as above)
 - `PETALINUX_PATH`: The path to the PetaLinux installation directory (by default, this will be `/tools/Xilinx/PetaLinux/2024.2/tool`)
 - `PETALINUX_VERSION`: The version of PetaLinux you are using (e.g. `2024.2`)
@@ -215,6 +226,18 @@ For personal use, I'd set it in the last location to override everything else. Y
 set rev_d_dir $::env(REV_D_DIR)
 source $rev_d_dir/scripts/vivado/repo_paths.tcl
 ```
+
+## Optional: Makefile variable defaults
+
+The Makefile is set up to use the variables `PROJECT`, `BOARD`, and `BOARD_VER` to determine which project, board, and board version to build, as well as a couple others (see [Building an SD card](#building-an-sd-card), [Building a different board, board version, or project](#building-a-different-board-board-version-or-project), [Building PetaLinux offline](#building-petalinux-offline) and [Script targets](#script-targets) for more information). To set personal default values for these variables, you should copy
+```
+make_defaults.mk.example
+```
+into the file
+```
+make_defaults.mk
+```
+and make your edits there. Just like `environment.sh`, only the example file is tracked, so you can edit the `make_defaults.mk` file without worrying about it being overwritten by a `git pull` or similar command.
 
 ## Optional: PetaLinux offline build setup
 

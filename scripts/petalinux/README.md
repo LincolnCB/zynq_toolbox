@@ -42,7 +42,7 @@ Adds and configures kernel modules for the PetaLinux project. It reads a list of
 
 Usage:
 ```bash
-./scripts/petalinux/make_offline.sh <board_name> <board_version> <project_name>
+./scripts/petalinux/make_offline.sh <petalinux_project_path
 ```
 
 Configures the PetaLinux project for offline builds by updating configuration files to use local pre-mirror and sstate feeds, and disables network access for Yocto fetches.
@@ -78,4 +78,4 @@ Usage:
 ./scripts/petalinux/project.sh <board_name> <board_version> <project_name>
 ```
 
-Creates a new PetaLinux project for the specified board, version, and project, loading the hardware definition (`.xsa`) file and configuration patches. It checks for required files, sets up the project directory, applies patches, and ensures the configuration matches the expected PetaLinux version.
+Creates a new PetaLinux project for the specified board, version, and project, loading the hardware definition (`.xsa`) file and configuration patches, as well as running `make_offline.sh` and optionally including kernel configuration. It checks for required files, sets up the project directory, applies patches, and ensures the configuration matches the expected PetaLinux version.

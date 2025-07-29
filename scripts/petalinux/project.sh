@@ -1,9 +1,9 @@
 #!/bin/bash
 # Build a PetaLinux project for the given board and project
-# Arguments: <board_name> <board_version> <project_name>
-if [ $# -ne 3 ]; then
+# Arguments: <board_name> <board_version> <project_name> [OFFLINE]
+if [ $# -lt 3 ] || [ $# -gt 4 ]; then
   echo "[PTLNX PROJECT] ERROR:"
-  echo "Usage: $0 <board_name> <board_version> <project_name>"
+  echo "Usage: $0 <board_name> <board_version> <project_name> [OFFLINE]"
   exit 1
 fi
 
@@ -11,6 +11,7 @@ fi
 BRD=${1}
 VER=${2}
 PRJ=${3}
+OFFLINE=${4:-""}
 PBV="project \"${PRJ}\" and board \"${BRD}\" v${VER}"
 set --
 
@@ -21,6 +22,9 @@ set -e
 echo "[PTLNX PROJECT] Checking PetaLinux configuration files for ${PBV}"
 ./scripts/check/xsa_file.sh ${BRD} ${VER} ${PRJ} || exit 1
 ./scripts/check/petalinux_rootfs_cfg_file.sh ${BRD} ${VER} ${PRJ} || exit 1
+
+# Set the project's config patch directory
+PRJ_CFG_DIR=${REV_D_DIR}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}
 
 # Delete any existing project directory
 echo "[PTLNX PROJECT] Deleting any existing PetaLinux project directory"
@@ -50,7 +54,7 @@ cd petalinux
 
 # Initialize the project with the hardware description
 echo "[PTLNX PROJECT] Initializing default PetaLinux system configuration"
-petalinux-config --get-hw-description ../hw_def.xsa --silentconfig
+petalinux-config --get-hw-description ${REV_D_DIR}/tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa --silentconfig
 
 # Check that the PetaLinux version matches the environment variable
 PETALINUX_CONF_PATH="components/yocto/layers/meta-petalinux/conf/distro/include/petalinux-version.conf"
@@ -67,12 +71,30 @@ fi
 
 # Patch the project configuration
 echo "[PTLNX PROJECT] Patching and configuring PetaLinux project"
-patch project-spec/configs/config ../../../../../projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch
+patch project-spec/configs/config ${PRJ_CFG_DIR}/config.patch
 petalinux-config --silentconfig
 
 # Patch the root filesystem configuration
 echo "[PTLNX PROJECT] Initializing default PetaLinux root filesystem configuration"
 petalinux-config -c rootfs --silentconfig
 echo "[PTLNX PROJECT] Patching and configuring PetaLinux root filesystem"
-patch project-spec/configs/rootfs_config ../../../../../projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/rootfs_config.patch
+patch project-spec/configs/rootfs_config ${PRJ_CFG_DIR}/rootfs_config.patch
 petalinux-config -c rootfs --silentconfig
+
+# If OFFLINE, set the project to offline
+if [ "$OFFLINE" = "true" ]; then
+  echo "[PTLNX PROJECT] Setting PetaLinux project to offline mode"
+  cd ${REV_D_DIR}
+  ./scripts/petalinux/make_offline.sh ${BRD}/${VER}/${PRJ}
+  cd tmp/${BRD}/${VER}/${PRJ}/petalinux
+else
+  echo "[PTLNX PROJECT] PetaLinux project is set to online mode"
+fi
+
+# Append the kernel configuration if it exists
+if [ -f "${PRJ_CFG_DIR}/kernel_config.cfg" ]; then
+  echo "[PTLNX PROJECT] Appending kernel configuration"
+  cat ${PRJ_CFG_DIR}/kernel_config.cfg >> project-spec/meta-user/recipes-kernel/linux/linux-xlnx/bsp.cfg
+else
+  echo "[PTLNX PROJECT] No kernel configuration file, skipping append"
+fi

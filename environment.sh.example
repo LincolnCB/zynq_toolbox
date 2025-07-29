@@ -1,4 +1,12 @@
 #!/bin/bash
+
+##################################################
+##                                              ##
+## !!!!! COPY THIS FILE TO environment.sh !!!!! ##
+##                                              ##
+##################################################
+
+
 # Set all the necessary environment variables.
 # To utilize:
 # - Make a local copy of this file as "environment.sh"

@@ -92,9 +92,9 @@ echo "[PTLNX SYS CFG] Saving default PetaLinux system configuration"
 cp project-spec/configs/config project-spec/configs/config.default
 
 # If updating, apply the existing patch
-if [ -f "../../../${CONFIG_PATCH_PATH}" ]; then
+if [ -f "${REV_D_DIR}/${CONFIG_PATCH_PATH}" ]; then
   echo "[PTLNX SYS CFG] Applying existing PetaLinux system configuration patch"
-  patch project-spec/configs/config ../../../${CONFIG_PATCH_PATH}
+  patch project-spec/configs/config ${REV_D_DIR}/${CONFIG_PATCH_PATH}
 fi
 
 # Manually configure the project
@@ -105,7 +105,7 @@ petalinux-config
 echo "[PTLNX SYS CFG] Creating PetaLinux system configuration patch"
 diff -u project-spec/configs/config.default project-spec/configs/config | \
   tail -n +3 > \
-  ../../../projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch
+  ${REV_D_DIR}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch
 
 # Replace the patched project configuration with the default
 echo "[PTLNX SYS CFG] Restoring default PetaLinux system configuration for template project"

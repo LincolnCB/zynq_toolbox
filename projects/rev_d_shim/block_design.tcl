@@ -1,4 +1,4 @@
-## Variably define the channel count (MUST BE 8 OR BELOW)
+## Variably define the channel count (MUST BE 1 TO 8 INCLUSIVE)
 set board_count 2
 
 # If the board count is not 8, then error out
@@ -159,8 +159,8 @@ cell xilinx.com:ip:smartconnect:1.0 ps_periph_axi_intercon {
 # +1 Integrator window (unsigned, 32b cap)
 # +2 Integrator enable (1b cap)
 # +3 Buffer reset (25b)
-# +4 Hardware enable (1b cap)
-cell lcb:user:shim_axi_prestart_cfg axi_prestart_cfg {
+# +4 System enable (1b cap)
+cell lcb:user:shim_axi_sys_ctrl axi_sys_ctrl {
   INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT 16384
   INTEGRATOR_WINDOW_DEFAULT 5000000
   INTEG_EN_DEFAULT 1
@@ -169,7 +169,7 @@ cell lcb:user:shim_axi_prestart_cfg axi_prestart_cfg {
   aresetn ps_rst/peripheral_aresetn
   S_AXI ps_periph_axi_intercon/M00_AXI
 }
-addr 0x40000000 128 axi_prestart_cfg/S_AXI ps/M_AXI_GP0
+addr 0x40000000 128 axi_sys_ctrl/S_AXI ps/M_AXI_GP0
   
 
 ###############################################################################
@@ -183,16 +183,24 @@ cell lcb:user:shim_hw_manager hw_manager {
 } {
   clk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn
-  sys_en axi_prestart_cfg/sys_en
+  sys_en axi_sys_ctrl/sys_en
   ext_shutdown Shutdown_Button
-  integ_thresh_avg_oob axi_prestart_cfg/integ_thresh_avg_oob
-  integ_window_oob axi_prestart_cfg/integ_window_oob
-  integ_en_oob axi_prestart_cfg/integ_en_oob
-  sys_en_oob axi_prestart_cfg/sys_en_oob
-  lock_viol axi_prestart_cfg/lock_viol
-  unlock_cfg axi_prestart_cfg/unlock
+  integ_thresh_avg_oob axi_sys_ctrl/integ_thresh_avg_oob
+  integ_window_oob axi_sys_ctrl/integ_window_oob
+  integ_en_oob axi_sys_ctrl/integ_en_oob
+  sys_en_oob axi_sys_ctrl/sys_en_oob
+  lock_viol axi_sys_ctrl/lock_viol
+  unlock_cfg axi_sys_ctrl/unlock
   n_shutdown_force n_Shutdown_Force
   n_shutdown_rst n_Shutdown_Reset
+}
+
+## IRQ interrupt concat (necessary for the IRQ to work properly)
+cell xilinx.com:ip:xlconcat:2.1 irq_concat {
+  NUM_PORTS 1
+} {
+  In0 hw_manager/ps_interrupt
+  dout ps/IRQ_F2P
 }
 
 ## Shutdown sense
@@ -238,9 +246,9 @@ module spi_clk_domain spi_clk_domain {
   aclk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn
   spi_clk spi_clk/clk_out1
-  integ_thresh_avg axi_prestart_cfg/integ_thresh_avg
-  integ_window axi_prestart_cfg/integ_window
-  integ_en axi_prestart_cfg/integ_en
+  integ_thresh_avg axi_sys_ctrl/integ_thresh_avg
+  integ_window axi_sys_ctrl/integ_window
+  integ_en axi_sys_ctrl/integ_en
   spi_en hw_manager/spi_en
   spi_off hw_manager/spi_off
   over_thresh hw_manager/over_thresh
@@ -269,13 +277,13 @@ module spi_clk_domain spi_clk_domain {
 module axi_spi_interface axi_spi_interface {
   aclk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn
-  buffer_reset axi_prestart_cfg/buffer_reset
+  buffer_reset axi_sys_ctrl/buffer_reset
   spi_clk spi_clk/clk_out1
   S_AXI ps/M_AXI_GP1
 }
 ## Wire channel pins for the module
 # DAC and ADC FIFOs
-for {set i 1} {$i <= $board_count} {incr i} {
+for {set i 0} {$i < $board_count} {incr i} {
   wire axi_spi_interface/dac_ch${i}_cmd spi_clk_domain/dac_ch${i}_cmd
   wire axi_spi_interface/dac_ch${i}_cmd_rd_en spi_clk_domain/dac_ch${i}_cmd_rd_en
   wire axi_spi_interface/dac_ch${i}_cmd_empty spi_clk_domain/dac_ch${i}_cmd_empty
@@ -297,14 +305,14 @@ wire axi_spi_interface/trig_data_full spi_clk_domain/trig_data_full
 wire axi_spi_interface/trig_data_almost_full spi_clk_domain/trig_data_almost_full
 ## Address assignment
 # DAC and ADC FIFOs
-for {set i 1} {$i <= $board_count} {incr i} {
-  addr 0x800[expr {$i-1}]0000 128 axi_spi_interface/dac_cmd_fifo_${i}_axi_bridge/S_AXI ps/M_AXI_GP1
-  addr 0x800[expr {$i-1}]1000 128 axi_spi_interface/adc_cmd_fifo_${i}_axi_bridge/S_AXI ps/M_AXI_GP1
-  addr 0x800[expr {$i-1}]2000 128 axi_spi_interface/adc_data_fifo_${i}_axi_bridge/S_AXI ps/M_AXI_GP1
+for {set i 0} {$i < $board_count} {incr i} {
+  addr 0x800${i}0000 128 axi_spi_interface/dac_cmd_fifo_${i}_axi_bridge/S_AXI ps/M_AXI_GP1
+  addr 0x800${i}1000 128 axi_spi_interface/adc_cmd_fifo_${i}_axi_bridge/S_AXI ps/M_AXI_GP1
+  addr 0x800${i}2000 128 axi_spi_interface/adc_data_fifo_${i}_axi_bridge/S_AXI ps/M_AXI_GP1
 }
 # Trigger command and data FIFOs
-addr 0x800[expr {$board_count}]0000 128 axi_spi_interface/trig_cmd_fifo_axi_bridge/S_AXI ps/M_AXI_GP1
-addr 0x800[expr {$board_count}]1000 128 axi_spi_interface/trig_data_fifo_axi_bridge/S_AXI ps/M_AXI_GP1
+addr 0x80100000 128 axi_spi_interface/trig_cmd_fifo_axi_bridge/S_AXI ps/M_AXI_GP1
+addr 0x80101000 128 axi_spi_interface/trig_data_fifo_axi_bridge/S_AXI ps/M_AXI_GP1
 
 ## AXI-domain over/underflow detection
 wire axi_spi_interface/dac_cmd_buf_overflow hw_manager/dac_cmd_buf_overflow
@@ -338,7 +346,7 @@ cell xilinx.com:ip:xlconstant:1.1 pad_160 {
   CONST_WIDTH 160
 } {}
 # Status register concatenation
-# Concatenate: hw_manager/status_word, pad_32, then for each i=1..8: dac_cmd_fifo_$i/fifo_sts_word, adc_cmd_fifo_$i/fifo_sts_word, adc_data_fifo_$i/fifo_sts_word, then pad_448
+# Concatenate: hw_manager/status_word, pad_32, then for each i=1..8: dac_cmd_fifo_${i}/fifo_sts_word, adc_cmd_fifo_${i}/fifo_sts_word, adc_data_fifo_${i}/fifo_sts_word, then pad_448
 cell xilinx.com:ip:xlconcat:2.1 sts_concat {
   NUM_PORTS 3
 } {
@@ -351,83 +359,34 @@ cell xilinx.com:ip:xlconcat:2.1 sts_concat {
 ###############################################################################
 
 ### Create I/O buffers for differential signals
-
-## DAC
-# (LDAC)
-cell lcb:user:differential_out_buffer ldac_obuf {
-  DIFF_BUFFER_WIDTH 1
-} {
-  d_in spi_clk_domain/ldac
-  diff_out_p LDAC_p
-  diff_out_n LDAC_n
-}
-# (~DAC_CS)
-cell lcb:user:differential_out_buffer n_dac_cs_obuf {
-  DIFF_BUFFER_WIDTH 8
-} {
-  d_in spi_clk_domain/n_dac_cs
-  diff_out_p n_DAC_CS_p
-  diff_out_n n_DAC_CS_n
-}
-# (DAC_MOSI)
-cell lcb:user:differential_out_buffer dac_mosi_obuf {
-  DIFF_BUFFER_WIDTH 8
-} {
-  d_in spi_clk_domain/dac_mosi
-  diff_out_p DAC_MOSI_p
-  diff_out_n DAC_MOSI_n
-}
-# (DAC_MISO)
-cell lcb:user:differential_in_buffer dac_miso_ibuf {
-  DIFF_BUFFER_WIDTH 8
-} {
-  diff_in_p DAC_MISO_p
-  diff_in_n DAC_MISO_n
-  d_out spi_clk_domain/dac_miso
-}
-
-## ADC
-# (~ADC_CS)
-cell lcb:user:differential_out_buffer n_adc_cs_obuf {
-  DIFF_BUFFER_WIDTH 8
-} {
-  d_in spi_clk_domain/n_adc_cs
-  diff_out_p n_ADC_CS_p
-  diff_out_n n_ADC_CS_n
-}
-# (ADC_MOSI)
-cell lcb:user:differential_out_buffer adc_mosi_obuf {
-  DIFF_BUFFER_WIDTH 8
-} {
-  d_in spi_clk_domain/adc_mosi
-  diff_out_p ADC_MOSI_p
-  diff_out_n ADC_MOSI_n
-}
-# (ADC_MISO)
-cell lcb:user:differential_in_buffer adc_miso_ibuf {
-  DIFF_BUFFER_WIDTH 8
-} {
-  diff_in_p ADC_MISO_p
-  diff_in_n ADC_MISO_n
-  d_out spi_clk_domain/adc_miso
-}
-
-## Clocks
-# (MISO_SCK)
-cell lcb:user:differential_in_buffer miso_sck_ibuf {
-  DIFF_BUFFER_WIDTH 8
-} {
-  diff_in_p MISO_SCK_p
-  diff_in_n MISO_SCK_n
-  d_out spi_clk_domain/miso_sck
-}
-# (~MOSI_SCK)
-cell lcb:user:differential_out_buffer n_mosi_sck_obuf {
-  DIFF_BUFFER_WIDTH 1
-} {
-  d_in spi_clk/clk_out1
-  diff_out_p n_MOSI_SCK_p
-  diff_out_n n_MOSI_SCK_n
+module io_buffers io_buffers {
+  ldac spi_clk_domain/ldac
+  n_dac_cs spi_clk_domain/n_dac_cs
+  dac_mosi spi_clk_domain/dac_mosi
+  dac_miso spi_clk_domain/dac_miso
+  n_adc_cs spi_clk_domain/n_adc_cs
+  adc_mosi spi_clk_domain/adc_mosi
+  adc_miso spi_clk_domain/adc_miso
+  miso_sck spi_clk_domain/miso_sck
+  n_mosi_sck spi_clk/clk_out1
+  ldac_p LDAC_p
+  ldac_n LDAC_n
+  n_dac_cs_p n_DAC_CS_p
+  n_dac_cs_n n_DAC_CS_n
+  dac_mosi_p DAC_MOSI_p
+  dac_mosi_n DAC_MOSI_n
+  dac_miso_p DAC_MISO_p
+  dac_miso_n DAC_MISO_n
+  n_adc_cs_p n_ADC_CS_p
+  n_adc_cs_n n_ADC_CS_n
+  adc_mosi_p ADC_MOSI_p
+  adc_mosi_n ADC_MOSI_n
+  adc_miso_p ADC_MISO_p
+  adc_miso_n ADC_MISO_n
+  miso_sck_p MISO_SCK_p
+  miso_sck_n MISO_SCK_n
+  n_mosi_sck_p n_MOSI_SCK_p
+  n_mosi_sck_n n_MOSI_SCK_n
 }
 
 ###############################################################################

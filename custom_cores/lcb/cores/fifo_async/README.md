@@ -33,6 +33,7 @@ The `fifo_async_count` module implements an asynchronous FIFO with independent r
 
 ## Parameters
 
+- `FORCE_BRAM` (default: 0): Set to 1 to force the use of block RAM for FIFO memory. Otherwise, Vivado can choose.
 - `DATA_WIDTH` (default: 16): Data width of FIFO.
 - `ADDR_WIDTH` (default: 4): Address width; FIFO depth is `2^ADDR_WIDTH`.
 - `ALMOST_FULL_THRESHOLD` (default: 2): Threshold for almost full flag.

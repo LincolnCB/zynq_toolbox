@@ -1,6 +1,6 @@
 `timescale 1 ns / 1 ps
 
-module shim_axi_prestart_cfg #
+module shim_axi_sys_ctrl #
 (
   parameter integer AXI_ADDR_WIDTH = 16,
 
@@ -61,15 +61,15 @@ module shim_axi_prestart_cfg #
   // Localparams for MIN/MAX values
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_MIN = 1;
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_MAX = 15'h7FFF; // 15-bit unsigned max
-  localparam integer INTEGRATOR_WINDOW_MIN = 2048;
-  localparam integer INTEGRATOR_WINDOW_MAX = 32'hFFFFFFFF; // 32-bit unsigned max
+  localparam integer INTEGRATOR_WINDOW_MIN            = 2048;
+  localparam integer INTEGRATOR_WINDOW_MAX            = 32'hFFFFFFFF; // 32-bit unsigned max
 
   // Localparams for bit ranges (shifted after removing DAC divider)
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET = 0;
-  localparam integer INTEGRATOR_WINDOW_32_OFFSET = 1;
-  localparam integer INTEGRATOR_EN_32_OFFSET = 2;
-  localparam integer BUFFER_RESET_32_OFFSET = 3;
-  localparam integer SYS_EN_32_OFFSET = 4;
+  localparam integer INTEGRATOR_WINDOW_32_OFFSET            = 1;
+  localparam integer INTEGRATOR_EN_32_OFFSET                = 2;
+  localparam integer BUFFER_RESET_32_OFFSET                 = 3;
+  localparam integer SYS_EN_32_OFFSET                       = 4;
 
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_WIDTH = 15;
   localparam integer INTEGRATOR_WINDOW_WIDTH = 32;

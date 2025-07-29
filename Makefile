@@ -4,11 +4,21 @@
 ## Required environment variable inputs to the Makefile
 #############################################
 
-# You need to set PROJECT, BOARD, and BOARD_VERto the project and board you want to build
+# You need to set PROJECT, BOARD, and BOARD_VER to the project and board you want to build
 # These can be set on the command line:
 # - e.g. 'make PROJECT=ex02_axi_interface BOARD=snickerdoodle_black BOARD_VER=1.0'
 
-# Default values for PROJECT and BOARD
+#   --------------------------------------------------------------------
+#   ------>                                                      <------
+#   ------> To set your personal defaults, edit make_defaults.mk <------
+#   ------>   which you can copy from make_defaults.mk.example   <------
+#   ------>                                                      <------
+#   --------------------------------------------------------------------
+
+# Include the defaults file
+include make_defaults.mk
+
+# Master default values for variables:
 PROJECT ?= rev_d_shim
 BOARD ?= snickerdoodle_black
 BOARD_VER ?= 1.0
@@ -111,7 +121,7 @@ RM = rm -rf
 .PRECIOUS: tmp/cores/% tmp/%.xpr tmp/%.bit
 
 # Targets that aren't real files (GNU Make 4.9)
-.PHONY: all tests write_sd petalinux_cfg petalinux_rootfs_cfg clean_sd clean_project clean_build clean_tests clean_test_results clean_all bit sd rootfs boot cores xpr xsa petalinux petalinux_build
+.PHONY: all help tests write_sd petalinux_cfg petalinux_rootfs_cfg petalinux_kernel_cfg clean_sd clean_project clean_build clean_tests clean_test_results clean_all bit sd rootfs boot cores xpr xsa petalinux petalinux_build
 
 # Enable secondary expansion (GNU Make 3.9) to allow for more complex pattern matching (see cores target)
 .SECONDEXPANSION:
@@ -124,6 +134,31 @@ all: sd
 ## Script targets (tests, sd management, clean, etc. targets)
 #############################################
 
+# Print all the available targets
+help:
+	@echo "Available targets:"
+	@echo "  all                  - Build the SD card image for the project"
+	@echo "  tests                - Run all the tests for the custom cores necessary for the project"
+	@echo "  write_sd             - Write the SD card image to the mount point"
+	@echo "  petalinux_cfg        - Write or update the PetaLinux system configuration file"
+	@echo "  petalinux_rootfs_cfg - Write or update the PetaLinux root filesystem configuration file"
+	@echo "  petalinux_kernel_cfg - Write or update the PetaLinux kernel configuration file"
+	@echo "  clean_sd             - Clean the SD card"
+	@echo "  clean_project        - Remove a single project's intermediate and temporary files, including cores"
+	@echo "  clean_build          - Remove all the intermediate and temporary files"
+	@echo "  clean_tests          - Remove all the result files from the tests, leaving the test status"
+	@echo "  clean_test_results   - Clean all test status and summary files from custom cores and projects"
+	@echo "  clean_all            - Remove all the output files too"
+	@echo "  bit                  - Build the bitstream file (system.bit)"
+	@echo "  sd                   - Build all the files necessary for a bootable SD card"
+	@echo "  rootfs               - Build the compressed root filesystem"
+	@echo "  boot                 - Build the compressed boot files"
+	@echo "  cores                - Build all the cores necessary for the project"
+	@echo "  xpr                  - Build the Xilinx project file"
+	@echo "  xsa                  - Build the hardware definition file"
+	@echo "  petalinux            - Create the PetaLinux project without building it"
+	@echo "  petalinux_build      - Build the PetaLinux project"
+
 # Test summary for all the custom cores necessary for the project
 tests: projects/${PROJECT}/tests/core_tests_summary
 
@@ -133,14 +168,19 @@ write_sd: sd
 	./scripts/make/write_sd.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(MOUNT_DIR)
 
 # Write or update the PetaLinux system configuration file
-petalinux_cfg:
+petalinux_cfg: xsa
 	@./scripts/make/status.sh "CONFIGURING PETALINUX PROJECT"
 	./scripts/petalinux/config_system.sh $(BOARD) $(BOARD_VER) $(PROJECT)
 
 # Write or update the PetaLinux root filesystem configuration file
-petalinux_rootfs_cfg:
+petalinux_rootfs_cfg: xsa
 	@./scripts/make/status.sh "CONFIGURING PETALINUX ROOTFS"
 	./scripts/petalinux/config_rootfs.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+
+# Write or update the PetaLinux kernel configuration file
+petalinux_kernel_cfg: xsa
+	@./scripts/make/status.sh "CONFIGURING PETALINUX KERNEL"
+	./scripts/petalinux/config_kernel.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(OFFLINE)
 
 # Clean the SD card image at the mount point
 clean_sd:
@@ -323,10 +363,9 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PRO
 tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION)/config.patch projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION)/rootfs_config.patch scripts/petalinux/project.sh scripts/petalinux/software.sh scripts/petalinux/kernel_modules.sh scripts/petalinux/make_offline.sh
 	@./scripts/make/status.sh "MAKING CONFIGURED PETALINUX PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	@if [ $(OFFLINE) = "true" ]; then scripts/make/status.sh "PetaLinux OFFLINE build"; fi
-	scripts/petalinux/project.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+	scripts/petalinux/project.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(OFFLINE)
 	scripts/petalinux/software.sh $(BOARD) $(BOARD_VER) $(PROJECT)
 	scripts/petalinux/kernel_modules.sh $(BOARD) $(BOARD_VER) $(PROJECT)
-	@if [ $(OFFLINE) = "true" ]; then scripts/petalinux/make_offline.sh $(BOARD) $(BOARD_VER) $(PROJECT); fi
 	
 
 # The compressed root filesystem

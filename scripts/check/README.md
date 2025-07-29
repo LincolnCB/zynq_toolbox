@@ -4,7 +4,7 @@
 
 These scripts are used to check required files, directories, and environment variables as part of the build process, giving the user feedback on what is missing or misconfigured.They're typically run by the Makefile or other scripts to ensure that the environment is set up correctly before proceeding with the build.
 
-All of thesre scripts check for specific conditions for the step in question. They will also run a minimum set of previous checks required for the step to make sense, and can optionally run ALL previous checks if the `--full` flag is provided. The one exception is `board_files.sh`, which does not have a `--full` option because it is not dependent on any previous checks.
+All of thesre scripts check for specific conditions for the step in question. They will also run a minimum set of previous checks required for the step to make sense, and can optionally run ALL previous checks if the `--full` flag is provided. The two exceptions are `board_files.sh` and `petalinux_offline.sh`, which do not have a `--full` option because they are not dependent on any previous checks.
 
 ---
 
@@ -142,9 +142,9 @@ Check for the presence of the PetaLinux root filesystem configuration patch file
 ### `petalinux_offline.sh`
 Usage:
 ```bash
-./scripts/check/petalinux_offline.sh <board_name> <board_version> <project_name> [--full]
+./scripts/check/petalinux_offline.sh
 ```
-Check that the required PetaLinux offline directories (`downloads` and `sstate`) are set and exist for the specified project, board, and version.
+Check that the required PetaLinux offline directories (`downloads` and `sstate`) are set and exist.
 
 #### Minimum checks:
 - None
