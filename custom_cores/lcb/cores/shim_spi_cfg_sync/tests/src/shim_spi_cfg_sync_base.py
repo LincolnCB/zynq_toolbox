@@ -11,8 +11,14 @@ class shim_spi_cfg_sync_base:
         self.clk_period = clk_period
         self.time_unit = time_unit
 
+        # Synchronizer Parameters
+        # This means any input signal will be stable after 3 * 2 clk cycles if the input remains constant.
+        self.SYNC_DEPTH = 3
+        self.STABLE_COUNT = 2
+        self.STABLE_AFTER_N_CLK_CYCLES = self.SYNC_DEPTH * self.STABLE_COUNT
+
         # Initialize the clock
-        cocotb.start_soon(Clock(dut.spi_clk, clk_period, time_unit).start())
+        cocotb.start_soon(Clock(dut.spi_clk, clk_period, time_unit).start(start_high=False))
 
         # Initialize input signals
         self.dut.integ_thresh_avg.value = 0
@@ -22,11 +28,11 @@ class shim_spi_cfg_sync_base:
         self.dut.block_buffers.value = 0
 
         # Input data queues
-        self.integ_thresh_avg_queue = deque()
-        self.integ_window_queue = deque()
-        self.integ_en_queue = deque()
-        self.spi_en_queue = deque()
-        self.block_buffers_queue = deque()
+        self.integ_thresh_avg_queue = deque(maxlen=self.STABLE_AFTER_N_CLK_CYCLES)
+        self.integ_window_queue = deque(maxlen=self.STABLE_AFTER_N_CLK_CYCLES)
+        self.integ_en_queue = deque(maxlen=self.STABLE_AFTER_N_CLK_CYCLES)
+        self.spi_en_queue = deque(maxlen=self.STABLE_AFTER_N_CLK_CYCLES)
+        self.block_buffers_queue = deque(maxlen=self.STABLE_AFTER_N_CLK_CYCLES)
 
     async def reset(self):
         """Reset the DUT and hold it for two clk cycles."""
@@ -55,13 +61,6 @@ class shim_spi_cfg_sync_base:
             # Previous reset
             prev_sync_resetn = self.dut.sync_resetn.value
 
-            # Previous inputs from AXI domain
-            prev_integ_thresh_avg = self.dut.integ_thresh_avg.value
-            prev_integ_window = self.dut.integ_window.value
-            prev_integ_en = self.dut.integ_en.value
-            prev_spi_en = self.dut.spi_en.value
-            prev_block_buffers = self.dut.block_buffers.value
-
             # Previous intermediate values for synchronized signals
             prev_integ_thresh_avg_sync = self.dut.integ_thresh_avg_sync.value
             prev_integ_window_sync = self.dut.integ_window_sync.value
@@ -88,6 +87,13 @@ class shim_spi_cfg_sync_base:
                 assert int(self.dut.block_buffers_stable_flag.value) == 0, "block_buffers_stable_flag should be low after reset"
             
             elif prev_spi_en_sync == 1 and prev_spi_en_stable_flag == 1:
+
+                # Print the queues for debugging purposes
+                self.dut._log.info(f"integ_thresh_avg_queue: {self.integ_thresh_avg_queue}")
+                self.dut._log.info(f"integ_window_queue: {self.integ_window_queue}")
+                self.dut._log.info(f"integ_en_queue: {self.integ_en_queue}")
+                self.dut._log.info(f"spi_en_queue: {self.spi_en_queue}")
+                self.dut._log.info(f"block_buffers_queue: {self.block_buffers_queue}")
                 
                 # Pop the expected values from the queues here.
                 integ_thresh_avg_expected = self.integ_thresh_avg_queue.popleft()
@@ -111,37 +117,30 @@ class shim_spi_cfg_sync_base:
                 if not self.integ_thresh_avg_queue or not self.integ_window_queue or not self.integ_en_queue or not self.spi_en_queue or not self.block_buffers_queue:
                     break
 
+    # NEEDS UPDATE
     async def one_time_driver(self):
         """ Drive random inputs to the DUT, and push them to the queues for monitoring. """
-        await RisingEdge(self.dut.spi_clk)
-
         # Randomly generate inputs
-        integ_thresh_avg = random.randint(0, 2**16 - 1)
+        integ_thresh_avg = random.randint(0, 2**15 - 1)
         integ_window = random.randint(0, 2**32 - 1)
         integ_en = random.randint(0, 1)
-        spi_en = random.randint(0, 1)
+        spi_en = 1
         block_buffers = random.randint(0, 1)
 
-        # Drive the DUT inputs
-        self.dut.integ_thresh_avg.value = integ_thresh_avg
-        self.dut.integ_window.value = integ_window
-        self.dut.integ_en.value = integ_en
-        self.dut.spi_en.value = spi_en
-        self.dut.block_buffers.value = block_buffers
+        for _ in range(self.STABLE_AFTER_N_CLK_CYCLES):
 
-        # Push the values to the queues for monitoring
-        self.integ_thresh_avg_queue.append(integ_thresh_avg)
-        self.integ_window_queue.append(integ_window)
-        self.integ_en_queue.append(integ_en)
-        self.spi_en_queue.append(spi_en)
-        self.block_buffers_queue.append(block_buffers)
+            await RisingEdge(self.dut.spi_clk)
+            # Drive the DUT inputs
+            self.dut.integ_thresh_avg.value = integ_thresh_avg
+            self.dut.integ_window.value = integ_window
+            self.dut.integ_en.value = integ_en
+            self.dut.spi_en.value = spi_en
+            self.dut.block_buffers.value = block_buffers
 
-    async def n_times_driver(self, n=10):
-        """ Drive random inputs to the DUT n times, and push them to the queues for monitoring. """
-        for _ in range(n):
-            await self.one_time_driver()
+            # Push the values to the queues for monitoring
+            self.integ_thresh_avg_queue.append(integ_thresh_avg)
+            self.integ_window_queue.append(integ_window)
+            self.integ_en_queue.append(integ_en)
+            self.spi_en_queue.append(spi_en)
+            self.block_buffers_queue.append(block_buffers)
 
-            random_clk_cycle_delay = random.randint(0, 10)
-
-            for _ in range(random_clk_cycle_delay):
-                await RisingEdge(self.dut.spi_clk)

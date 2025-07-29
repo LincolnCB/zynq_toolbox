@@ -41,7 +41,7 @@ module shim_spi_cfg_sync (
     .STABLE_COUNT(2)
   ) sync_integ_thresh_avg (
     .clk(spi_clk),
-    .resetn(spi_resetn),
+    .resetn(sync_resetn),
     .din(integ_thresh_avg),
     .dout(integ_thresh_avg_sync),
     .stable(integ_thresh_avg_stable_flag)
@@ -53,7 +53,7 @@ module shim_spi_cfg_sync (
     .STABLE_COUNT(2)
   ) sync_integ_window (
     .clk(spi_clk),
-    .resetn(spi_resetn),
+    .resetn(sync_resetn),
     .din(integ_window),
     .dout(integ_window_sync),
     .stable(integ_window_stable_flag)
@@ -65,7 +65,7 @@ module shim_spi_cfg_sync (
     .STABLE_COUNT(2)
   ) sync_integ_en (
     .clk(spi_clk),
-    .resetn(spi_resetn),
+    .resetn(sync_resetn),
     .din(integ_en),
     .dout(integ_en_sync),
     .stable(integ_en_stable_flag)
@@ -77,7 +77,7 @@ module shim_spi_cfg_sync (
     .STABLE_COUNT(2)
   ) sync_spi_en (
     .clk(spi_clk),
-    .resetn(spi_resetn),
+    .resetn(sync_resetn),
     .din(spi_en),
     .dout(spi_en_sync),
     .stable(spi_en_stable_flag)
@@ -89,7 +89,7 @@ module shim_spi_cfg_sync (
     .STABLE_COUNT(2)
   ) sync_block_buffers (
     .clk(spi_clk),
-    .resetn(spi_resetn),
+    .resetn(sync_resetn),
     .din(block_buffers),
     .dout(block_buffers_sync),
     .stable(block_buffers_stable_flag)
