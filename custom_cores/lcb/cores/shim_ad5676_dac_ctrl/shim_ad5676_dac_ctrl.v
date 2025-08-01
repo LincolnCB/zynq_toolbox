@@ -419,7 +419,7 @@ module shim_ad5676_dac_ctrl #(
 
   //// SPI MISO control
   // Start MISO synchonization
-  synchronizer start_miso_sync(
+  sync_incoherent start_miso_sync(
     .clk(miso_sck), // MISO clock
     .resetn(miso_resetn), // Reset for MISO clock domain
     .din(start_miso_mosi_clk), // Start MISO read signal in MOSI clock domain

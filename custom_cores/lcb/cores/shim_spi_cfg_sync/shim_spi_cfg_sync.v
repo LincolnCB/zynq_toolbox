@@ -1,9 +1,10 @@
-// filepath: /home/lcb-virt/Documents/rev_d_shim/cores/lcb/spi_cfg_sync.v
 `timescale 1ns/1ps
 
 module shim_spi_cfg_sync (
-  input  wire        spi_clk,             // SPI clock
-  input  wire        sync_resetn,         // Active low reset
+  input  wire        aclk,       // AXI domain clock
+  input  wire        aresetn,    // Active low reset signal
+  input  wire        spi_clk,    // SPI domain clock
+  input  wire        spi_resetn, // Active low reset signal for SPI domain
 
   // Inputs from axi_shim_cfg (AXI domain)
   input  wire [14:0] integ_thresh_avg,
@@ -13,19 +14,19 @@ module shim_spi_cfg_sync (
   input  wire        block_buffers,
 
   // Synchronized outputs to SPI domain
-  output reg  [14:0] integ_thresh_avg_stable,
-  output reg  [31:0] integ_window_stable,
-  output reg         integ_en_stable,
-  output reg         spi_en_stable,
-  output reg         block_buffers_stable
+  output wire [14:0] integ_thresh_avg_sync,
+  output wire [31:0] integ_window_sync,
+  output wire        integ_en_sync,
+  output wire        spi_en_sync,
+  output wire        block_buffers_sync
 );
 
-  // Intermediate wires for synchronized signals
-  wire [14:0] integ_thresh_avg_sync;
-  wire [31:0] integ_window_sync;
-  wire        integ_en_sync;
-  wire        spi_en_sync;
-  wire        block_buffers_sync;
+  // Default values for registers
+  localparam [14:0] integ_thresh_avg_default = 15'h1000;
+  localparam [31:0] integ_window_default = 32'h00010000;
+  localparam integ_en_default = 1'b0;
+  localparam spi_en_default = 1'b0;
+  localparam block_buffers_default = 1'b1;
 
   // Stability signals for each synchronizer
   wire integ_thresh_avg_stable_flag;
@@ -34,87 +35,66 @@ module shim_spi_cfg_sync (
   wire spi_en_stable_flag;
   wire block_buffers_stable_flag;
 
-  // Synchronize each signal using the synchronizer module
-  synchronizer #(
-    .DEPTH(3),
-    .WIDTH(15),
-    .STABLE_COUNT(2)
+  // Synchronize each signal using the sync_coherent module
+
+  sync_coherent #(
+    .WIDTH(15)
   ) sync_integ_thresh_avg (
-    .clk(spi_clk),
-    .resetn(spi_resetn),
+    .in_clk(aclk),
+    .in_resetn(aresetn),
+    .out_clk(spi_clk),
+    .out_resetn(spi_resetn),
     .din(integ_thresh_avg),
     .dout(integ_thresh_avg_sync),
-    .stable(integ_thresh_avg_stable_flag)
+    .dout_default(integ_thresh_avg_default)
   );
 
-  synchronizer #(
-    .DEPTH(3),
-    .WIDTH(32),
-    .STABLE_COUNT(2)
+  sync_coherent #(
+    .WIDTH(32)
   ) sync_integ_window (
-    .clk(spi_clk),
-    .resetn(spi_resetn),
+    .in_clk(aclk),
+    .in_resetn(aresetn),
+    .out_clk(spi_clk),
+    .out_resetn(spi_resetn),
     .din(integ_window),
     .dout(integ_window_sync),
-    .stable(integ_window_stable_flag)
+    .dout_default(integ_window_default)
   );
 
-  synchronizer #(
-    .DEPTH(3),
-    .WIDTH(1),
-    .STABLE_COUNT(2)
+  sync_coherent #(
+    .WIDTH(1)
   ) sync_integ_en (
-    .clk(spi_clk),
-    .resetn(spi_resetn),
+    .in_clk(aclk),
+    .in_resetn(aresetn),
+    .out_clk(spi_clk),
+    .out_resetn(spi_resetn),
     .din(integ_en),
     .dout(integ_en_sync),
-    .stable(integ_en_stable_flag)
+    .dout_default(integ_en_default)
   );
 
-  synchronizer #(
-    .DEPTH(3),
-    .WIDTH(1),
-    .STABLE_COUNT(2)
+  sync_coherent #(
+    .WIDTH(1)
   ) sync_spi_en (
-    .clk(spi_clk),
-    .resetn(spi_resetn),
+    .in_clk(aclk),
+    .in_resetn(aresetn),
+    .out_clk(spi_clk),
+    .out_resetn(spi_resetn),
     .din(spi_en),
     .dout(spi_en_sync),
-    .stable(spi_en_stable_flag)
+    .dout_default(spi_en_default)
   );
 
-  synchronizer #(
-    .DEPTH(3),
-    .WIDTH(1),
-    .STABLE_COUNT(2)
+  sync_coherent #(
+    .WIDTH(1)
   ) sync_block_buffers (
-    .clk(spi_clk),
-    .resetn(spi_resetn),
+    .in_clk(aclk),
+    .in_resetn(aresetn),
+    .out_clk(spi_clk),
+    .out_resetn(spi_resetn),
     .din(block_buffers),
     .dout(block_buffers_sync),
-    .stable(block_buffers_stable_flag)
+    .dout_default(block_buffers_default)
   );
-
-  // Update stable registers when all signals are stable and spi_en_sync is high
-  always @(posedge spi_clk) begin
-    if (!sync_resetn) begin
-      integ_thresh_avg_stable  <= 15'b0;
-      integ_window_stable      <= 32'b0;
-      integ_en_stable          <= 1'b0;
-      block_buffers_stable     <= 1'b1;
-      spi_en_stable            <= 1'b0;
-    end else if (spi_en_sync && spi_en_stable_flag) begin
-      // Update all the configuration registers only when spi_en_sync is high and they're stable
-      if (integ_thresh_avg_stable_flag
-          && integ_window_stable_flag 
-          && integ_en_stable_flag) begin
-        integ_thresh_avg_stable  <= integ_thresh_avg_sync;
-        integ_window_stable      <= integ_window_sync;
-        integ_en_stable          <= integ_en_sync;
-        spi_en_stable            <= spi_en_sync;
-      end
-      // Update block_buffers_stable regardless of other flags
-      if (block_buffers_stable_flag) block_buffers_stable <= block_buffers_sync;
-    end
-  end
+  
 endmodule
