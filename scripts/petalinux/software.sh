@@ -74,8 +74,8 @@ for SW_DIR in ${SW_PATH}/*; do
     # Create the app directory and copy the source files in
     echo "[PTLNX SOFTWARE] Building ${SAN_SW_NAME}"
 
-    # Get a list of .c files that aren't the top file
-    SRC_FILES=$(find "${SW_DIR}" -type f -name "*.c" ! -name "${SW_NAME}.c")
+    # Get a list of .c and .h files that aren't the top file
+    SRC_FILES=$(find "${SW_DIR}" -type f \( -name "*.c" -o -name "*.h" \) ! -name "${SW_NAME}.c")
     if [ -z "${SRC_FILES}" ]; then
       petalinux-create apps --template c --name ${SAN_SW_NAME} --enable
     else
