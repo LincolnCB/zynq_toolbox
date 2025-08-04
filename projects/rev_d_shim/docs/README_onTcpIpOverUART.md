@@ -120,4 +120,4 @@ sshd. ftp requires ftp server up and running.
 Note that scp and some other tools appear to be stalled soon after
 they are run. Just ignore that and wait. They successfully complete
 the transfer, and the average transfer rate happens to be such that
-sctually there was no stall.
+actually there was no stall.
