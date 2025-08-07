@@ -7,6 +7,15 @@ if {$board_count < 1 || $board_count > 8} {
   exit 1
 }
 
+## Variably choose whether to use an external clock
+set use_ext_clk 1
+
+# If the external clock is not 0 or 1, then error out
+if {$use_ext_clk != 0 && $use_ext_clk != 1} {
+  puts "Error: use_ext_clk must be 0 or 1."
+  exit 1
+}
+
 ###############################################################################
 #
 #   Single-ended ports
@@ -101,17 +110,27 @@ create_bd_port -dir O -from 0 -to 0 n_MOSI_SCK_p
 # (~SCKI-)
 create_bd_port -dir O -from 0 -to 0 n_MOSI_SCK_n
 
+###############################################################################
+
+### 0 and 1 constants to fill bits for unused boards
+cell xilinx.com:ip:xlconstant:1.1 const_0 {
+  CONST_VAL 0
+} {}
+cell xilinx.com:ip:xlconstant:1.1 const_1 {
+  CONST_VAL 1
+} {}
 
 ###############################################################################
 
 ### Create processing system
-# Enable M_AXI_GP0 and S_AXI_ACP
-# Tie AxUSER pins to 1 for ACP port (to enable coherency)
+# Enable M_AXI_GP0 and M_AXI_GP1
 # Enable UART1 on the correct MIO pins
 # UART1 baud rate 921600
 # Pullup for UART1 RX
 # Enable I2C0 on the correct MIO pins
-# Turn off FCLK1-3 and reset1-3
+# Set FCLK0 to 100 MHz
+# Set FCLK1 to 10 MHz
+# Turn off FCLK2-3 and reset1-3
 init_ps ps {
   PCW_USE_M_AXI_GP0 1
   PCW_USE_M_AXI_GP1 1
@@ -122,7 +141,8 @@ init_ps ps {
   PCW_MIO_37_PULLUP enabled
   PCW_I2C0_PERIPHERAL_ENABLE 1
   PCW_I2C0_I2C0_IO {MIO 38 .. 39}
-  PCW_EN_CLK1_PORT 0
+  PCW_FPGA0_PERIPHERAL_FREQMHZ 100
+  PCW_FPGA1_PERIPHERAL_FREQMHZ 10
   PCW_EN_CLK2_PORT 0
   PCW_EN_CLK3_PORT 0
   PCW_EN_RST1_PORT 0
@@ -140,14 +160,13 @@ cell xilinx.com:ip:proc_sys_reset:5.0 ps_rst {} {
   slowest_sync_clk ps/FCLK_CLK0
 }
 
-
 ### AXI Smart Connect
-cell xilinx.com:ip:smartconnect:1.0 ps_periph_axi_intercon {
+cell xilinx.com:ip:smartconnect:1.0 sys_cfg_axi_intercon {
   NUM_SI 1
-  NUM_MI 3
+  NUM_MI 4
 } {
   aclk ps/FCLK_CLK0
-  S00_AXI /ps/M_AXI_GP0
+  S00_AXI ps/M_AXI_GP0
   aresetn ps_rst/peripheral_aresetn
 }
 
@@ -167,7 +186,7 @@ cell lcb:user:shim_axi_sys_ctrl axi_sys_ctrl {
 } {
   aclk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn
-  S_AXI ps_periph_axi_intercon/M00_AXI
+  S_AXI sys_cfg_axi_intercon/M00_AXI
 }
 addr 0x40000000 128 axi_sys_ctrl/S_AXI ps/M_AXI_GP0
   
@@ -175,12 +194,7 @@ addr 0x40000000 128 axi_sys_ctrl/S_AXI ps/M_AXI_GP0
 ###############################################################################
 
 ### Hardware manager
-cell lcb:user:shim_hw_manager hw_manager {
-  POWERON_WAIT   250000000
-  BUF_LOAD_WAIT  250000000
-  SPI_START_WAIT 250000000
-  SPI_STOP_WAIT  250000000
-} {
+cell lcb:user:shim_hw_manager hw_manager {} {
   clk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn
   sys_en axi_sys_ctrl/sys_en
@@ -195,21 +209,22 @@ cell lcb:user:shim_hw_manager hw_manager {
   n_shutdown_rst n_Shutdown_Reset
 }
 
-## IRQ interrupt concat (necessary for the IRQ to work properly)
-cell xilinx.com:ip:xlconcat:2.1 irq_concat {
-  NUM_PORTS 1
-} {
-  In0 hw_manager/ps_interrupt
-  dout ps/IRQ_F2P
+## Shutdown sense
+# Set which shutdown sense channels are connected
+cell xilinx.com:ip:xlconcat:2.1 shutdown_sense_connected {
+  NUM_PORTS 8
+} {}
+for {set i 0} {$i < $board_count} {incr i} {
+  wire shutdown_sense_connected/In${i} const_1/dout
 }
-
-## Shutdown sense
-## Shutdown sense
-cell lcb:user:shim_shutdown_sense shutdown_sense {
-  CLK_FREQ_HZ 100000000
-} {
+for {set i $board_count} {$i < 8} {incr i} {
+  wire shutdown_sense_connected/In${i} const_0/dout
+}
+# Shutdown sense module
+cell lcb:user:shim_shutdown_sense shutdown_sense {} {
   clk ps/FCLK_CLK0
   shutdown_sense_en hw_manager/shutdown_sense_en
+  shutdown_sense_connected shutdown_sense_connected/dout
   shutdown_sense_pin Shutdown_Sense
   shutdown_sense hw_manager/shutdown_sense
   shutdown_sense_sel Shutdown_Sense_Sel
@@ -233,11 +248,20 @@ cell xilinx.com:ip:clk_wiz:6.0 spi_clk {
 } {
   s_axi_aclk ps/FCLK_CLK0
   s_axi_aresetn ps_rst/peripheral_aresetn
-  s_axi_lite ps_periph_axi_intercon/M02_AXI
-  clk_in1 Scanner_10Mhz_In
+  s_axi_lite sys_cfg_axi_intercon/M03_AXI
   power_down hw_manager/spi_clk_power_n
 }
 addr 0x40200000 2048 spi_clk/s_axi_lite ps/M_AXI_GP0
+
+## SPI clock input
+# If use_ext_clk is 1, then use the external clock input
+# otherwise use the 10MHz FCLK_CLK1 
+if {$use_ext_clk} {
+  wire spi_clk/clk_in1 Scanner_10Mhz_In
+} else {
+  wire spi_clk/clk_in1 ps/FCLK_CLK1
+}
+  
 
 ###############################################################################
 
@@ -328,8 +352,8 @@ cell pavel-demin:user:axi_sts_register status_reg {
   STS_DATA_WIDTH 1024
 } {
   aclk ps/FCLK_CLK0
-  S_AXI ps_periph_axi_intercon/M01_AXI
   aresetn ps_rst/peripheral_aresetn
+  S_AXI sys_cfg_axi_intercon/M01_AXI
 }
 addr 0x40100000 128 status_reg/S_AXI ps/M_AXI_GP0
 ## Concatenation
@@ -354,6 +378,26 @@ cell xilinx.com:ip:xlconcat:2.1 sts_concat {
   In1 axi_spi_interface/fifo_sts
   In2 pad_160/dout
   dout status_reg/sts_data
+}
+
+### Alert status register (tracking FIFO unavailability)
+cell lcb:user:axi_sts_alert_reg fifo_unavailable_reg {
+  STS_DATA_WIDTH 32
+} {
+  aclk ps/FCLK_CLK0
+  aresetn ps_rst/peripheral_aresetn
+  S_AXI sys_cfg_axi_intercon/M02_AXI
+  sts_data axi_spi_interface/fifo_ps_side_unavailable
+}
+addr 0x40110000 128 fifo_unavailable_reg/S_AXI ps/M_AXI_GP0
+
+## IRQ interrupt concat
+cell xilinx.com:ip:xlconcat:2.1 irq_concat {
+  NUM_PORTS 2
+} {
+  In0 hw_manager/ps_interrupt
+  In1 fifo_unavailable_reg/alert
+  dout ps/IRQ_F2P
 }
 
 ###############################################################################

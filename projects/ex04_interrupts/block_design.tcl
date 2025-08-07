@@ -35,8 +35,8 @@ cell xilinx.com:ip:smartconnect:1.0 axi_smc {
 ## CFG register
 # 64 adressable bits
 cell pavel-demin:user:axi_cfg_register axi_irq {
-  DATA_WIDTH 64
-  ADDR_WIDTH 32
+  CFG_DATA_WIDTH 64
+  AXI_ADDR_WIDTH 32
 } {
   aclk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn

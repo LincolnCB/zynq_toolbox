@@ -18,6 +18,13 @@ set --
 # If any subsequent command fails, exit immediately
 set -e
 
+# Alert if offline mode is set
+if [ "$OFFLINE" = "true" ]; then
+  echo "[PTLNX PROJECT] PetaLinux project will be built in OFFLINE mode"
+else
+  echo "[PTLNX PROJECT] PetaLinux project will be built in ONLINE mode"
+fi
+
 # Check the PetaLinux project prerequisites: XSA file and configuration files
 echo "[PTLNX PROJECT] Checking PetaLinux configuration files for ${PBV}"
 ./scripts/check/xsa_file.sh ${BRD} ${VER} ${PRJ} || exit 1

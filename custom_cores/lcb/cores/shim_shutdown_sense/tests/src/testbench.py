@@ -5,8 +5,8 @@ import random
 from shim_shutdown_sense_base import shim_shutdown_sense_base
 from shim_shutdown_sense_coverage import start_coverage_monitor
 
-async def setup_testbench(dut, clk_period=4, time_unit='ns'):
-    tb = shim_shutdown_sense_base(dut, clk_period, time_unit)
+async def setup_testbench(dut, connected=0b11111111, clk_period=4, time_unit='ns'):
+    tb = shim_shutdown_sense_base(dut, connected, clk_period, time_unit)
     return tb
 
 # Test to drive shutdown_sense to all high one by one
@@ -66,6 +66,28 @@ async def test_drive_single_bit_high(dut):
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
     monitor_and_scoreboard_task.kill()
+
+# Test to confirm no latching when shutdown_sense_connected is disabled for each channel
+@cocotb.test()
+async def test_no_latching_when_disabled(dut):
+    tb = await setup_testbench(dut, connected=0b00000000)
+    tb.dut._log.info("STARTING TEST: test_no_latching_when_disabled")
+
+    # Start the coverage monitor
+    start_coverage_monitor(dut)
+
+    # Have the DUT at a known state for each test
+    await tb.shutdown_sense_en_drive_low()
+
+    tb.dut._log.info(f"Shutdown sense connected == {int(dut.shutdown_sense_connected.value):08b}")
+    tb.dut._log.info(f"Shutdown sense at start  == {int(dut.shutdown_sense.value):08b}")
+    for i in range(8):
+        await RisingEdge(dut.clk)
+        dut.shutdown_sense_en.value = 1
+        dut.shutdown_sense_pin.value = 1
+        # No latching should occur since all channels are disabled
+        tb.dut._log.info(f"Shutdown sense after step {i} == {int(dut.shutdown_sense.value):08b}")
+        assert int(dut.shutdown_sense.value) == 0, "Expected no latching when all channels are disabled."
 
 # Test numerous random operations
 @cocotb.test()

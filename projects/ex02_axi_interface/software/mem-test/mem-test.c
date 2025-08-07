@@ -223,6 +223,8 @@ int main()
   munmap((void *)bram, sysconf(_SC_PAGESIZE));
 
   printf("Exiting program.\n");
+
+  return EXIT_SUCCESS; // Exit the program successfully
 }
 
 

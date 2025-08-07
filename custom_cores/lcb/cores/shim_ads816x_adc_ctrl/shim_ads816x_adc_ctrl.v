@@ -102,7 +102,7 @@ module shim_ads816x_adc_ctrl #(
   reg         wait_for_trig;
   reg         expect_next;
   // Delay timer
-  reg  [24:0] delay_timer;
+  reg  [25:0] delay_timer;
   // Sample order for ADC
   reg  [ 2:0] sample_order [0:7];
   // ADC control signals
@@ -173,9 +173,14 @@ module shim_ads816x_adc_ctrl #(
     if (!resetn || state == S_ERROR) begin
       wait_for_trig <= 1'b0;
       expect_next <= 1'b0;
-    end else if (next_cmd && ((cmd_word[31:30] == CMD_NO_OP) || (cmd_word[31:30] == CMD_ADC_RD))) begin
-      wait_for_trig <= cmd_word[TRIG_BIT];
-      expect_next <= cmd_word[CONT_BIT];
+    end else if (next_cmd) begin
+      if ((cmd_word[31:30] == CMD_NO_OP) || (cmd_word[31:30] == CMD_ADC_RD)) begin
+        wait_for_trig <= cmd_word[TRIG_BIT];
+        expect_next <= cmd_word[CONT_BIT];
+      end else begin
+        wait_for_trig <= 1'b0; // No wait for trigger for SET_ORD or CANCEL commands
+        expect_next <= 1'b0; // No expectation for next command for SET_ORD or CANCEL commands
+      end
     end
   end
   // Command word read enable
@@ -184,10 +189,10 @@ module shim_ads816x_adc_ctrl #(
 
   // Delay timer
   always @(posedge clk) begin
-    if (!resetn || state == S_ERROR) delay_timer <= 25'd0;
+    if (!resetn || state == S_ERROR) delay_timer <= 26'd0;
     else if (next_cmd
              && ((cmd_word[31:30] == CMD_ADC_RD) || (cmd_word[31:30] == CMD_NO_OP))
-             && !cmd_word[TRIG_BIT]) delay_timer <= cmd_word[24:0];
+             && !cmd_word[TRIG_BIT]) delay_timer <= cmd_word[25:0];
     else if (delay_timer > 0) delay_timer <= delay_timer - 1;
   end
 
@@ -323,7 +328,7 @@ module shim_ads816x_adc_ctrl #(
 
   //// SPI MISO
   // Start MISO synchonization
-  synchronizer start_miso_sync(
+  sync_incoherent start_miso_sync(
     .clk(miso_sck), // MISO clock
     .resetn(miso_resetn), // Reset for MISO clock domain
     .din(start_miso_mosi_clk), // Start MISO read signal in MOSI clock domain

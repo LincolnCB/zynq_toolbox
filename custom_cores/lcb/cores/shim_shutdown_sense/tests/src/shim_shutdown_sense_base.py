@@ -4,7 +4,7 @@ from cocotb.triggers import RisingEdge, ReadOnly, ReadWrite
 import random
 
 class shim_shutdown_sense_base:
-    def __init__(self, dut, clk_period=4, time_unit='ns'):
+    def __init__(self, dut, connected=0b11111111, clk_period=4, time_unit='ns'):
         self.dut = dut
         self.clk_period = clk_period
         self.time_unit = time_unit
@@ -14,11 +14,14 @@ class shim_shutdown_sense_base:
 
         # Initialize input signals
         self.dut.shutdown_sense_pin.value = 0
+        self.dut.shutdown_sense_connected.value = connected
 
     async def shutdown_sense_en_drive_low(self):
         """Drive the shutdown sense en low to initialize `shutdown_sense_sel` to `000` and clear the `shutdown_sense` register."""
         await RisingEdge(self.dut.clk)
         self.dut.shutdown_sense_en.value = 0
+        await RisingEdge(self.dut.clk)
+        await RisingEdge(self.dut.clk)
         self.dut._log.info("DUT now at a known STATE.")
 
     async def monitor_and_scoreboard(self):

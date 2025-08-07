@@ -23,6 +23,11 @@ module fifo_async #(
   output wire                   almost_empty
 );
 
+  // Cap ALMOST_FULL_THRESHOLD to be less than FIFO depth
+  localparam [ADDR_WIDTH:0] ALMOST_FULL_THRESHOLD_CAPPED = (ALMOST_FULL_THRESHOLD < (1 << ADDR_WIDTH)) ? ALMOST_FULL_THRESHOLD[ADDR_WIDTH:0] : (1 << ADDR_WIDTH) - 1;
+  localparam [ADDR_WIDTH:0] ALMOST_EMPTY_THRESHOLD_CAPPED = (ALMOST_EMPTY_THRESHOLD < (1 << ADDR_WIDTH)) ? ALMOST_EMPTY_THRESHOLD[ADDR_WIDTH:0] : (1 << ADDR_WIDTH) - 1;
+  
+
   // Function to convert binary to Gray code
   function [ADDR_WIDTH:0] binary_to_gray(input [ADDR_WIDTH:0] bin);
     binary_to_gray = (bin >> 1) ^ bin;
@@ -74,7 +79,7 @@ module fifo_async #(
   end
 
   // Read logic
-  always @* rd_ptr_bin_next = rd_ptr_bin + (rd_en & ~empty);
+  always @* rd_ptr_bin_next = rd_ptr_bin + {{ADDR_WIDTH{1'b0}}, (rd_en & ~empty)};
   always @(posedge rd_clk or negedge rd_rst_n) begin
     if (!rd_rst_n) begin
       rd_ptr_bin  <= 0;
@@ -124,12 +129,12 @@ module fifo_async #(
   assign fifo_count_wr_clk = wr_ptr_bin - rd_ptr_bin_wr_clk;
 
   // since the ptrs wrap circularily we need to be very careful with the subtractions. Best to have a test
-  assign almost_full = (fifo_count_wr_clk >= ((1 << ADDR_WIDTH) - ALMOST_FULL_THRESHOLD));
+  assign almost_full = (fifo_count_wr_clk >= ((1 << ADDR_WIDTH) - ALMOST_FULL_THRESHOLD_CAPPED));
 
   // ALMOST EMPTY calculation is done in read clock domain
   assign fifo_count_rd_clk = wr_ptr_bin_rd_clk - rd_ptr_bin;
 
-  assign almost_empty = (fifo_count_rd_clk <= ALMOST_EMPTY_THRESHOLD);
+  assign almost_empty = (fifo_count_rd_clk <= ALMOST_EMPTY_THRESHOLD_CAPPED);
 
 endmodule
 

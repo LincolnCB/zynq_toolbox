@@ -159,7 +159,7 @@ Usage:
 ```bash
 ./scripts/check/kmod_src.sh <board_name> <board_version> <project_name> [--full]
 ```
-Check for the validity of the `kernel_modules` file in the `projects/<project_name>/cfg/<board_name>/<board_version>/petalinux/` directory if it exists, which indicates which kernel modules should be built and included from the `kernel_modules/` directory.
+Check for the validity of the `kernel_modules` file in the `projects/<project_name>/cfg/<board_name>/<board_version>/petalinux/[petalinux_version]/` directory if it exists, which indicates which kernel modules should be built and included from the `kernel_modules/` directory.
 
 #### Minimum checks:
 - [`project_dir.sh`](#project_dirsh)

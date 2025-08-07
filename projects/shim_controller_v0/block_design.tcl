@@ -35,10 +35,10 @@ init_ps ps_0 {
 }
 
 # Create xlconstant (default value 1) to hold reset high (active low)
-cell xilinx.com:ip:xlconstant const_0
+cell xilinx.com:ip:xlconstant const_1
 # Create proc_sys_reset
 cell xilinx.com:ip:proc_sys_reset:5.0 rst_0 {} {
-  ext_reset_in const_0/dout
+  ext_reset_in const_1/dout
 }
 
 ## LCB: Make single-ended input for snickerdoodle

@@ -1,15 +1,17 @@
-***Updated 2025-06-18***
+***Updated 2024-08-01***
 # SPI Configuration Synchronization Core
 
-The `shim_spi_cfg_sync` module synchronizes configuration signals from the AXI clock domain to the SPI clock domain, ensuring reliable transfer and stable updates of configuration values.
+The `shim_spi_cfg_sync` module synchronizes configuration signals from the AXI clock domain to the SPI clock domain.
 
 ## Inputs and Outputs
 
 ### Inputs
 
 - **Clocks and Reset**
-  - `spi_clk`: SPI clock signal.
-  - `sync_resetn`: Active-low reset signal for the synchronization logic.
+  - `aclk`: AXI domain clock signal.
+  - `aresetn`: Active-low reset for AXI domain.
+  - `spi_clk`: SPI domain clock signal.
+  - `spi_resetn`: Active-low reset for SPI domain.
 
 - **AXI Domain Configuration Inputs**
   - `integ_thresh_avg [14:0]`: Integration threshold average configuration.
@@ -21,21 +23,23 @@ The `shim_spi_cfg_sync` module synchronizes configuration signals from the AXI c
 ### Outputs
 
 - **SPI Domain Synchronized Outputs**
-  - `integ_thresh_avg_stable [14:0]`: Synchronized and stable integration threshold average.
-  - `integ_window_stable [31:0]`: Synchronized and stable integration window configuration.
-  - `integ_en_stable`: Synchronized and stable integration enable signal.
-  - `spi_en_stable`: Synchronized and stable SPI enable signal.
-  - `block_buffers_stable`: Synchronized and stable block buffers enable signal.
+  - `integ_thresh_avg_sync [14:0]`: Synchronized integration threshold average.
+  - `integ_window_sync [31:0]`: Synchronized integration window.
+  - `integ_en_sync`: Synchronized integration enable.
+  - `spi_en_sync`: Synchronized SPI enable.
+  - `block_buffers_sync`: Synchronized block buffers enable.
 
 ## Operation
 
-- Each AXI domain input is synchronized to the SPI clock domain using a 3-stage synchronizer with a stability check (`STABLE_COUNT=2`).
-- Each synchronizer generates a stability flag indicating when the synchronized value is stable.
-- When all configuration stability flags are asserted and `spi_en_sync` is high, the synchronized values are latched into the corresponding stable output registers.
-- The `block_buffers_stable` output is updated independently when its stability flag is asserted.
-- On synchronization reset (`sync_resetn` low), all stable output registers are cleared to their default values:
-  - `integ_thresh_avg_stable`: 0
-  - `integ_window_stable`: 0
-  - `integ_en_stable`: 0
-  - `spi_en_stable`: 0
-  - `block_buffers_stable`: 1
+- Each AXI domain input is synchronized to the SPI clock domain using the `sync_coherent` module.
+- Default values are provided for each output in case of reset:
+  - `integ_thresh_avg_sync`: 0x1000
+  - `integ_window_sync`: 0x00010000
+  - `integ_en_sync`: 0
+  - `spi_en_sync`: 0
+  - `block_buffers_sync`: 1
+
+## Notes
+
+- The `sync_coherent` module is used for each configuration signal to handle clock domain crossing.
+- For more details, refer to the Verilog source code.

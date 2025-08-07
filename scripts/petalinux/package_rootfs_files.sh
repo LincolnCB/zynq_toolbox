@@ -77,7 +77,7 @@ users=$(echo "$users" | grep -v '^root$')
 # Append the files from the rootfs_include directory into the home/<user> for each user using tar
 # Overwrite existing files
 echo "[PTLNX ROOTFS PKG] Adding files to the root filesystem for users"
-include_dir="../../../../../../../projects/${PRJ}/rootfs_include"
+include_dir="${REV_D_DIR}/projects/${PRJ}/rootfs_include"
 for user in $users; do
   echo "[PTLNX ROOTFS PKG] Including files for user: $user"
 

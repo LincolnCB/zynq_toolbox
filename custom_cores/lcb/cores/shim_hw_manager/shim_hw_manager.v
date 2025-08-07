@@ -226,7 +226,7 @@ module shim_hw_manager #(
             state <= S_POWER_ON_AMP_BRD;
             timer <= 0;
             n_shutdown_rst <= 0;
-          end else if (dac_boot_fail || adc_boot_fail || timer >= SPI_START_WAIT) begin
+          end else if (|dac_boot_fail || |adc_boot_fail || timer >= SPI_START_WAIT) begin
             // If the SPI subsystem is still off after the wait, or a channel failed to boot, halt the system
             state <= S_HALTED;
             timer <= 0;
@@ -235,10 +235,10 @@ module shim_hw_manager #(
             spi_clk_power_n <= 1;
             spi_en <= 0;
             // Set the status code based on the error condition
-            if (dac_boot_fail) begin
+            if (|dac_boot_fail) begin
               status_code <= STS_DAC_BOOT_FAIL;
               board_num <= extract_board_num(dac_boot_fail);
-            end else if (adc_boot_fail) begin
+            end else if (|adc_boot_fail) begin
               status_code <= STS_ADC_BOOT_FAIL;
               board_num <= extract_board_num(adc_boot_fail);
             end else begin
@@ -304,31 +304,31 @@ module shim_hw_manager #(
               // Pre-start configuration values
               || lock_viol
               // Shutdown sense
-              || shutdown_sense
+              || |shutdown_sense
               || ext_shutdown
               // Integrator threshold core
-              || over_thresh
-              || thresh_underflow
-              || thresh_overflow
+              || |over_thresh
+              || |thresh_underflow
+              || |thresh_overflow
               // Trigger buffer and commands
               || bad_trig_cmd
               || trig_cmd_buf_overflow
               || trig_data_buf_underflow
               || trig_data_buf_overflow
               // DAC buffers and commands
-              || bad_dac_cmd
-              || dac_cal_oob
-              || dac_val_oob
-              || dac_cmd_buf_underflow
-              || dac_cmd_buf_overflow
-              || unexp_dac_trig
+              || |bad_dac_cmd
+              || |dac_cal_oob
+              || |dac_val_oob
+              || |dac_cmd_buf_underflow
+              || |dac_cmd_buf_overflow
+              || |unexp_dac_trig
               // ADC buffers and commands
-              || bad_adc_cmd
-              || adc_cmd_buf_underflow
-              || adc_cmd_buf_overflow
-              || adc_data_buf_underflow
-              || adc_data_buf_overflow
-              || unexp_adc_trig
+              || |bad_adc_cmd
+              || |adc_cmd_buf_underflow
+              || |adc_cmd_buf_overflow
+              || |adc_data_buf_underflow
+              || |adc_data_buf_overflow
+              || |unexp_adc_trig
           ) begin
             //// Set the status code based on the error condition
             // Basic system
@@ -336,21 +336,21 @@ module shim_hw_manager #(
             // Pre-start configuration values
             else if (lock_viol) status_code <= STS_LOCK_VIOL;
             // Shutdown sense
-            else if (shutdown_sense) begin
+            else if (|shutdown_sense) begin
               status_code <= STS_SHUTDOWN_SENSE;
               board_num <= extract_board_num(shutdown_sense);
             end
             else if (ext_shutdown) status_code <= STS_EXT_SHUTDOWN;
             // Integrator threshold core
-            else if (over_thresh) begin
+            else if (|over_thresh) begin
               status_code <= STS_OVER_THRESH;
               board_num <= extract_board_num(over_thresh);
             end
-            else if (thresh_underflow) begin
+            else if (|thresh_underflow) begin
               status_code <= STS_THRESH_UNDERFLOW;
               board_num <= extract_board_num(thresh_underflow);
             end
-            else if (thresh_overflow) begin
+            else if (|thresh_overflow) begin
               status_code <= STS_THRESH_OVERFLOW;
               board_num <= extract_board_num(thresh_overflow);
             end
@@ -360,52 +360,52 @@ module shim_hw_manager #(
             else if (trig_data_buf_underflow) status_code <= STS_TRIG_DATA_BUF_UNDERFLOW;
             else if (trig_data_buf_overflow) status_code <= STS_TRIG_DATA_BUF_OVERFLOW;
             // DAC buffers and commands
-            else if (bad_dac_cmd) begin
+            else if (|bad_dac_cmd) begin
               status_code <= STS_BAD_DAC_CMD;
               board_num <= extract_board_num(bad_dac_cmd);
             end
-            else if (dac_cal_oob) begin
+            else if (|dac_cal_oob) begin
               status_code <= STS_DAC_CAL_OOB;
               board_num <= extract_board_num(dac_cal_oob);
             end
-            else if (dac_val_oob) begin
+            else if (|dac_val_oob) begin
               status_code <= STS_DAC_VAL_OOB;
               board_num <= extract_board_num(dac_val_oob);
             end
-            else if (dac_cmd_buf_underflow) begin
+            else if (|dac_cmd_buf_underflow) begin
               status_code <= STS_DAC_BUF_UNDERFLOW;
               board_num <= extract_board_num(dac_cmd_buf_underflow);
             end
-            else if (dac_cmd_buf_overflow) begin
+            else if (|dac_cmd_buf_overflow) begin
               status_code <= STS_DAC_BUF_OVERFLOW;
               board_num <= extract_board_num(dac_cmd_buf_overflow);
             end
-            else if (unexp_dac_trig) begin
+            else if (|unexp_dac_trig) begin
               status_code <= STS_UNEXP_DAC_TRIG;
               board_num <= extract_board_num(unexp_dac_trig);
             end
             // ADC buffers and commands
-            else if (bad_adc_cmd) begin
+            else if (|bad_adc_cmd) begin
               status_code <= STS_BAD_ADC_CMD;
               board_num <= extract_board_num(bad_adc_cmd);
             end
-            else if (adc_cmd_buf_underflow) begin
+            else if (|adc_cmd_buf_underflow) begin
               status_code <= STS_ADC_CMD_BUF_UNDERFLOW;
               board_num <= extract_board_num(adc_cmd_buf_underflow);
             end
-            else if (adc_cmd_buf_overflow) begin
+            else if (|adc_cmd_buf_overflow) begin
               status_code <= STS_ADC_CMD_BUF_OVERFLOW;
               board_num <= extract_board_num(adc_cmd_buf_overflow);
             end
-            else if (adc_data_buf_underflow) begin
+            else if (|adc_data_buf_underflow) begin
               status_code <= STS_ADC_DATA_BUF_UNDERFLOW;
               board_num <= extract_board_num(adc_data_buf_underflow);
             end
-            else if (adc_data_buf_overflow) begin
+            else if (|adc_data_buf_overflow) begin
               status_code <= STS_ADC_DATA_BUF_OVERFLOW;
               board_num <= extract_board_num(adc_data_buf_overflow);
             end
-            else if (unexp_adc_trig) begin
+            else if (|unexp_adc_trig) begin
               status_code <= STS_UNEXP_ADC_TRIG;
               board_num <= extract_board_num(unexp_adc_trig);
             end
@@ -434,6 +434,21 @@ module shim_hw_manager #(
             unlock_cfg <= 1;
           end
         end // S_HALTED
+
+        default: begin
+          state <= S_HALTED; // Default to halted state
+          timer <= 0;
+          n_shutdown_force <= 0;
+          n_shutdown_rst <= 1;
+          shutdown_sense_en <= 0;
+          unlock_cfg <= 1;
+          spi_clk_power_n <= 1;
+          spi_en <= 0;
+          block_buffers <= 1;
+          status_code <= STS_EMPTY;
+          board_num <= 0;
+          ps_interrupt <= 1;
+        end // default
 
       endcase // case (state)
     end // if (rst) else

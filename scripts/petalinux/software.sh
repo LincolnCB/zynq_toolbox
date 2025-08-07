@@ -18,6 +18,7 @@ set --
 set -e
 
 # Check that the PetaLinux project and its dependencies exist
+./scripts/check/project_dir.sh ${BRD} ${VER} ${PRJ}
 ./scripts/check/petalinux_project.sh ${BRD} ${VER} ${PRJ}
 
 # Check for a software folder
@@ -34,7 +35,7 @@ source ${PETALINUX_PATH}/settings.sh
 cd tmp/${BRD}/${VER}/${PRJ}/petalinux
 
 # Set the software path
-SW_PATH="../../../../../projects/${PRJ}/software"
+SW_PATH="${REV_D_DIR}/projects/${PRJ}/software"
 
 # For each software folder, build the software
 echo "[PTLNX SOFTWARE] Building software for ${PBV}"
@@ -73,16 +74,42 @@ for SW_DIR in ${SW_PATH}/*; do
     # Create the app directory and copy the source files in
     echo "[PTLNX SOFTWARE] Building ${SAN_SW_NAME}"
 
-    # Get a list of .c files that aren't the top file
-    SRC_FILES=$(find "${SW_DIR}" -type f -name "*.c" ! -name "${SW_NAME}.c")
+    # Get a list of .c and .h files that aren't the top file
+    C_FILES=$(find "${SW_DIR}" -type f -name "*.c" ! -name "${SW_NAME}.c")
+    H_FILES=$(find "${SW_DIR}" -type f -name "*.h")
+    SRC_FILES=""
+    if [ -n "${C_FILES}" ]; then
+      SRC_FILES+=" ${C_FILES}"
+    fi
+    if [ -n "${H_FILES}" ]; then
+      SRC_FILES+=" ${H_FILES}"
+    fi
     if [ -z "${SRC_FILES}" ]; then
       petalinux-create apps --template c --name ${SAN_SW_NAME} --enable
     else
       petalinux-create apps --template c --name ${SAN_SW_NAME} --srcuri "${SRC_FILES}" --enable
+      # Update SRC_URI in the .bb file to include Makefile and top .c file
+      BBFILE="project-spec/meta-user/recipes-apps/${SAN_SW_NAME}/${SAN_SW_NAME}.bb"
+      sed -i "s|^SRC_URI *= *\"|SRC_URI = \"file://Makefile file://${SAN_SW_NAME}.c |" "${BBFILE}"
     fi
 
     # Copy the top file to the app directory and replace the existing one
     cp "${SW_DIR}/${SW_NAME}.c" "project-spec/meta-user/recipes-apps/${SAN_SW_NAME}/files/${SAN_SW_NAME}.c"
+
+    # Update the Makefile to include all object files
+    MAKEFILE="project-spec/meta-user/recipes-apps/${SAN_SW_NAME}/files/Makefile"
+    if [ -f "${MAKEFILE}" ]; then
+      # Build the list of object files: all .c files (basename, .c -> .o)
+      OBJ_FILES="${SAN_SW_NAME}.o"
+      for SRC in ${C_FILES}; do
+      OBJ_NAME=$(basename "${SRC}" .c).o
+      OBJ_FILES="${OBJ_FILES} ${OBJ_NAME}"
+      done
+      # Remove leading space
+      OBJ_FILES=$(echo "${OBJ_FILES}" | sed 's/^ *//')
+      # Replace the APP_OBJS line
+      sed -i "s|^APP_OBJS *=.*$|APP_OBJS = ${OBJ_FILES}|" "${MAKEFILE}"
+    fi
   fi
 
   if [ ${ANY_SW} -eq 0 ]; then

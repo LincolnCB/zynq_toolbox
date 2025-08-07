@@ -57,11 +57,15 @@ ifeq ($(PETALINUX_VERSION),)
 $(error PetaLinux version environment variable PETALINUX_VERSION is not set)
 endif
 
-# Check if the target is only "clean" targets that don't care about the project or board to avoid checking the project and board.
-CLEAN_ONLY = false
+# Check if the project and board matter for the make targets
+#   For instance, if the user runs 'make clean' or 'make help', the project and board do not matter
+#   and don't need to be checked
+PROJECT_MATTERS = true
+# If no targets, then the project and board do matter
 ifneq ($(),$(MAKECMDGOALS))
-ifeq ($(),$(filter-out clean_sd clean_build clean_tests clean_test_results clean_all,$(MAKECMDGOALS)))
-CLEAN_ONLY = true
+# If some targets are specified, check if none of them require the project and board
+ifeq ($(),$(filter-out help clean_sd clean_build clean_tests clean_test_results clean_all,$(MAKECMDGOALS)))
+PROJECT_MATTERS = false
 endif
 endif
 
@@ -72,8 +76,8 @@ else
 $(info ---- Making "$(MAKECMDGOALS)")
 endif
 
-# Run some checks and setup, but only if there are targets other than clean or clean_all
-ifneq (true, $(CLEAN_ONLY)) # Clean check
+# Run some checks and setup if the project and board matter for the make targets
+ifeq (true, $(PROJECT_MATTERS)) # Check if the project and board matter
 $(info ----  for project "$(PROJECT)" and board "$(BOARD)" version $(BOARD_VER))
 
 # Check the board, board version, and project
@@ -351,21 +355,24 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit: tmp/$(BOARD)/$(BOARD_VER)/$(
 #   Note the `;` and `\` that make these steps a single command line, as make runs each line separately.
 tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr scripts/vivado/hw_def.tcl scripts/vivado/utilization.tcl
 	@./scripts/make/status.sh "MAKING HW DEF: $(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa"
-	-$(VIVADO) -source scripts/vivado/hw_def.tcl -tclargs $(BOARD)/$(BOARD_VER)/$(PROJECT); \
+	$(VIVADO) -source scripts/vivado/hw_def.tcl -tclargs $(BOARD)/$(BOARD_VER)/$(PROJECT); \
 		RESULT=$$?; \
 		./scripts/make/status.sh "WRITING UTILIZATION: $(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa"; \
 		$(VIVADO) -source scripts/vivado/utilization.tcl -tclargs $(BOARD)/$(BOARD_VER)/$(PROJECT); \
-		if [ $$RESULT -ne 0 ]; then exit $$RESULT; fi
+		if [ $$RESULT -ne 0 ]; then \
+			echo "Error: Vivado hw_def.tcl failed with exit code $$RESULT"; \
+			exit $$RESULT; \
+		fi
 
 # The PetaLinux project
 # Requires the hardware definition file
 # Built using the scripts/petalinux/project.sh script
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION)/config.patch projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION)/rootfs_config.patch scripts/petalinux/project.sh scripts/petalinux/software.sh scripts/petalinux/kernel_modules.sh scripts/petalinux/make_offline.sh
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa $(shell find projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION) -type f) $(shell find projects/$(PROJECT)/rootfs_include -type f) $(shell find projects/$(PROJECT)/software -type f) $(shell find scripts/petalinux -type f)
 	@./scripts/make/status.sh "MAKING CONFIGURED PETALINUX PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
-	@if [ $(OFFLINE) = "true" ]; then scripts/make/status.sh "PetaLinux OFFLINE build"; fi
 	scripts/petalinux/project.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(OFFLINE)
 	scripts/petalinux/software.sh $(BOARD) $(BOARD_VER) $(PROJECT)
 	scripts/petalinux/kernel_modules.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+	scripts/petalinux/device_tree.sh $(BOARD) $(BOARD_VER) $(PROJECT)
 	
 
 # The compressed root filesystem

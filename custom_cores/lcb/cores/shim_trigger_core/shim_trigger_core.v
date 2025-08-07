@@ -61,6 +61,7 @@ module shim_trigger_core #(
 
   // Command execution
   reg [28:0] delay_counter;
+  reg [28:0] lockout_counter;
   reg [28:0] trig_counter;
   reg [28:0] trig_lockout;
   wire do_trig;
@@ -84,8 +85,8 @@ module shim_trigger_core #(
                           : (cmd_type == CMD_CANCEL || cmd_type == CMD_FORCE_TRIG) ? S_IDLE
                           : (cmd_type == CMD_SET_LOCKOUT) ? (cmd_val >= TRIGGER_LOCKOUT_MIN ? S_IDLE : S_ERROR) // Lockout must be non-zero
                           : (cmd_type == CMD_SYNC_CH) ? (all_waiting ? S_IDLE : S_SYNC_CH) // If all channels are already waiting, go right to idle
-                          : (cmd_type == CMD_EXPECT_EXT_TRIG) ? ((|cmd_val) ? S_EXPECT_TRIG : S_IDLE) // Zero triggers goes right to idle
-                          : (cmd_type == CMD_DELAY) ? ((|cmd_val) ? S_DELAY : S_IDLE) // Zero delay goes right to idle
+                          : (cmd_type == CMD_EXPECT_EXT_TRIG) ? ((cmd_val != 0) ? S_EXPECT_TRIG : S_IDLE) // Zero triggers goes right to idle
+                          : (cmd_type == CMD_DELAY) ? ((cmd_val != 0) ? S_DELAY : S_IDLE) // Zero delay goes right to idle
                           : S_ERROR;
   // State transition logic
   always @(posedge clk) begin
@@ -105,18 +106,23 @@ module shim_trigger_core #(
     else if (next_cmd && cmd_type == CMD_EXPECT_EXT_TRIG) trig_counter <= cmd_val;
     else if (state == S_EXPECT_TRIG && trig_counter > 0 && do_trig) trig_counter <= trig_counter - 1;
   end
-  // Delay counter, used in delay state and for external trigger lockout
+  // Delay counter, used in delay state
   always @(posedge clk) begin
     if (!resetn || cancel || state == S_ERROR) delay_counter <= 0;
     else if (next_cmd && cmd_type == CMD_DELAY) delay_counter <= cmd_val;
-    else if (state == S_EXPECT_TRIG && do_trig) delay_counter <= trig_lockout; // Set to lockout delay after trigger
     else if (delay_counter > 0) delay_counter <= delay_counter - 1;
+  end
+  // Lockout counter, used to prevent immediate re-triggering
+  always @(posedge clk) begin
+    if (!resetn || state == S_ERROR) lockout_counter <= 0;
+    else if (state == S_EXPECT_TRIG && do_trig) lockout_counter <= trig_lockout; // Set to trig_lockout value after trigger
+    else if (lockout_counter > 0) lockout_counter <= lockout_counter - 1; // Decrement lockout counter
   end
   // Trigger pulse generation
   assign do_trig = (next_cmd && cmd_type == CMD_FORCE_TRIG) // Force trigger
                     || (next_cmd && cmd_type == CMD_SYNC_CH && all_waiting) // Sync channels edge case where all channels are already waiting
                     || (state == S_SYNC_CH && all_waiting) // Sync channels when all are waiting
-                    || (state == S_EXPECT_TRIG && delay_counter == 0 && ext_trig); // External trigger when expected and lockout is done
+                    || (state == S_EXPECT_TRIG && lockout_counter == 0 && ext_trig); // External trigger when expected and lockout is done
   always @(posedge clk) begin
     if (!resetn || cancel || state == S_ERROR) trig_out <= 0;
     else trig_out <= do_trig; // Trigger pulse

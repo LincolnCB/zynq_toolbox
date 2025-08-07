@@ -1,7 +1,7 @@
-***Updated 2025-06-18***
+***Updated 2024-08-01***
 # SPI System Status Synchronization Core
 
-The `shim_spi_sts_sync` module synchronizes a variety of status signals from the SPI domain into the AXI (PS) clock domain, ensuring reliable and glitch-free transfer of asynchronous status information.
+The `shim_spi_sts_sync` module synchronizes a variety of status signals from the SPI clock domain into the AXI (PS) clock domain.
 
 ## Inputs and Outputs
 
@@ -10,6 +10,8 @@ The `shim_spi_sts_sync` module synchronizes a variety of status signals from the
 - **Clocks and Reset**
   - `aclk`: AXI (PS) clock signal.
   - `aresetn`: Active-low reset signal for the AXI domain.
+  - `spi_clk`: SPI domain clock signal.
+  - `spi_resetn`: Active-low reset signal for the SPI domain.
 
 - **SPI Domain Status Inputs**
   - `spi_off`: Indicates the SPI subsystem is powered off.
@@ -33,27 +35,26 @@ The `shim_spi_sts_sync` module synchronizes a variety of status signals from the
 ### Outputs
 
 - **AXI Domain Synchronized Outputs**
-  - `spi_off_stable`: Synchronized and stable SPI off status.
-  - `over_thresh_stable [7:0]`: Synchronized and stable integrator over-threshold status.
-  - `thresh_underflow_stable [7:0]`: Synchronized and stable integrator threshold underflow status.
-  - `thresh_overflow_stable [7:0]`: Synchronized and stable integrator threshold overflow status.
-  - `bad_trig_cmd_stable`: Synchronized and stable bad trigger command status.
-  - `trig_data_buf_overflow_stable`: Synchronized and stable trigger data buffer overflow status.
-  - `dac_boot_fail_stable [7:0]`: Synchronized and stable DAC boot failure status.
-  - `bad_dac_cmd_stable [7:0]`: Synchronized and stable bad DAC command status.
-  - `dac_cal_oob_stable [7:0]`: Synchronized and stable DAC calibration out-of-bounds status.
-  - `dac_val_oob_stable [7:0]`: Synchronized and stable DAC value out-of-bounds status.
-  - `dac_cmd_buf_underflow_stable [7:0]`: Synchronized and stable DAC command buffer underflow status.
-  - `unexp_dac_trig_stable [7:0]`: Synchronized and stable unexpected DAC trigger status.
-  - `adc_boot_fail_stable [7:0]`: Synchronized and stable ADC boot failure status.
-  - `bad_adc_cmd_stable [7:0]`: Synchronized and stable bad ADC command status.
-  - `adc_cmd_buf_underflow_stable [7:0]`: Synchronized and stable ADC command buffer underflow status.
-  - `adc_data_buf_overflow_stable [7:0]`: Synchronized and stable ADC data buffer overflow status.
-  - `unexp_adc_trig_stable [7:0]`: Synchronized and stable unexpected ADC trigger status.
+  - `spi_off_sync`: Synchronized SPI off status.
+  - `over_thresh_sync [7:0]`: Synchronized integrator over-threshold status.
+  - `thresh_underflow_sync [7:0]`: Synchronized integrator threshold underflow status.
+  - `thresh_overflow_sync [7:0]`: Synchronized integrator threshold overflow status.
+  - `bad_trig_cmd_sync`: Synchronized bad trigger command status.
+  - `trig_data_buf_overflow_sync`: Synchronized trigger data buffer overflow status.
+  - `dac_boot_fail_sync [7:0]`: Synchronized DAC boot failure status.
+  - `bad_dac_cmd_sync [7:0]`: Synchronized bad DAC command status.
+  - `dac_cal_oob_sync [7:0]`: Synchronized DAC calibration out-of-bounds status.
+  - `dac_val_oob_sync [7:0]`: Synchronized DAC value out-of-bounds status.
+  - `dac_cmd_buf_underflow_sync [7:0]`: Synchronized DAC command buffer underflow status.
+  - `unexp_dac_trig_sync [7:0]`: Synchronized unexpected DAC trigger status.
+  - `adc_boot_fail_sync [7:0]`: Synchronized ADC boot failure status.
+  - `bad_adc_cmd_sync [7:0]`: Synchronized bad ADC command status.
+  - `adc_cmd_buf_underflow_sync [7:0]`: Synchronized ADC command buffer underflow status.
+  - `adc_data_buf_overflow_sync [7:0]`: Synchronized ADC data buffer overflow status.
+  - `unexp_adc_trig_sync [7:0]`: Synchronized unexpected ADC trigger status.
 
 ## Operation
 
-- Each input signal from the SPI domain is synchronized to the AXI clock domain using a 3-stage synchronizer with a stability check.
-- For each signal, a stability flag is generated to indicate when the synchronized value is stable.
-- When the stability flag is asserted, the synchronized value is latched into the corresponding stable output register.
-- On AXI domain reset (`aresetn` low), all stable output registers are cleared to their default values (zeros).
+- Each input signal from the SPI domain is synchronized to the AXI clock domain using the `sync_coherent` module.
+- On AXI domain reset (`aresetn` low), all synchronized output signals are set to their default values (zeros).
+

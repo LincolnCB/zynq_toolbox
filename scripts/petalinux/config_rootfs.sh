@@ -72,7 +72,7 @@ cd petalinux
 
 # Initialize the project with the hardware description
 echo "[PTLNX ROOTFS CFG] Initializing default PetaLinux system configuration"
-petalinux-config --get-hw-description ../../${BRD}/${VER}/${PRJ}/hw_def.xsa --silentconfig
+petalinux-config --get-hw-description ${REV_D_DIR}/tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa --silentconfig
 
 # Check that the PetaLinux version matches the environment variable
 PETALINUX_CONF_PATH="components/yocto/layers/meta-petalinux/conf/distro/include/petalinux-version.conf"

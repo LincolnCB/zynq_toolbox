@@ -21,10 +21,10 @@ set -e
 ./scripts/check/kmod_src.sh ${BRD} ${VER} ${PRJ}
 
 # Check for a kernel_modules file
-KERNEL_MODULES_FILE="projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/kernel_modules"
-if [ ! -f "${KERNEL_MODULES_FILE}" ]; then
+REL_KERNEL_MODULES_PATH="projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/kernel_modules"
+if [ ! -f "${REL_KERNEL_MODULES_PATH}" ]; then
   echo "[PTLNX KMODS] INFO: No kernel_modules file found. Skipping kernel module checks."
-  echo "  Path: ${KERNEL_MODULES_FILE}"
+  echo "  Path: ${REL_KERNEL_MODULES_PATH}"
   exit 0
 fi
 
@@ -41,7 +41,7 @@ while IFS= read -r MOD; do
   petalinux-create modules --name ${MOD} --enable --force
 
   # Copy the source files into the kernel module directory
-  SRC_DIR="../../../../../kernel_modules/${MOD}/petalinux/${PETALINUX_VERSION}"
+  SRC_DIR="${REV_D_DIR}/kernel_modules/${MOD}/petalinux"
   KMOD_DIR="project-spec/meta-user/recipes-modules/${MOD}/files"
 
   # Copy the makefile and top source file, overwriting the default ones
@@ -51,6 +51,6 @@ while IFS= read -r MOD; do
   # Copy any additional source files, excluding those two
   find "${SRC_DIR}" -type f ! -name "Makefile" ! -name "${MOD}.c" -exec cp -f {} "${KMOD_DIR}/" \;
 
-done < ../../../../../${KERNEL_MODULES_FILE}
+done < ${REV_D_DIR}/${REL_KERNEL_MODULES_PATH}
 
 

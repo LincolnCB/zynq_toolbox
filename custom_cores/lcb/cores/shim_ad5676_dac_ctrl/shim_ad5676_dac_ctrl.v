@@ -92,7 +92,7 @@ module shim_ad5676_dac_ctrl #(
   reg         wait_for_trig;
   reg         expect_next;
   // Delay timer
-  reg  [24:0] delay_timer;
+  reg  [25:0] delay_timer;
   // Calibration
   reg  signed [15:0] cal_val [0:7]; // Calibration values for each channel
   // DAC MOSI control signals
@@ -172,10 +172,16 @@ module shim_ad5676_dac_ctrl #(
       do_ldac <= 1'b0;
       wait_for_trig <= 1'b0;
       expect_next <= 1'b0;
-    end else if (next_cmd && ((cmd_word[31:30] == CMD_NO_OP ) || (cmd_word[31:30] == CMD_DAC_WR))) begin
-      do_ldac <= cmd_word[LDAC_BIT]; // Set do_ldac based on command word
-      wait_for_trig <= cmd_word[TRIG_BIT]; // Set wait_for_trig based on command word
-      expect_next <= cmd_word[CONT_BIT]; // Set expect_next based on command word
+    end else if (next_cmd) begin
+      if ((cmd_word[31:30] == CMD_NO_OP ) || (cmd_word[31:30] == CMD_DAC_WR)) begin
+        do_ldac <= cmd_word[LDAC_BIT]; // Set do_ldac based on command word
+        wait_for_trig <= cmd_word[TRIG_BIT]; // Set wait_for_trig based on command word
+        expect_next <= cmd_word[CONT_BIT]; // Set expect_next based on command word
+      end else begin
+        do_ldac <= 1'b0; // Reset do_ldac if not a NO_OP or DAC_WR command
+        wait_for_trig <= 1'b0; // Reset wait_for_trig if not a NO_OP or DAC_WR command
+        expect_next <= 1'b0; // Reset expect_next if not a NO_OP or DAC_WR command
+      end
     end
   end
   // Command word read enable
@@ -185,11 +191,11 @@ module shim_ad5676_dac_ctrl #(
 
   //// Delay timer
   always @(posedge clk) begin
-    if (!resetn || state == S_ERROR) delay_timer <= 25'd0;
+    if (!resetn || state == S_ERROR) delay_timer <= 26'd0;
     // If the next command is a DAC write or no-op with a delay wait, load the delay timer
     else if (next_cmd 
              && ((cmd_word[31:30] == CMD_DAC_WR) || (cmd_word[31:30] == CMD_NO_OP)) 
-             && !cmd_word[TRIG_BIT]) delay_timer <= cmd_word[24:0]; // Load delay timer with delay value from command word
+             && !cmd_word[TRIG_BIT]) delay_timer <= cmd_word[25:0]; // Load delay timer with delay value from command word
     else if (delay_timer > 0) delay_timer <= delay_timer - 1; // Decrement delay timer to zero if nonzero
   end
 
@@ -413,7 +419,7 @@ module shim_ad5676_dac_ctrl #(
 
   //// SPI MISO control
   // Start MISO synchonization
-  synchronizer start_miso_sync(
+  sync_incoherent start_miso_sync(
     .clk(miso_sck), // MISO clock
     .resetn(miso_resetn), // Reset for MISO clock domain
     .din(start_miso_mosi_clk), // Start MISO read signal in MOSI clock domain

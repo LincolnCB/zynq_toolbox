@@ -48,8 +48,8 @@ cell xilinx.com:ip:smartconnect:1.0 axi_smc {
 # - Connect the axi_cfg to the processing system's GP AXI 0 interface through the 
 #    first AXI4 SmartConnect Manager/Master port
 cell pavel-demin:user:axi_cfg_register axi_cfg {
-  DATA_WIDTH 96
-  ADDR_WIDTH 32
+  CFG_DATA_WIDTH 96
+  AXI_ADDR_WIDTH 32
 } {
   aclk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn
@@ -71,8 +71,8 @@ addr 0x40000000 128 axi_cfg/S_AXI ps/M_AXI_GP0
 # - Connect the axi_sts to the processing system's GP AXI 0 interface through the 
 #    second AXI4 SmartConnect Manager/Master port
 cell pavel-demin:user:axi_sts_register axi_sts {
-  DATA_WIDTH 64
-  ADDR_WIDTH 32
+  STS_DATA_WIDTH 64
+  AXI_ADDR_WIDTH 32
 } {
   aclk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn

@@ -2,6 +2,7 @@
 
 module shim_shutdown_sense (
   input wire clk,
+  input wire [7:0] shutdown_sense_connected,
   input wire shutdown_sense_en,
   input wire shutdown_sense_pin,
   output reg [2:0] shutdown_sense_sel,
@@ -17,8 +18,8 @@ module shim_shutdown_sense (
       // Cycle through shutdown_sense_sel
       shutdown_sense_sel <= shutdown_sense_sel + 1;
 
-      // Latch the corresponding bit of shutdown_sense
-      if (shutdown_sense_pin) begin
+      // Latch the corresponding bit of shutdown_sense if connected on that channel
+      if (shutdown_sense_pin && shutdown_sense_connected[shutdown_sense_sel]) begin
         shutdown_sense[shutdown_sense_sel] <= 1'b1;
       end
     end

@@ -1,4 +1,16 @@
-@@ -194,17 +194,15 @@
+@@ -117,9 +117,8 @@
+ #
+ # Kernel Bootargs
+ #
+-CONFIG_SUBSYSTEM_BOOTARGS_AUTO=y
+-CONFIG_SUBSYSTEM_BOOTARGS_EARLYPRINTK=y
+-CONFIG_SUBSYSTEM_EXTRA_BOOTARGS=""
++# CONFIG_SUBSYSTEM_BOOTARGS_AUTO is not set
++CONFIG_SUBSYSTEM_USER_CMDLINE="console=ttyPS0,115200 earlycon root=/dev/mmcblk0p2 ro rootwait uio_pdrv_genirq.of_id=\"generic-uio\""
+ CONFIG_SUBSYSTEM_DEVICETREE_COMPILER_FLAGS="-@"
+ # CONFIG_SUBSYSTEM_DTB_OVERLAY is not set
+ # CONFIG_SUBSYSTEM_REMOVE_PL_DTB is not set
+@@ -194,17 +193,15 @@
  # Image Packaging Configuration
  #
  # CONFIG_SUBSYSTEM_ROOTFS_INITRAMFS is not set
@@ -20,9 +32,8 @@
  
  #
  # Firmware Version Configuration
-@@ -260,4 +258,4 @@
+@@ -260,4 +257,3 @@
  # User Layers
  #
  CONFIG_USER_LAYER_0=""
 -CONFIG_SUBSYSTEM_BOOTARGS_GENERATED="console=ttyPS0,115200 earlycon root=/dev/ram0 rw"
-+CONFIG_SUBSYSTEM_BOOTARGS_GENERATED="console=ttyPS0,115200 earlycon root=/dev/mmcblk0p2 ro rootwait"
