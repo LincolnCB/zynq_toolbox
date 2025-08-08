@@ -3,15 +3,10 @@
 module shim_axi_sys_ctrl #
 (
   parameter integer AXI_ADDR_WIDTH = 16,
-
-  // Integrator threshold average (+0)
   parameter integer INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT = 16384,
-  
-  // Integrator window (+4)
   parameter integer INTEGRATOR_WINDOW_DEFAULT = 5000000, // 100 ms at 50MHz
-
-  // Integrator enable (+8)
-  parameter integer INTEG_EN_DEFAULT = 1
+  parameter integer INTEGRATOR_EN_DEFAULT = 1,
+  parameter integer BOOT_TEST_SKIP_DEFAULT = 0 // Default to not skipping boot test for all 16 cores
 )
 (
   // System signals
@@ -21,17 +16,20 @@ module shim_axi_sys_ctrl #
   input  wire                       unlock,
 
   // Configuration outputs
+  output wire                sys_en,
+  output reg  [25:0]         buffer_reset,
   output reg  [14:0]         integ_thresh_avg,
   output reg  [31:0]         integ_window,
   output reg                 integ_en,
-  output wire                sys_en,
-  output reg  [25:0]         buffer_reset,
+  output reg  [15:0]         boot_test_skip,
 
   // Configuration bounds
+  output wire  sys_en_oob,
+  output wire  buffer_reset_oob,
   output wire  integ_thresh_avg_oob,
   output wire  integ_window_oob,
   output wire  integ_en_oob,
-  output wire  sys_en_oob,
+  output wire  boot_test_skip_oob,
   output reg   lock_viol,
 
   // AXI4-Line subordinate port
@@ -58,34 +56,49 @@ module shim_axi_sys_ctrl #
     for(clogb2 = 0; value > 0; clogb2 = clogb2 + 1) value = value >> 1;
   endfunction
 
-  // Localparams for MIN/MAX values
-  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_MIN = 1;
-  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_MAX = 15'h7FFF; // 15-bit unsigned max
-  localparam integer INTEGRATOR_WINDOW_MIN            = 2048;
-  localparam integer INTEGRATOR_WINDOW_MAX            = 32'hFFFFFFFF; // 32-bit unsigned max
+  // Localparams for bit offsets
+  localparam integer SYS_EN_32_OFFSET                       = 0;
+  localparam integer BUFFER_RESET_32_OFFSET                 = 1;
+  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET = 2;
+  localparam integer INTEGRATOR_WINDOW_32_OFFSET            = 3;
+  localparam integer INTEGRATOR_EN_32_OFFSET                = 4;
+  localparam integer BOOT_TEST_SKIP_32_OFFSET               = 5;
 
-  // Localparams for bit ranges (shifted after removing DAC divider)
-  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET = 0;
-  localparam integer INTEGRATOR_WINDOW_32_OFFSET            = 1;
-  localparam integer INTEGRATOR_EN_32_OFFSET                = 2;
-  localparam integer BUFFER_RESET_32_OFFSET                 = 3;
-  localparam integer SYS_EN_32_OFFSET                       = 4;
-
+  // Localparams for widths
+  localparam integer SYS_EN_WIDTH = 1;
+  localparam integer BUFFER_RESET_WIDTH = 26;
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_WIDTH = 15;
   localparam integer INTEGRATOR_WINDOW_WIDTH = 32;
-  localparam integer BUFFER_RESET_WIDTH = 26;
+  localparam integer INTEGRATOR_EN_WIDTH = 1;
+  localparam integer BOOT_TEST_SKIP_WIDTH = 16;
+
+  // Localparams for MIN/MAX values
+  localparam integer SYS_EN_MAX                       = {{SYS_EN_WIDTH{1'b1}}};
+  localparam integer BUFFER_RESET_MAX                 = {{BUFFER_RESET_WIDTH{1'b1}}};
+  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_MIN = {{(INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1){1'b0}}, 1'b1}; // Minimum is 1
+  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_MAX = {{INTEGRATOR_THRESHOLD_AVERAGE_WIDTH{1'b1}}};
+  localparam integer INTEGRATOR_WINDOW_MIN            = 2048;
+  localparam integer INTEGRATOR_WINDOW_MAX            = {{INTEGRATOR_WINDOW_WIDTH{1'b1}}};
+  localparam integer INTEGRATOR_EN_MAX                = {{INTEGRATOR_EN_WIDTH{1'b1}}};
+  localparam integer BOOT_TEST_SKIP_MAX               = {{BOOT_TEST_SKIP_WIDTH{1'b1}}};
 
   // Local capped default values
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT_CAPPED = 
     (INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT < INTEGRATOR_THRESHOLD_AVERAGE_MIN) ? INTEGRATOR_THRESHOLD_AVERAGE_MIN :
     (INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT > INTEGRATOR_THRESHOLD_AVERAGE_MAX) ? INTEGRATOR_THRESHOLD_AVERAGE_MAX :
     INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT;
-
   localparam integer INTEGRATOR_WINDOW_DEFAULT_CAPPED = 
     (INTEGRATOR_WINDOW_DEFAULT < INTEGRATOR_WINDOW_MIN) ? INTEGRATOR_WINDOW_MIN :
     (INTEGRATOR_WINDOW_DEFAULT > INTEGRATOR_WINDOW_MAX) ? INTEGRATOR_WINDOW_MAX :
     INTEGRATOR_WINDOW_DEFAULT;
+  localparam integer INTEGRATOR_EN_DEFAULT_CAPPED = 
+    (INTEGRATOR_EN_DEFAULT > INTEGRATOR_EN_MAX) ? INTEGRATOR_EN_MAX :
+    INTEGRATOR_EN_DEFAULT;
+  localparam integer BOOT_TEST_SKIP_DEFAULT_CAPPED =
+    (BOOT_TEST_SKIP_DEFAULT > BOOT_TEST_SKIP_MAX) ? BOOT_TEST_SKIP_MAX :
+    BOOT_TEST_SKIP_DEFAULT;
 
+  // Local parameters for AXI configuration
   localparam integer CFG_DATA_WIDTH = 1024;
   localparam integer AXI_DATA_WIDTH = 32;
   localparam integer ADDR_LSB = clogb2(AXI_DATA_WIDTH/8 - 1);
@@ -147,39 +160,44 @@ module shim_axi_sys_ctrl #
 
   // Initial values (shifted)
   assign int_data_wire = int_axi_data_wire | (~int_data_modified_wire & int_initial_data_wire);
-  assign int_initial_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH] = INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT_CAPPED;
-  assign int_initial_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1-:INTEGRATOR_WINDOW_WIDTH] = INTEGRATOR_WINDOW_DEFAULT_CAPPED;
-  assign int_initial_data_wire[INTEGRATOR_EN_32_OFFSET*32] = INTEG_EN_DEFAULT;
+  assign int_initial_data_wire[SYS_EN_32_OFFSET*32+SYS_EN_WIDTH-1:SYS_EN_32_OFFSET*32] = {SYS_EN_WIDTH{1'b0}}; // System enable defaults to 0
   assign int_initial_data_wire[BUFFER_RESET_32_OFFSET*32+BUFFER_RESET_WIDTH-1-:BUFFER_RESET_WIDTH] = {BUFFER_RESET_WIDTH{1'b0}}; // Buffer reset defaults to 0 (but !aresetn will override them to 1)
-  assign int_initial_data_wire[SYS_EN_32_OFFSET*32] = 0;
+  assign int_initial_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH] = INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT_CAPPED[INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1:0];
+  assign int_initial_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1-:INTEGRATOR_WINDOW_WIDTH] = INTEGRATOR_WINDOW_DEFAULT_CAPPED[INTEGRATOR_WINDOW_WIDTH-1:0];
+  assign int_initial_data_wire[INTEGRATOR_EN_32_OFFSET*32+INTEGRATOR_EN_WIDTH-1:INTEGRATOR_EN_32_OFFSET*32] = INTEGRATOR_EN_DEFAULT_CAPPED[INTEGRATOR_EN_WIDTH-1:0];
+  assign int_initial_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1-:BOOT_TEST_SKIP_WIDTH] = BOOT_TEST_SKIP_DEFAULT_CAPPED[BOOT_TEST_SKIP_WIDTH-1:0];
 
-  // Out of bounds checks. Use the whole word for the check to avoid truncation
+  // Out of bounds checks. Use the whole word for the check to error on truncation
+  assign sys_en_oob = $unsigned(int_data_wire[SYS_EN_32_OFFSET*32+SYS_EN_WIDTH-1:SYS_EN_32_OFFSET*32]) > SYS_EN_MAX;
+  assign buffer_reset_oob = $unsigned(int_data_wire[BUFFER_RESET_32_OFFSET*32+BUFFER_RESET_WIDTH-1:BUFFER_RESET_32_OFFSET*32]) > BUFFER_RESET_MAX;
   assign integ_thresh_avg_oob = $unsigned(int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH]) < $unsigned(INTEGRATOR_THRESHOLD_AVERAGE_MIN) 
                              || $unsigned(int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH]) > $unsigned(INTEGRATOR_THRESHOLD_AVERAGE_MAX)
                              || $unsigned(int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH]) > $unsigned(32767);
   assign integ_window_oob = $unsigned(int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1-:INTEGRATOR_WINDOW_WIDTH]) < $unsigned(INTEGRATOR_WINDOW_MIN) 
                          || $unsigned(int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1-:INTEGRATOR_WINDOW_WIDTH]) > $unsigned(INTEGRATOR_WINDOW_MAX);
-  assign integ_en_oob = int_data_wire[INTEGRATOR_EN_32_OFFSET*32+31:INTEGRATOR_EN_32_OFFSET*32] > 1;
-  assign sys_en_oob = int_data_wire[SYS_EN_32_OFFSET*32+31:SYS_EN_32_OFFSET*32] > 1;
+  assign integ_en_oob = $unsigned(int_data_wire[INTEGRATOR_EN_32_OFFSET*32+31:INTEGRATOR_EN_32_OFFSET*32]) > INTEGRATOR_EN_MAX;
+  assign boot_test_skip_oob = $unsigned(int_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1:BOOT_TEST_SKIP_32_OFFSET*32]) > BOOT_TEST_SKIP_MAX;
 
   // Address and value bound compliance sent to write response
   // Send SLVERR if there are any violations
   assign int_bresp_wire = 
-    locked ? 2'b10 :
-    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET) ? (integ_thresh_avg_oob ? 2'b10 : 2'b00) :
-    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_WINDOW_32_OFFSET) ? (integ_window_oob ? 2'b10 : 2'b00) :
-    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_EN_32_OFFSET) ? (integ_en_oob ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == SYS_EN_32_OFFSET) ? (sys_en_oob ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == BUFFER_RESET_32_OFFSET) ? (buffer_reset_oob ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET) ? ((locked || integ_thresh_avg_oob) ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_WINDOW_32_OFFSET) ? ((locked || integ_window_oob) ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_EN_32_OFFSET) ? ((locked || integ_en_oob) ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == BOOT_TEST_SKIP_32_OFFSET) ? ((locked || boot_test_skip_oob) ? 2'b10 : 2'b00) :
     2'b10;
   
   assign sys_en = int_data_wire[SYS_EN_32_OFFSET*32];
 
   // Lock violation wire
+  // sys_en and buffer_reset are not locked, so they are not checked
   assign int_lock_viol_wire = 
             integ_thresh_avg != int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1:INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32]
             || integ_window != int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1:INTEGRATOR_WINDOW_32_OFFSET*32]
-            || integ_en != int_data_wire[INTEGRATOR_EN_32_OFFSET*32];
-            // Note: buffer_reset is not checked here, as it can be reset even if locked
+            || integ_en != int_data_wire[INTEGRATOR_EN_32_OFFSET*32]
+            || boot_test_skip != int_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1:BOOT_TEST_SKIP_32_OFFSET*32];
 
   // Configuration register sanitization logic
   always @(posedge aclk)
@@ -190,10 +208,11 @@ module shim_axi_sys_ctrl #
       int_rvalid_reg <= 1'b0;
       int_rdata_reg <= {(AXI_DATA_WIDTH){1'b0}};
 
+      buffer_reset <= {BUFFER_RESET_WIDTH{1'b1}}; // Buffer reset is high if reset is asserted, but defaults to 0 otherwise
       integ_thresh_avg <= INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT_CAPPED;
       integ_window <= INTEGRATOR_WINDOW_DEFAULT_CAPPED;
-      integ_en <= INTEG_EN_DEFAULT;
-      buffer_reset <= {BUFFER_RESET_WIDTH{1'b1}}; // Buffer reset is high if reset is asserted, but defaults to 0 otherwise
+      integ_en <= INTEGRATOR_EN_DEFAULT_CAPPED;
+      boot_test_skip <= BOOT_TEST_SKIP_DEFAULT_CAPPED;
 
       locked <= 1'b0;
       lock_viol <= 1'b0;
@@ -204,15 +223,16 @@ module shim_axi_sys_ctrl #
       int_rvalid_reg <= int_rvalid_next;
       int_rdata_reg <= int_rdata_next;
 
-      // Reset the buffers if requested. Allow this even if locked
+      // Buffers are a register even though they're not locked to allow the reset value to be different than the default
       buffer_reset <= int_data_wire[BUFFER_RESET_32_OFFSET*32+BUFFER_RESET_WIDTH-1:BUFFER_RESET_32_OFFSET*32];
 
-      // Lock the configuration registers
+      // Lock other registers if sys_en is set
       if(sys_en) begin
         locked <= 1'b1;
         integ_thresh_avg <= int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1:INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32];
         integ_window <= int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1:INTEGRATOR_WINDOW_32_OFFSET*32];
-        integ_en <= int_data_wire[INTEGRATOR_EN_32_OFFSET*32];
+        integ_en <= int_data_wire[INTEGRATOR_EN_32_OFFSET*32+INTEGRATOR_EN_WIDTH-1:INTEGRATOR_EN_32_OFFSET*32];
+        boot_test_skip <= int_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1:BOOT_TEST_SKIP_32_OFFSET*32];
       end else if (unlock) begin
         locked <= 1'b0;
         lock_viol <= 1'b0;

@@ -6,6 +6,8 @@ module shim_ad5676_dac_ctrl #(
   input  wire        clk,
   input  wire        resetn,
 
+  input  wire        boot_test_skip, // Skip the boot test sequence
+
   output reg         setup_done,
 
   output wire        cmd_word_rd_en,
@@ -149,7 +151,7 @@ module shim_ad5676_dac_ctrl #(
   always @(posedge clk) begin
     if (!resetn)                                                state <= S_RESET; // Reset to initial state
     else if (error)                                             state <= S_ERROR; // Check for error states
-    else if (state == S_RESET)                                  state <= S_INIT; // Start the setup initialization
+    else if (state == S_RESET)                                  state <= boot_test_skip ? S_IDLE : S_INIT; // Skip boot test if requested
     else if (state == S_INIT)                                   state <= S_TEST_WR; // Transition to TEST_WR first in initialization
     else if (state == S_TEST_WR && dac_spi_command_done)        state <= S_REQ_RD; // Transition to REQ_RD after writing test value
     else if (state == S_REQ_RD && dac_spi_command_done)         state <= S_TEST_RD; // Transition to TEST_RD after requesting read
@@ -161,6 +163,7 @@ module shim_ad5676_dac_ctrl #(
   // Setup done
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) setup_done <= 1'b0; // Reset setup done on reset or error
+    else if (boot_test_skip) setup_done <= 1'b1; // If boot test is skipped, set setup done immediately
     else if ((state == S_TEST_RD) && ~n_miso_data_ready_mosi_clk && boot_readback_match) setup_done <= 1'b1;
   end
 

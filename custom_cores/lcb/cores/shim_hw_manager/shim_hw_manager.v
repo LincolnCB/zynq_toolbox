@@ -17,11 +17,13 @@ module shim_hw_manager #(
   input   wire          spi_off,      // SPI system powered off
   input   wire          ext_shutdown, // External shutdown
   // Pre-start configuration values
+  input   wire          lock_viol,            // Configuration lock violation
+  input   wire          sys_en_oob,           // System enable register out of bounds
+  input   wire          buffer_reset_oob,     // Buffer reset out of bounds
   input   wire          integ_thresh_avg_oob, // Integrator threshold average out of bounds
   input   wire          integ_window_oob,     // Integrator window out of bounds
   input   wire          integ_en_oob,         // Integrator enable register out of bounds
-  input   wire          sys_en_oob,           // System enable register out of bounds
-  input   wire          lock_viol,            // Configuration lock violation
+  input   wire          boot_test_skip_oob,   // Boot test skip out of bounds
   // Shutdown sense (per board)
   input   wire  [ 7:0]  shutdown_sense, // Shutdown sense
   // Integrator (per board)
@@ -91,11 +93,13 @@ module shim_hw_manager #(
   localparam  STS_SPI_RESET_TIMEOUT       = 25'h0100,
               STS_SPI_START_TIMEOUT       = 25'h0101;
   // Pre-start configuration values
-  localparam  STS_INTEG_THRESH_AVG_OOB    = 25'h0200,
-              STS_INTEG_WINDOW_OOB        = 25'h0201,
-              STS_INTEG_EN_OOB            = 25'h0202,
-              STS_SYS_EN_OOB              = 25'h0203,
-              STS_LOCK_VIOL               = 25'h0204;
+  localparam  STS_LOCK_VIOL               = 25'h0200,
+              STS_SYS_EN_OOB              = 25'h0201,
+              STS_BUFFER_RESET_OOB        = 25'h0202,
+              STS_INTEG_THRESH_AVG_OOB    = 25'h0203,
+              STS_INTEG_WINDOW_OOB        = 25'h0204,
+              STS_INTEG_EN_OOB            = 25'h0205,
+              STS_BOOT_TEST_SKIP_OOB      = 25'h0206;
   // Shutdown sense
   localparam  STS_SHUTDOWN_SENSE          = 25'h0300,
               STS_EXT_SHUTDOWN            = 25'h0301;
@@ -150,7 +154,13 @@ module shim_hw_manager #(
         S_IDLE: begin : idle_state
           if (sys_en) begin
             // Check for out of bounds configuration values
-            if (integ_thresh_avg_oob) begin // Integrator threshold average out of bounds
+            if (sys_en_oob) begin // System enable out of bounds
+              state <= S_HALTING;
+              status_code <= STS_SYS_EN_OOB;
+            end else if (buffer_reset_oob) begin // Buffer reset out of bounds
+              state <= S_HALTING;
+              status_code <= STS_BUFFER_RESET_OOB;
+            end else if (integ_thresh_avg_oob) begin // Integrator threshold average out of bounds
               state <= S_HALTING;
               status_code <= STS_INTEG_THRESH_AVG_OOB;
             end else if (integ_window_oob) begin // Integrator window out of bounds
@@ -159,9 +169,9 @@ module shim_hw_manager #(
             end else if (integ_en_oob) begin // Integrator enable out of bounds
               state <= S_HALTING;
               status_code <= STS_INTEG_EN_OOB;
-            end else if (sys_en_oob) begin // System enable out of bounds
+            end else if (boot_test_skip_oob) begin // Boot test skip out of bounds
               state <= S_HALTING;
-              status_code <= STS_SYS_EN_OOB;
+              status_code <= STS_BOOT_TEST_SKIP_OOB;
             end else begin // Lock the cfg registers and start the SPI clock to confirm the SPI subsystem is initialized
               state <= S_CONFIRM_SPI_RST;
               timer <= 0;

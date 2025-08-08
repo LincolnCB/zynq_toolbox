@@ -1,4 +1,4 @@
-***Updated 2025-06-18***
+***Updated 2025-08-08***
 # Hardware Manager Core
 
 The `shim_hw_manager` module manages the hardware system's startup, operation, and shutdown processes. It implements a state machine to sequence power-up, configuration, SPI subsystem enable, and error/shutdown handling.
@@ -17,11 +17,13 @@ The `shim_hw_manager` module manages the hardware system's startup, operation, a
   - `ext_shutdown`: External shutdown.
 
 - **Configuration Status**
+  - `lock_viol`: Configuration lock violation.
+  - `sys_en_oob`: System enable register out of bounds.
+  - `buffer_reset_oob`: Buffer reset out of bounds.
   - `integ_thresh_avg_oob`: Integrator threshold average out of bounds.
   - `integ_window_oob`: Integrator window out of bounds.
   - `integ_en_oob`: Integrator enable register out of bounds.
-  - `sys_en_oob`: System enable register out of bounds.
-  - `lock_viol`: Configuration lock violation.
+  - `boot_test_skip_oob`: Boot test skip out of bounds.
 
 - **Shutdown Sense**
   - `shutdown_sense [7:0]`: Shutdown sense (per board).
@@ -75,13 +77,13 @@ The `shim_hw_manager` module manages the hardware system's startup, operation, a
 ### State Machine Overview
 
 The state machine states are encoded as follows:
-- `4'd1`: `S_IDLE` - Waits for `sys_en` to go high. Checks for out-of-bounds configuration values. If any OOB condition is detected, transitions to `S_HALTED` with the corresponding status code and asserts `ps_interrupt`. If all checks pass, locks configuration and powers up the SPI clock.
-- `4'd2`: `S_CONFIRM_SPI_RST` - Makes sure the SPI system is powered off (`spi_off`). If not powered off within `SPI_RESET_WAIT`, transitions to `S_HALTED` with a timeout status.
+- `4'd1`: `S_IDLE` - Waits for `sys_en` to go high. Checks for out-of-bounds configuration values (`sys_en_oob`, `buffer_reset_oob`, `integ_thresh_avg_oob`, `integ_window_oob`, `integ_en_oob`, `boot_test_skip_oob`). If any OOB condition is detected, transitions to `S_HALTING` with the corresponding status code and asserts `ps_interrupt`. If all checks pass, locks configuration and powers up the SPI clock.
+- `4'd2`: `S_CONFIRM_SPI_RST` - Makes sure the SPI system is powered off (`spi_off`). If not powered off within `SPI_RESET_WAIT`, transitions to `S_HALTING` with a timeout status.
 - `4'd3`: `S_POWER_ON_CRTL_BRD` - Releases shutdown force (`n_shutdown_force` high) and waits for `SHUTDOWN_FORCE_DELAY`.
-- `4'd4`: `S_CONFIRM_SPI_START` - Enables shutdown sense, SPI clock, and SPI subsystem, then waits for the SPI subsystem to start (`spi_off` deasserted). If not started within `SPI_START_WAIT` or if any DAC/ADC boot failure occurs, transitions to `S_HALTED` with the appropriate status code.
+- `4'd4`: `S_CONFIRM_SPI_START` - Enables shutdown sense, SPI clock, and SPI subsystem, then waits for the SPI subsystem to start (`spi_off` deasserted). If not started within `SPI_START_WAIT` or if any DAC/ADC boot failure occurs, transitions to `S_HALTING` with the appropriate status code.
 - `4'd5`: `S_POWER_ON_AMP_BRD` - Pulses `n_shutdown_rst` low for `SHUTDOWN_RESET_PULSE`, then sets it high again.
 - `4'd6`: `S_AMP_POWER_WAIT` - Waits for `SHUTDOWN_RESET_DELAY` after pulsing shutdown reset, then unblocks command/data buffers and asserts `ps_interrupt`.
-- `4'd7`: `S_RUNNING` - Normal operation. Continuously monitors for halt conditions. If any error or shutdown condition occurs, transitions to `S_HALTED`, disables outputs, and asserts `ps_interrupt`.
+- `4'd7`: `S_RUNNING` - Normal operation. Continuously monitors for halt conditions. If any error or shutdown condition occurs, transitions to `S_HALTING`, disables outputs, and asserts `ps_interrupt`.
 - `4'd8`: `S_HALTING` - Prepares to halt the system. Takes one cycle to set all signals to the initial state and assert `ps_interrupt`.
 - `4'd9`: `S_HALTED` - Halted state. All outputs are disabled, and the system waits for a reset or `sys_en` to go low.
 
@@ -90,6 +92,7 @@ The state machine states are encoded as follows:
 The system transitions through `S_HALTING` to `S_HALTED` and sets the appropriate status code if any of the following occur:
 - `sys_en` goes low (processing system shutdown)
 - Configuration lock violation (`lock_viol`)
+- Out-of-bounds configuration values (`sys_en_oob`, `buffer_reset_oob`, `integ_thresh_avg_oob`, `integ_window_oob`, `integ_en_oob`, `boot_test_skip_oob`)
 - Shutdown detected via `shutdown_sense` or `ext_shutdown`
 - Integrator thresholds exceeded or hardware error underflow/overflow conditions
 - Trigger buffer or command errors
@@ -114,11 +117,13 @@ Status codes are 25 bits wide and include:
 - `25'h0002`: `STS_PS_SHUTDOWN` - Processing system shutdown.
 - `25'h0100`: `STS_SPI_RESET_TIMEOUT` - SPI initialization timeout.
 - `25'h0101`: `STS_SPI_START_TIMEOUT` - SPI start timeout.
-- `25'h0200`: `STS_INTEG_THRESH_AVG_OOB` - Integrator threshold average out of bounds.
-- `25'h0201`: `STS_INTEG_WINDOW_OOB` - Integrator window out of bounds.
-- `25'h0202`: `STS_INTEG_EN_OOB` - Integrator enable register out of bounds.
-- `25'h0203`: `STS_SYS_EN_OOB` - System enable register out of bounds.
-- `25'h0204`: `STS_LOCK_VIOL` - Configuration lock violation.
+- `25'h0200`: `STS_LOCK_VIOL` - Configuration lock violation.
+- `25'h0201`: `STS_SYS_EN_OOB` - System enable register out of bounds.
+- `25'h0202`: `STS_BUFFER_RESET_OOB` - Buffer reset out of bounds.
+- `25'h0203`: `STS_INTEG_THRESH_AVG_OOB` - Integrator threshold average out of bounds.
+- `25'h0204`: `STS_INTEG_WINDOW_OOB` - Integrator window out of bounds.
+- `25'h0205`: `STS_INTEG_EN_OOB` - Integrator enable register out of bounds.
+- `25'h0206`: `STS_BOOT_TEST_SKIP_OOB` - Boot test skip out of bounds.
 - `25'h0300`: `STS_SHUTDOWN_SENSE` - Shutdown sense detected.
 - `25'h0301`: `STS_EXT_SHUTDOWN` - External shutdown triggered.
 - `25'h0400`: `STS_OVER_THRESH` - DAC over threshold.

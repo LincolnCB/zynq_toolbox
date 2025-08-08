@@ -16,6 +16,7 @@ Select device via the `ADS_MODEL_ID` parameter (to 8, 7, or 6).
 ### Inputs
 
 - `clk`, `resetn`: Main clock and active-low reset.
+- `boot_test_skip`: If set, skips the boot-time test sequence and enters normal operation immediately.
 - `cmd_word [31:0]`: Command word from buffer.
 - `cmd_buf_empty`: Indicates if command buffer is empty.
 - `trigger`: External trigger signal.
@@ -24,7 +25,7 @@ Select device via the `ADS_MODEL_ID` parameter (to 8, 7, or 6).
 
 ### Outputs
 
-- `setup_done`: Indicates successful boot and setup.
+- `setup_done`: Indicates successful boot and setup (set immediately if `boot_test_skip` is asserted).
 - `cmd_word_rd_en`: Enables reading the next command word.
 - `waiting_for_trig`: Indicates waiting for trigger.
 - `data_word_wr_en`: Enables writing a data word to the output buffer.
@@ -51,7 +52,7 @@ Select device via the `ADS_MODEL_ID` parameter (to 8, 7, or 6).
 - `[28]` - CONTINUE: If set, expects next command immediately after current completes.
 - `[25:0]` - Delay timer: Used for delay timer (in clock cycles) if TRIGGER WAIT is not set.
 
-This command will not perform SPI actions. It will wait for the specified delay or trigger. It can be used for a delay or trigger sycnhronization block.
+This command will not perform SPI actions. It will wait for the specified delay or trigger. It can be used for a delay or trigger synchronization block.
 
 #### ADC_RD Command (`2'b01`)
 - `[29]` - TRIGGER WAIT
@@ -86,10 +87,16 @@ Sets the order in which ADC channels are sampled during ADC_RD commands.
 
 If the current state is waiting for a trigger or delay, if the next command is a CANCEL command, the core will immediately exit the wait state and return to IDLE. From the user side, it's recommended to clear the command buffer before issuing a CANCEL command in order to cancel immediately, as the core will only cancel once the CANCEL command is at the end of the buffer.
 
+### Boot Test Skip
+
+- If `boot_test_skip` is asserted, the core skips the boot-time register write/read test and enters normal operation immediately.
+- When skipped, `setup_done` is set as soon as reset is released.
+- If not skipped, the core performs a register write/read test to verify SPI communication and sets `setup_done` only after successful verification.
+
 ### State Machine
 
 - **RESET:** Initialization.
-- **INIT/TEST_WR/REQ_RD/TEST_RD:** Boot-time test and verification.
+- **INIT/TEST_WR/REQ_RD/TEST_RD:** Boot-time test and verification (skipped if `boot_test_skip` is set).
 - **IDLE:** Awaiting commands.
 - **DELAY/TRIG_WAIT:** Wait for delay or trigger.
 - **ADC_RD:** Perform ADC sampling.

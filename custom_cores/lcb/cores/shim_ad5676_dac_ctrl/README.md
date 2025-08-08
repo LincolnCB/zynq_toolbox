@@ -1,6 +1,5 @@
-**Updated 2025-07-29**
+**Updated 2025-08-08**
 # AD5676 DAC Control Core
-
 
 The `shim_ad5676_dac_ctrl` module controls the AD5676 DAC in the Rev D shim firmware via a command buffer. It manages SPI communication, command sequencing, calibration, error handling, and synchronization for the 8 DAC channels on the AD5676.
 
@@ -9,6 +8,7 @@ The `shim_ad5676_dac_ctrl` module controls the AD5676 DAC in the Rev D shim firm
 ### Inputs
 
 - `clk`, `resetn`: Main clock and active-low reset.
+- `boot_test_skip`: If set, skips the boot-time DAC test sequence and immediately sets up the core.
 - `cmd_word [31:0]`: Command word from buffer.
 - `cmd_buf_empty`: Indicates if command buffer is empty.
 - `trigger`: External trigger signal.
@@ -17,7 +17,7 @@ The `shim_ad5676_dac_ctrl` module controls the AD5676 DAC in the Rev D shim firm
 
 ### Outputs
 
-- `setup_done`: Indicates successful boot and setup.
+- `setup_done`: Indicates successful boot and setup (set immediately if `boot_test_skip` is asserted).
 - `cmd_word_rd_en`: Enables reading the next command word.
 - `waiting_for_trig`: Indicates waiting for trigger.
 - `boot_fail`, `cmd_buf_underflow`, `unexp_trig`, `bad_cmd`, `cal_oob`, `dac_val_oob`: Error flags.
@@ -46,7 +46,7 @@ The `shim_ad5676_dac_ctrl` module controls the AD5676 DAC in the Rev D shim firm
 - `[26]` - Unused.
 - `[25:0]` - Delay timer: Used for delay timer (in clock cycles) if TRIGGER WAIT is not set.
 
-This command will not perform SPI actions. It will wait for the specified delay or trigger, and if LDAC is set, it will pulse LDAC at the end of the command. Otherwise, it can be used for a delay or trigger sycnhronization block.
+This command will not perform SPI actions. It will wait for the specified delay or trigger, and if LDAC is set, it will pulse LDAC at the end of the command. Otherwise, it can be used for a delay or trigger synchronization block.
 
 #### DAC_WR Command (`2'b01`)
 - `[29]` - TRIGGER WAIT: If set, waits at the end of the command for an external trigger. Otherwise, waits until delay timer expires.
@@ -83,7 +83,7 @@ If the current state is waiting for a trigger or delay, if the next command is a
 ### State Machine
 
 - **RESET:** Initialization.
-- **INIT/TEST_WR/REQ_RD/TEST_RD:** Boot-time test and verification.
+- **INIT/TEST_WR/REQ_RD/TEST_RD:** Boot-time test and verification (skipped if `boot_test_skip` is asserted).
 - **IDLE:** Awaiting commands.
 - **DELAY/TRIG_WAIT:** Wait for delay or trigger.
 - **DAC_WR:** Perform DAC update.
@@ -107,6 +107,7 @@ If the current state is waiting for a trigger or delay, if the next command is a
 - SPI timing and chip select are managed to meet AD5676 requirements.
 - All conversions between offset and signed values are handled internally.
 - Uses asynchronous FIFO and synchronizer modules for safe cross-domain data transfer.
+- The `boot_test_skip` input allows skipping the boot-time DAC test for faster startup or testing scenarios.
 
 ## References
 

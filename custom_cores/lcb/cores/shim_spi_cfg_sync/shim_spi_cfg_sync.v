@@ -7,36 +7,61 @@ module shim_spi_cfg_sync (
   input  wire        spi_resetn, // Active low reset signal for SPI domain
 
   // Inputs from axi_shim_cfg (AXI domain)
+  input  wire        spi_en,
+  input  wire        block_buffers,
   input  wire [14:0] integ_thresh_avg,
   input  wire [31:0] integ_window,
   input  wire        integ_en,
-  input  wire        spi_en,
-  input  wire        block_buffers,
+  input  wire [15:0] boot_test_skip,
 
   // Synchronized outputs to SPI domain
+  output wire        spi_en_sync,
+  output wire        block_buffers_sync,
   output wire [14:0] integ_thresh_avg_sync,
   output wire [31:0] integ_window_sync,
   output wire        integ_en_sync,
-  output wire        spi_en_sync,
-  output wire        block_buffers_sync
+  output wire [15:0] boot_test_skip_sync
 );
 
   // Default values for registers
   localparam [14:0] integ_thresh_avg_default = 15'h1000;
   localparam [31:0] integ_window_default = 32'h00010000;
-  localparam integ_en_default = 1'b0;
-  localparam spi_en_default = 1'b0;
-  localparam block_buffers_default = 1'b1;
 
-  // Stability signals for each synchronizer
-  wire integ_thresh_avg_stable_flag;
-  wire integ_window_stable_flag;
-  wire integ_en_stable_flag;
-  wire spi_en_stable_flag;
-  wire block_buffers_stable_flag;
+  // Synchronize each signal
+  // Use sync_coherent for multi-bit data,
+  //   sync_incoherent for data where individual bits are not coherent with each other
 
-  // Synchronize each signal using the sync_coherent module
+  // SPI enable (incoherent)
+  sync_incoherent #(
+    .WIDTH(1)
+  ) sync_spi_en (
+    .clk(spi_clk),
+    .resetn(spi_resetn),
+    .din(spi_en),
+    .dout(spi_en_sync)
+  );
 
+  // Block buffers (incoherent)
+  sync_incoherent #(
+    .WIDTH(1)
+  ) sync_block_buffers (
+    .clk(spi_clk),
+    .resetn(spi_resetn),
+    .din(block_buffers),
+    .dout(block_buffers_sync)
+  );
+  
+  // Integrator enable (incoherent)
+  sync_incoherent #(
+    .WIDTH(1)
+  ) sync_integ_en (
+    .clk(spi_clk),
+    .resetn(spi_resetn),
+    .din(integ_en),
+    .dout(integ_en_sync)
+  );
+
+  // Integrator threshold average (coherent)
   sync_coherent #(
     .WIDTH(15)
   ) sync_integ_thresh_avg (
@@ -49,6 +74,7 @@ module shim_spi_cfg_sync (
     .dout_default(integ_thresh_avg_default)
   );
 
+  // Integrator window (coherent)
   sync_coherent #(
     .WIDTH(32)
   ) sync_integ_window (
@@ -60,32 +86,15 @@ module shim_spi_cfg_sync (
     .dout(integ_window_sync),
     .dout_default(integ_window_default)
   );
-  
-  sync_incoherent #(
-    .WIDTH(1)
-  ) sync_integ_en (
-    .clk(spi_clk),
-    .resetn(spi_resetn),
-    .din(integ_en),
-    .dout(integ_en_sync)
-  );
 
+  // Boot test skip (incoherent)
   sync_incoherent #(
-    .WIDTH(1)
-  ) sync_spi_en (
+    .WIDTH(16)
+  ) sync_boot_test_skip (
     .clk(spi_clk),
     .resetn(spi_resetn),
-    .din(spi_en),
-    .dout(spi_en_sync)
-  );
-
-  sync_incoherent #(
-    .WIDTH(1)
-  ) sync_block_buffers (
-    .clk(spi_clk),
-    .resetn(spi_resetn),
-    .din(block_buffers),
-    .dout(block_buffers_sync)
+    .din(boot_test_skip),
+    .dout(boot_test_skip_sync)
   );
   
 endmodule
