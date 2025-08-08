@@ -52,10 +52,10 @@ module shim_hw_manager #(
 
   // Outputs
   output  reg           unlock_cfg,        // Lock configuration
-  output  reg           spi_clk_power_n,   // SPI clock power (negated)
+  output  reg           spi_clk_gate,      // SPI clock power (negated)
   output  reg           spi_en,            // SPI subsystem enable
   output  reg           shutdown_sense_en, // Shutdown sense enable
-  output  reg           block_buffers,           // Trigger enable
+  output  reg           block_buffers,     // Block PL side of command/data buffers
   output  reg           n_shutdown_force,  // Shutdown force (negated)
   output  reg           n_shutdown_rst,    // Shutdown reset (negated)
   output  wire  [31:0]  status_word,       // Status - Status word
@@ -134,7 +134,7 @@ module shim_hw_manager #(
       n_shutdown_rst <= 1;
       shutdown_sense_en <= 0;
       unlock_cfg <= 1;
-      spi_clk_power_n <= 1;
+      spi_clk_gate <= 0;
       spi_en <= 0;
       block_buffers <= 1;
       status_code <= STS_OK;
@@ -166,7 +166,6 @@ module shim_hw_manager #(
               state <= S_CONFIRM_SPI_RST;
               timer <= 0;
               unlock_cfg <= 0;
-              spi_clk_power_n <= 0;
             end
           end // if (sys_en)
         end // S_IDLE
@@ -177,7 +176,6 @@ module shim_hw_manager #(
           if (timer >= 10 && spi_off) begin
             state <= S_POWER_ON_CRTL_BRD;
             timer <= 0;
-            spi_clk_power_n <= 1;
             n_shutdown_force <= 1;
           end else if (timer >= SPI_RESET_WAIT) begin
             state <= S_HALTING;
@@ -197,8 +195,8 @@ module shim_hw_manager #(
             state <= S_CONFIRM_SPI_START;
             timer <= 0;
             shutdown_sense_en <= 1;
-            spi_clk_power_n <= 0;
             spi_en <= 1;
+            spi_clk_gate <= 1;
           end else begin
             timer <= timer + 1;
           end // if (timer >= SHUTDOWN_FORCE_DELAY)
@@ -383,7 +381,7 @@ module shim_hw_manager #(
           n_shutdown_rst <= 1;
           shutdown_sense_en <= 0;
           unlock_cfg <= 1;
-          spi_clk_power_n <= 1;
+          spi_clk_gate <= 0;
           spi_en <= 0;
           block_buffers <= 1;
           ps_interrupt <= 1;
@@ -411,7 +409,7 @@ module shim_hw_manager #(
           n_shutdown_rst <= 1;
           shutdown_sense_en <= 0;
           unlock_cfg <= 1;
-          spi_clk_power_n <= 1;
+          spi_clk_gate <= 0;
           spi_en <= 0;
           block_buffers <= 1;
           status_code <= STS_EMPTY;
