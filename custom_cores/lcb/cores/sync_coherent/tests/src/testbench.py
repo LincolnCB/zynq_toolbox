@@ -39,7 +39,7 @@ async def test_prev_din_after_reset(dut):
     await in_side_reset_task2
     await out_side_reset_task2
 
-    # Now start driving with prev_din before reset
+    # Now start driving with prev_din after reset
     din_driver_task2 = cocotb.start_soon(tb.static_din_driver_and_monitor(cycles=10, initial_data=10, expect_dummy=False))
     dout_scoreboard_task2 = cocotb.start_soon(tb.dout_scoreboard())
 
