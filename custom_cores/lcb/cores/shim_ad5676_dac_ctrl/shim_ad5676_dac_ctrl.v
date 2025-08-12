@@ -7,6 +7,7 @@ module shim_ad5676_dac_ctrl #(
   input  wire        resetn,
 
   input  wire        boot_test_skip, // Skip the boot test sequence
+  input  wire        boot_test_debug, // Debug mode for boot test
 
   output reg         setup_done,
 
@@ -35,16 +36,27 @@ module shim_ad5676_dac_ctrl #(
   output reg         ldac
 );
 
-  // TODO: Make this external and locked when the SPI system is on
-  // Minimum time for the n_cs signal to be high (in clock cycles)
-  // Calculation: 
-  //  - 50 MHz maximum SPI clock frequency
-  //  - 830 ns minimum time between n_cs rising edges
-  //  - 42 clock cycles needed
-  //  - 24 bits per SPI command
-  //  - 42 - 24 = 18 clock cycles for n_cs to be high
-  //  - Requires a minimum of 3 clock cycles for DAC word loading
-  wire [4:0] n_cs_high_time = 5'd18;
+  ///////////////////////////////////////////////////////////////////////////////
+  // SPI timing parameters for AD5676 DAC
+
+  // SPI clock frequency (Hz)
+  localparam integer SPI_CLK_HZ = 20_000_000;
+
+  // Conversion time (ns) for AD5676 (from datasheet)
+  localparam integer T_CONV_NS_AD5676 = 830;
+
+  // Calculate cycles for t_conv
+  localparam integer n_conv_cycles = (T_CONV_NS_AD5676 * SPI_CLK_HZ + 999_999_999) / 1_000_000_000;
+
+  // 24 bits per SPI command
+  localparam integer SPI_CMD_BITS = 24;
+
+  // n_cs must be high for the maximum of (n_conv_cycles, SPI_CMD_BITS)
+  localparam integer n_cs_high_time_calc = (n_conv_cycles > SPI_CMD_BITS) ? n_conv_cycles : SPI_CMD_BITS;
+
+  // Set n_cs_high_time as a wire for use in logic
+  wire [4:0] n_cs_high_time = n_cs_high_time_calc[4:0];
+  ///////////////////////////////////////////////////////////////////////////////
 
   localparam DAC_TEST_CH = 3'd5; // DAC channel for testing (5 is nice for a clear binary value)
   localparam DAC_TEST_VAL = 16'b1000000000001010; // Test value for DAC channel (near midrange is good)
@@ -120,6 +132,7 @@ module shim_ad5676_dac_ctrl #(
   reg  [14:0] miso_shift_reg; // Shift register for MISO data
   wire [15:0] miso_data;
   reg  [ 3:0] miso_bit; // MISO bit counter
+  reg         miso_buf_wr_en; // MISO buffer write enable
   reg         start_miso_mosi_clk; // Indicate whether to read the MISO data (in MOSI clock domain)
   wire        start_miso; // Indicate whether to read the MISO data
   wire        n_miso_data_ready_mosi_clk; // Indicate whether the MISO data is ready to be read in MOSI clock domain
@@ -436,7 +449,7 @@ module shim_ad5676_dac_ctrl #(
     .wr_clk      (miso_sck), // MISO clock
     .wr_rst_n    (miso_resetn), // Reset for MISO clock domain
     .wr_data     (miso_data), // MISO data to write
-    .wr_en       (miso_bit == 4'd1), // Write MISO data when the bit counter is 1 (last bit is being read)
+    .wr_en       (miso_buf_wr_en), // Write enable for MISO data
 
     .rd_clk      (clk), // FPGA SCK
     .rd_rst_n    (resetn),
@@ -457,6 +470,12 @@ module shim_ad5676_dac_ctrl #(
     else if (start_miso) miso_shift_reg <= {14'd0, miso}; // Start MISO read
   end
   assign miso_data = {miso_shift_reg, miso}; // MISO data is the shift register with the last bit from MISO
+  // MISO buffer write enable
+  always @(posedge miso_sck) begin
+    if (!miso_resetn) miso_buf_wr_en <= 1'b0; // Reset MISO buffer write enable on reset
+    else if (miso_bit == 1) miso_buf_wr_en <= 1'b1; // Write MISO data to FIFO when last bit is received
+    else miso_buf_wr_en <= 1'b0;
+  end
 
   //// Functions for conversions
   // Convert from offset to signed     

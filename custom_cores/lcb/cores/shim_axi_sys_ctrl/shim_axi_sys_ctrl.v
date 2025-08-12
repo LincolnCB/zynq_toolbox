@@ -6,7 +6,8 @@ module shim_axi_sys_ctrl #
   parameter integer INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT = 16384,
   parameter integer INTEGRATOR_WINDOW_DEFAULT = 5000000, // 100 ms at 50MHz
   parameter integer INTEGRATOR_EN_DEFAULT = 1,
-  parameter integer BOOT_TEST_SKIP_DEFAULT = 0 // Default to not skipping boot test for all 16 cores
+  parameter integer BOOT_TEST_SKIP_DEFAULT = 0, // Default to not skipping boot test for all 16 cores
+  parameter integer BOOT_TEST_DEBUG = 0 // Default to no debug
 )
 (
   // System signals
@@ -22,6 +23,7 @@ module shim_axi_sys_ctrl #
   output reg  [31:0]         integ_window,
   output reg                 integ_en,
   output reg  [15:0]         boot_test_skip,
+  output reg  [15:0]         boot_test_debug,
 
   // Configuration bounds
   output wire  sys_en_oob,
@@ -30,6 +32,7 @@ module shim_axi_sys_ctrl #
   output wire  integ_window_oob,
   output wire  integ_en_oob,
   output wire  boot_test_skip_oob,
+  output wire  boot_test_debug_oob,
   output reg   lock_viol,
 
   // AXI4-Line subordinate port
@@ -63,6 +66,7 @@ module shim_axi_sys_ctrl #
   localparam integer INTEGRATOR_WINDOW_32_OFFSET            = 3;
   localparam integer INTEGRATOR_EN_32_OFFSET                = 4;
   localparam integer BOOT_TEST_SKIP_32_OFFSET               = 5;
+  localparam integer BOOT_TEST_DEBUG_32_OFFSET              = 6;
 
   // Localparams for widths
   localparam integer SYS_EN_WIDTH = 1;
@@ -71,6 +75,7 @@ module shim_axi_sys_ctrl #
   localparam integer INTEGRATOR_WINDOW_WIDTH = 32;
   localparam integer INTEGRATOR_EN_WIDTH = 1;
   localparam integer BOOT_TEST_SKIP_WIDTH = 16;
+  localparam integer BOOT_TEST_DEBUG_WIDTH = 16;
 
   // Localparams for MIN/MAX values
   localparam integer SYS_EN_MAX                       = {{SYS_EN_WIDTH{1'b1}}};
@@ -81,6 +86,7 @@ module shim_axi_sys_ctrl #
   localparam integer INTEGRATOR_WINDOW_MAX            = {{INTEGRATOR_WINDOW_WIDTH{1'b1}}};
   localparam integer INTEGRATOR_EN_MAX                = {{INTEGRATOR_EN_WIDTH{1'b1}}};
   localparam integer BOOT_TEST_SKIP_MAX               = {{BOOT_TEST_SKIP_WIDTH{1'b1}}};
+  localparam integer BOOT_TEST_DEBUG_MAX              = {{BOOT_TEST_DEBUG_WIDTH{1'b1}}};
 
   // Local capped default values
   localparam integer INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT_CAPPED = 
@@ -97,6 +103,9 @@ module shim_axi_sys_ctrl #
   localparam integer BOOT_TEST_SKIP_DEFAULT_CAPPED =
     (BOOT_TEST_SKIP_DEFAULT > BOOT_TEST_SKIP_MAX) ? BOOT_TEST_SKIP_MAX :
     BOOT_TEST_SKIP_DEFAULT;
+  localparam integer BOOT_TEST_DEBUG_DEFAULT_CAPPED =
+    (BOOT_TEST_DEBUG > BOOT_TEST_DEBUG_MAX) ? BOOT_TEST_DEBUG_MAX :
+    BOOT_TEST_DEBUG;
 
   // Local parameters for AXI configuration
   localparam integer CFG_DATA_WIDTH = 1024;
@@ -166,6 +175,7 @@ module shim_axi_sys_ctrl #
   assign int_initial_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1-:INTEGRATOR_WINDOW_WIDTH] = INTEGRATOR_WINDOW_DEFAULT_CAPPED[INTEGRATOR_WINDOW_WIDTH-1:0];
   assign int_initial_data_wire[INTEGRATOR_EN_32_OFFSET*32+INTEGRATOR_EN_WIDTH-1:INTEGRATOR_EN_32_OFFSET*32] = INTEGRATOR_EN_DEFAULT_CAPPED[INTEGRATOR_EN_WIDTH-1:0];
   assign int_initial_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1-:BOOT_TEST_SKIP_WIDTH] = BOOT_TEST_SKIP_DEFAULT_CAPPED[BOOT_TEST_SKIP_WIDTH-1:0];
+  assign int_initial_data_wire[BOOT_TEST_DEBUG_32_OFFSET*32+BOOT_TEST_DEBUG_WIDTH-1-:BOOT_TEST_DEBUG_WIDTH] = BOOT_TEST_DEBUG_DEFAULT_CAPPED[BOOT_TEST_DEBUG_WIDTH-1:0];
 
   // Out of bounds checks. Use the whole word for the check to error on truncation
   assign sys_en_oob = $unsigned(int_data_wire[SYS_EN_32_OFFSET*32+SYS_EN_WIDTH-1:SYS_EN_32_OFFSET*32]) > SYS_EN_MAX;
@@ -177,6 +187,7 @@ module shim_axi_sys_ctrl #
                          || $unsigned(int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1-:INTEGRATOR_WINDOW_WIDTH]) > $unsigned(INTEGRATOR_WINDOW_MAX);
   assign integ_en_oob = $unsigned(int_data_wire[INTEGRATOR_EN_32_OFFSET*32+31:INTEGRATOR_EN_32_OFFSET*32]) > INTEGRATOR_EN_MAX;
   assign boot_test_skip_oob = $unsigned(int_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1:BOOT_TEST_SKIP_32_OFFSET*32]) > BOOT_TEST_SKIP_MAX;
+  assign boot_test_debug_oob = $unsigned(int_data_wire[BOOT_TEST_DEBUG_32_OFFSET*32+BOOT_TEST_DEBUG_WIDTH-1:BOOT_TEST_DEBUG_32_OFFSET*32]) > BOOT_TEST_DEBUG_MAX;
 
   // Address and value bound compliance sent to write response
   // Send SLVERR if there are any violations
@@ -187,6 +198,7 @@ module shim_axi_sys_ctrl #
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_WINDOW_32_OFFSET) ? ((locked || integ_window_oob) ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_EN_32_OFFSET) ? ((locked || integ_en_oob) ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == BOOT_TEST_SKIP_32_OFFSET) ? ((locked || boot_test_skip_oob) ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == BOOT_TEST_DEBUG_32_OFFSET) ? ((locked || boot_test_debug_oob) ? 2'b10 : 2'b00) :
     2'b10;
   
   assign sys_en = int_data_wire[SYS_EN_32_OFFSET*32];
@@ -197,7 +209,8 @@ module shim_axi_sys_ctrl #
             integ_thresh_avg != int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1:INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32]
             || integ_window != int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1:INTEGRATOR_WINDOW_32_OFFSET*32]
             || integ_en != int_data_wire[INTEGRATOR_EN_32_OFFSET*32]
-            || boot_test_skip != int_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1:BOOT_TEST_SKIP_32_OFFSET*32];
+            || boot_test_skip != int_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1:BOOT_TEST_SKIP_32_OFFSET*32]
+            || boot_test_debug != int_data_wire[BOOT_TEST_DEBUG_32_OFFSET*32+BOOT_TEST_DEBUG_WIDTH-1:BOOT_TEST_DEBUG_32_OFFSET*32];
 
   // Configuration register sanitization logic
   always @(posedge aclk)
@@ -213,6 +226,7 @@ module shim_axi_sys_ctrl #
       integ_window <= INTEGRATOR_WINDOW_DEFAULT_CAPPED;
       integ_en <= INTEGRATOR_EN_DEFAULT_CAPPED;
       boot_test_skip <= BOOT_TEST_SKIP_DEFAULT_CAPPED;
+      boot_test_debug <= BOOT_TEST_DEBUG_DEFAULT_CAPPED;
 
       locked <= 1'b0;
       lock_viol <= 1'b0;
@@ -233,6 +247,7 @@ module shim_axi_sys_ctrl #
         integ_window <= int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1:INTEGRATOR_WINDOW_32_OFFSET*32];
         integ_en <= int_data_wire[INTEGRATOR_EN_32_OFFSET*32+INTEGRATOR_EN_WIDTH-1:INTEGRATOR_EN_32_OFFSET*32];
         boot_test_skip <= int_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1:BOOT_TEST_SKIP_32_OFFSET*32];
+        boot_test_debug <= int_data_wire[BOOT_TEST_DEBUG_32_OFFSET*32+BOOT_TEST_DEBUG_WIDTH-1:BOOT_TEST_DEBUG_32_OFFSET*32];
       end else if (unlock) begin
         locked <= 1'b0;
         lock_viol <= 1'b0;

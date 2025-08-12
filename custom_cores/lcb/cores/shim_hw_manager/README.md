@@ -24,6 +24,7 @@ The `shim_hw_manager` module manages the hardware system's startup, operation, a
   - `integ_window_oob`: Integrator window out of bounds.
   - `integ_en_oob`: Integrator enable register out of bounds.
   - `boot_test_skip_oob`: Boot test skip out of bounds.
+  - `boot_test_debug_oob`: Boot test debug out of bounds.
 
 - **Shutdown Sense**
   - `shutdown_sense [7:0]`: Shutdown sense (per board).
@@ -124,6 +125,7 @@ Status codes are 25 bits wide and include:
 - `25'h0204`: `STS_INTEG_WINDOW_OOB` - Integrator window out of bounds.
 - `25'h0205`: `STS_INTEG_EN_OOB` - Integrator enable register out of bounds.
 - `25'h0206`: `STS_BOOT_TEST_SKIP_OOB` - Boot test skip out of bounds.
+- `25'h0207`: `STS_BOOT_TEST_DEBUG_OOB` - Boot test debug out of bounds.
 - `25'h0300`: `STS_SHUTDOWN_SENSE` - Shutdown sense detected.
 - `25'h0301`: `STS_EXT_SHUTDOWN` - External shutdown triggered.
 - `25'h0400`: `STS_OVER_THRESH` - DAC over threshold.

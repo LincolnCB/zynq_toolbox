@@ -5,6 +5,7 @@ module shim_ads816x_adc_ctrl #(
   input  wire        resetn,
 
   input  wire        boot_test_skip, // Skip the boot test sequence
+  input  wire        boot_test_debug, // Debug mode for boot test
 
   output reg         setup_done,
 
@@ -12,8 +13,8 @@ module shim_ads816x_adc_ctrl #(
   input  wire [31:0] cmd_word,
   input  wire        cmd_buf_empty,
 
-  output wire        data_word_wr_en,
-  output wire [31:0] data_word,
+  output reg         data_word_wr_en,
+  output reg  [31:0] data_word,
   input  wire        data_buf_full,
 
   input  wire        trigger,
@@ -32,39 +33,52 @@ module shim_ads816x_adc_ctrl #(
   input  wire        miso
 );
 
+  ///////////////////////////////////////////////////////////////////////////////
+  
   // TODO: Make this external and locked when the SPI system is on
   // Minimum time for n_cs signal to be high (in clock cycles)
   // Calculation (different for each ADC model):
-  //  - 50 MHz maximum SPI clock frequency
-  //  - There's a hard minimum time for n_cs to be high to convert
-  //    t_conv = 
-  //      -  660 ns for ADS8168
-  //      - 1200 ns for ADS8167
-  //      - 2500 ns for ADS8166
-  //  - Cycles to hit t_conv:
-  //      -  33 cycles for ADS8168
-  //      -  60 cycles for ADS8167
-  //      - 125 cycles for ADS8166
-  //  - Minimum time between n_cs rising edges
-  //    t_cycle =
-  //      -  1 us for ADS8168
-  //      -  2 us for ADS8167
-  //      -  4 us for ADS8166
-  //  - Cycles to hit t_cycle:
-  //      -  50 cycles for ADS8168
-  //      - 100 cycles for ADS8167
-  //      - 200 cycles for ADS8166
-  //  - 16 bits per on-the-fly SPI command (the ones we care do sampling with)
-  //  - n_cs must be high for the maximum of (n_conv, n_cycle - 16):
-  //      - ADS8168: max(33, 50 - 16) = max(33, 34) = 34 cycles
-  //      - ADS8167: max(60, 100 - 16) = max(60, 84) = 84 cycles
-  //      - ADS8166: max(125, 200 - 16) = max(125, 184) = 184 cycles
-  // Set n_cs_high_time based on ADS_MODEL_ID
-  wire [ 8:0] n_cs_high_time = 
-    (ADS_MODEL_ID == 8) ? 8'd34 :    // ADS8168
-    (ADS_MODEL_ID == 7) ? 8'd84 :    // ADS8167
-    (ADS_MODEL_ID == 6) ? 8'd184 :   // ADS8166
-    8'd184;                          // Default to ADS8166
+  // SPI clock frequency (Hz)
+  localparam integer SPI_CLK_HZ = 20_000_000;
+
+  // Conversion time (ns) and cycle time (ns) for each model
+  localparam integer T_CONV_NS_ADS8168 = 660;
+  localparam integer T_CONV_NS_ADS8167 = 1200;
+  localparam integer T_CONV_NS_ADS8166 = 2500;
+
+  localparam integer T_CYCLE_NS_ADS8168 = 1000;
+  localparam integer T_CYCLE_NS_ADS8167 = 2000;
+  localparam integer T_CYCLE_NS_ADS8166 = 4000;
+
+  // Select t_conv and t_cycle based on ADS_MODEL_ID
+  localparam integer t_conv_ns =
+    (ADS_MODEL_ID == 8) ? T_CONV_NS_ADS8168 :
+    (ADS_MODEL_ID == 7) ? T_CONV_NS_ADS8167 :
+    (ADS_MODEL_ID == 6) ? T_CONV_NS_ADS8166 :
+    T_CONV_NS_ADS8166;
+
+  localparam integer t_cycle_ns =
+    (ADS_MODEL_ID == 8) ? T_CYCLE_NS_ADS8168 :
+    (ADS_MODEL_ID == 7) ? T_CYCLE_NS_ADS8167 :
+    (ADS_MODEL_ID == 6) ? T_CYCLE_NS_ADS8166 :
+    T_CYCLE_NS_ADS8166;
+
+  // Calculate cycles for t_conv and t_cycle
+  localparam integer n_conv_cycles = (t_conv_ns * SPI_CLK_HZ + 999_999_999) / 1_000_000_000;
+  localparam integer n_cycle_cycles = (t_cycle_ns * SPI_CLK_HZ + 999_999_999) / 1_000_000_000;
+
+  // 16 bits per on-the-fly SPI command
+  localparam integer OTF_CMD_BITS = 16;
+
+  // n_cs must be high for the maximum of (n_conv_cycles, n_cycle_cycles - OTF_CMD_BITS)
+  localparam integer n_cs_high_time_calc = (n_cycle_cycles > OTF_CMD_BITS) ?
+    ((n_conv_cycles > (n_cycle_cycles - OTF_CMD_BITS)) ? n_conv_cycles : (n_cycle_cycles - OTF_CMD_BITS)) :
+    n_conv_cycles;
+
+  ///////////////////////////////////////////////////////////////////////////////
+
+  // Set n_cs_high_time as a wire for use in logic
+  wire [8:0] n_cs_high_time = n_cs_high_time_calc[8:0];
 
   // ADC SPI commands
   localparam SPI_CMD_REG_WRITE = 5'b00001;
@@ -122,6 +136,7 @@ module shim_ads816x_adc_ctrl #(
   reg  [14:0] miso_shift_reg; // MISO shift register for reading ADC data
   wire [15:0] miso_data; // MISO data output
   reg  [ 3:0] miso_bit; // MISO bit counter
+  reg         miso_buf_wr_en; // MISO buffer write enable
   reg         start_miso_mosi_clk; // Indicate whether to read the MISO data (in MOSI clock domain)
   wire        start_miso; // Indicate whether to read the MISO data
   wire        n_miso_data_ready_mosi_clk; // Indicate whether the MISO data is ready to be read in MOSI clock domain
@@ -298,7 +313,7 @@ module shim_ads816x_adc_ctrl #(
     if (!resetn || state == S_ERROR) spi_bit <= 5'd0;
     else if (spi_bit > 0) spi_bit <= spi_bit - 1; // Shift out bits
     else if (cs_wait_done) begin
-      if (state == S_ADC_RD) spi_bit <= 5'd15; // Start with 16 bits for ADC read
+      if (state == S_ADC_RD || state == S_TEST_RD) spi_bit <= 5'd15; // Start with 16 bits for ADC read
       else spi_bit <= 5'd23; // Start with 24 bits for boot-up tests
     end
   end
@@ -345,7 +360,7 @@ module shim_ads816x_adc_ctrl #(
     .wr_clk      (miso_sck), // MISO clock
     .wr_rst_n    (miso_resetn), // Reset for MISO clock domain
     .wr_data     (miso_data), // MISO data to write
-    .wr_en       (miso_bit == 4'd1), // Write MISO data when the bit counter is 1 (last bit is being read)
+    .wr_en       (miso_buf_wr_en), // Write enable for MISO data
 
     .rd_clk      (clk), // FPGA SCK
     .rd_rst_n    (resetn),
@@ -366,10 +381,23 @@ module shim_ads816x_adc_ctrl #(
     else if (start_miso) miso_shift_reg <= {14'd0, miso}; // Start MISO read
   end
   assign miso_data = {miso_shift_reg, miso}; // MISO data is the shift register with the last bit from MISO
+  // MISO buffer write enable
+  always @(posedge miso_sck) begin
+    if (!miso_resetn) miso_buf_wr_en <= 1'b0; // Reset MISO buffer write enable on reset
+    else if (miso_bit == 1) miso_buf_wr_en <= 1'b1; // Write MISO data to FIFO when last bit is received
+    else miso_buf_wr_en <= 1'b0;
+  end
 
   // ADC data output
+  // When two data words are ready (one stored, one just read), try to write them to the data buffer
+  assign try_data_write = !n_miso_data_ready_mosi_clk && miso_stored;
+  // ADC data output write enable
   // Write MISO data to the data buffer when two words are ready and buffer isn't full
-  assign data_word_wr_en = try_data_write && !data_buf_full;
+  always @(posedge clk) begin
+    if (!resetn || state == S_ERROR) data_word_wr_en <= 1'b0; // Reset data word write enable on reset or error
+    else if (try_data_write && !data_buf_full) data_word_wr_en <= 1'b1; // Write data word when two words are ready and buffer isn't full
+    else data_word_wr_en <= 1'b0;
+  end
   // MISO data stored flag
   // Alternate storing and writing MISO data
   always @(posedge clk) begin
@@ -377,17 +405,26 @@ module shim_ads816x_adc_ctrl #(
     else if (state != S_TEST_RD && !n_miso_data_ready_mosi_clk) miso_stored <= ~miso_stored; // Toggle MISO stored flag when MISO data is ready to be read
   end
   // MISO data storage
+  // Store the last MISO data word when it is ready
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) miso_data_storage <= 16'd0; // Reset MISO data storage on reset or error
-    else if (state != S_TEST_RD && !n_miso_data_ready_mosi_clk) begin
-      if (miso_stored) miso_data_storage <= 16'd0;
-      else miso_data_storage <= miso_data_mosi_clk; // Store MISO data when not stored
+    else if (!n_miso_data_ready_mosi_clk) begin
+      miso_data_storage <= miso_data_mosi_clk; // Store the last MISO data word
     end
   end
-  // ADC data write attempt
-  // When two data words are ready (one stored, one just read), try to write them to the data buffer
-  assign try_data_write = !n_miso_data_ready_mosi_clk && miso_stored;
-  assign data_word = {miso_data_mosi_clk[15:0], miso_data_storage}; // [15:0] is the first word, [31:16] is the second word
+  // MISO data word
+  // [15:0] is the first word, [31:16] is the second word
+  always @(posedge clk) begin
+    if (!resetn || state == S_ERROR) data_word <= 32'd0; // Reset data word on reset or error
+    else if (try_data_write) begin
+      data_word <= {miso_data_mosi_clk[15:0], miso_data_storage};
+    end else if (boot_test_debug) begin
+      // If debug is enabled, write the S_TEST_RD read value to the data buffer
+      if (state == S_TEST_RD && ~n_miso_data_ready_mosi_clk) begin
+        data_word <= {miso_data_mosi_clk[15:0], 16'd0}; // Write the read value to the data buffer
+      end
+    end
+  end
 
   //// Functions for command clarity
   // SPI command to write to an ADC register

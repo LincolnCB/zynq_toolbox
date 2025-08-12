@@ -24,6 +24,7 @@ module shim_hw_manager #(
   input   wire          integ_window_oob,     // Integrator window out of bounds
   input   wire          integ_en_oob,         // Integrator enable register out of bounds
   input   wire          boot_test_skip_oob,   // Boot test skip out of bounds
+  input   wire          boot_test_debug_oob,  // Boot test debug out of bounds
   // Shutdown sense (per board)
   input   wire  [ 7:0]  shutdown_sense, // Shutdown sense
   // Integrator (per board)
@@ -99,7 +100,8 @@ module shim_hw_manager #(
               STS_INTEG_THRESH_AVG_OOB    = 25'h0203,
               STS_INTEG_WINDOW_OOB        = 25'h0204,
               STS_INTEG_EN_OOB            = 25'h0205,
-              STS_BOOT_TEST_SKIP_OOB      = 25'h0206;
+              STS_BOOT_TEST_SKIP_OOB      = 25'h0206,
+              STS_BOOT_TEST_DEBUG_OOB     = 25'h0207;
   // Shutdown sense
   localparam  STS_SHUTDOWN_SENSE          = 25'h0300,
               STS_EXT_SHUTDOWN            = 25'h0301;
@@ -172,6 +174,9 @@ module shim_hw_manager #(
             end else if (boot_test_skip_oob) begin // Boot test skip out of bounds
               state <= S_HALTING;
               status_code <= STS_BOOT_TEST_SKIP_OOB;
+            end else if (boot_test_debug_oob) begin // Boot test debug out of bounds
+              state <= S_HALTING;
+              status_code <= STS_BOOT_TEST_DEBUG_OOB;
             end else begin // Lock the cfg registers and start the SPI clock to confirm the SPI subsystem is initialized
               state <= S_CONFIRM_SPI_RST;
               timer <= 0;
@@ -204,7 +209,6 @@ module shim_hw_manager #(
           if (timer >= SHUTDOWN_FORCE_DELAY) begin
             state <= S_CONFIRM_SPI_START;
             timer <= 0;
-            shutdown_sense_en <= 1;
             spi_en <= 1;
             spi_clk_gate <= 1;
           end else begin
@@ -255,6 +259,7 @@ module shim_hw_manager #(
           if (timer >= SHUTDOWN_RESET_DELAY) begin
             state <= S_RUNNING;
             timer <= 0;
+            shutdown_sense_en <= 1;
             block_buffers <= 0;
             ps_interrupt <= 1;
           end else begin
