@@ -99,7 +99,7 @@ module shim_hw_manager #(
   // Pre-start configuration values
   localparam  STS_LOCK_VIOL               = 25'h0200,
               STS_SYS_EN_OOB              = 25'h0201,
-              STS_CMD_BUF_RESET_OOB    = 25'h0202,
+              STS_CMD_BUF_RESET_OOB       = 25'h0202,
               STS_DATA_BUF_RESET_OOB      = 25'h0203,
               STS_INTEG_THRESH_AVG_OOB    = 25'h0204,
               STS_INTEG_WINDOW_OOB        = 25'h0205,

@@ -90,8 +90,8 @@ cell xilinx.com:ip:xlconcat:2.1 sts_concat {
 or
 ```tcl
 cell lcb:user:shim_axi_sys_ctrl axi_sys_ctrl {
-  INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT 16384
-  INTEGRATOR_WINDOW_DEFAULT 5000000
+  INTEG_THRESHOLD_AVERAGE_DEFAULT 16384
+  INTEG_WINDOW_DEFAULT 5000000
   INTEG_EN_DEFAULT 1
 } {
   aclk ps/FCLK_CLK0
