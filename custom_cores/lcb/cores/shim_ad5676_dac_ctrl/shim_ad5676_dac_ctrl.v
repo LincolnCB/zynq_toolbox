@@ -42,127 +42,155 @@ module shim_ad5676_dac_ctrl #(
 );
 
   ///////////////////////////////////////////////////////////////////////////////
-  // SPI timing parameters for AD5676 DAC
+  // SPI Timing Parameters
+  ///////////////////////////////////////////////////////////////////////////////
 
   // SPI clock frequency (Hz)
   localparam integer SPI_CLK_HZ = 20_000_000;
 
-  // Update time (ns) for AD5676 (time between rising edges of n_cs from datasheet)
+  // Update time (ns) for AD5676 (datasheet: time between rising edges of n_cs)
   localparam integer T_UPDATE_NS_AD5676 = 830;
-  
-  // 24 bits per SPI command
+
+  // SPI command bit width
   localparam integer SPI_CMD_BITS = 24;
 
-  // Calculate total cycles needed for t_update
+  // Calculate cycles for update time
   localparam integer t_update_cycles = (T_UPDATE_NS_AD5676 * SPI_CLK_HZ + 999_999_999) / 1_000_000_000;
 
-  // n_cs_high_time_calc must be at least 4, and such that n_cs_high_time_calc + SPI_CMD_BITS >= t_update_cycles
-  // Also, it must not exceed 31 (5 bits)
-  localparam integer n_cs_high_time_calc = 
+  // Calculate minimum n_cs high time (cycles), must be at least 4, max 31 (5 bits)
+  localparam integer n_cs_high_time_calc =
     (t_update_cycles < SPI_CMD_BITS) ? 4 :
     (t_update_cycles - SPI_CMD_BITS < 4) ? 4 :
     (t_update_cycles - SPI_CMD_BITS > 31) ? 31 :
     (t_update_cycles - SPI_CMD_BITS);
 
-  // Set n_cs_high_time as a wire for use in logic
+  // n_cs high time as wire
   wire [4:0] n_cs_high_time = n_cs_high_time_calc[4:0];
+
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // SPI Command Bit Definitions
   ///////////////////////////////////////////////////////////////////////////////
 
-  localparam DAC_TEST_CH = 3'd5; // DAC channel for testing (5 is nice for a clear binary value)
-  localparam DAC_TEST_VAL = 16'h800A; // Test value for DAC channel (near midrange is good)
-  localparam DAC_MIDRANGE = 16'h7FFF;
+  localparam DAC_TEST_CH   = 3'd5;      // DAC channel for testing
+  localparam DAC_TEST_VAL  = 16'h800A;  // Test value for DAC channel
+  localparam DAC_MIDRANGE  = 16'h7FFF;  // Midrange value
 
-  // DAC SPI command
-  localparam SPI_CMD_REG_WRITE = 4'b0001; // DAC SPI command for register write to be later loaded with LDAC
-  localparam SPI_CMD_REG_READ  = 4'b1001; // DAC SPI command for register readback
+  localparam SPI_CMD_REG_WRITE = 4'b0001; // Register write command
+  localparam SPI_CMD_REG_READ  = 4'b1001; // Register read command
 
-  // States
-  localparam S_RESET      = 4'd0; // Reset state
-  localparam S_INIT       = 4'd1; // Initialization state, starting a test write to the DAC
-  localparam S_TEST_WR    = 4'd2; // Setup -- Write test value
-  localparam S_REQ_RD     = 4'd3; // Setup -- Request read of the written test value
-  localparam S_TEST_RD    = 4'd4; // Setup -- Read test value
-  localparam S_IDLE       = 4'd5; // Idle state, waiting for commands
-  localparam S_DELAY      = 4'd6; // Delay state, waiting for delay timer to expire
-  localparam S_TRIG_WAIT  = 4'd7; // Trigger wait state, waiting for a trigger signal
-  localparam S_DAC_WR     = 4'd8; // DAC write state
-  localparam S_ERROR      = 4'd9; // Error state, invalid command or unexpected condition
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // State Machine and Command Definitions
+  ///////////////////////////////////////////////////////////////////////////////
+
+  // FSM states
+  localparam S_RESET     = 4'd0;
+  localparam S_INIT      = 4'd1;
+  localparam S_TEST_WR   = 4'd2;
+  localparam S_REQ_RD    = 4'd3;
+  localparam S_TEST_RD   = 4'd4;
+  localparam S_IDLE      = 4'd5;
+  localparam S_DELAY     = 4'd6;
+  localparam S_TRIG_WAIT = 4'd7;
+  localparam S_DAC_WR    = 4'd8;
+  localparam S_ERROR     = 4'd9;
 
   // Command types
   localparam CMD_NO_OP   = 2'b00;
   localparam CMD_DAC_WR  = 2'b01;
   localparam CMD_SET_CAL = 2'b10;
-  localparam CMD_CANCEL  = 2'b11; // Cancel the delay or trigger wait with no LDAC
+  localparam CMD_CANCEL  = 2'b11;
 
   // Command bit positions
-  localparam TRIG_BIT = 29; // Bit position for TRIGGER WAIT in the command word
-  localparam CONT_BIT = 28; // Bit position for CONTINUE in the command word
-  localparam LDAC_BIT = 27; // Bit position for DO LDAC in the command word
+  localparam TRIG_BIT = 29;
+  localparam CONT_BIT = 28;
+  localparam LDAC_BIT = 27;
 
-  // DAC loading stages -- loads a pair of DAC values from the FIFO in three stages
-  localparam DAC_LOAD_STAGE_INIT = 2'b00; // Initial stage, waiting for the first DAC value to be loaded
-  localparam DAC_LOAD_STAGE_CAL  = 2'b01; // Second stage, adding calibration and getting absolute values
-  localparam DAC_LOAD_STAGE_CONV = 2'b10; // Final conversion stage, converting back to offset representation
+  // DAC loading stages
+  localparam DAC_LOAD_STAGE_INIT = 2'b00;
+  localparam DAC_LOAD_STAGE_CAL  = 2'b01;
+  localparam DAC_LOAD_STAGE_CONV = 2'b10;
 
   // Debug codes
-  localparam DBG_MISO_DATA = 4'd1; // Debug code for MISO data
-  localparam DBG_STATE_TRANSITION = 4'd2; // Debug code for state transition
-  localparam DBG_N_CS_TIMER = 4'd3; // Debug code for n_cs timer
-  localparam DBG_SPI_BIT = 4'd4; // Debug code for SPI bit counter
+  localparam DBG_MISO_DATA        = 4'd1;
+  localparam DBG_STATE_TRANSITION = 4'd2;
+  localparam DBG_N_CS_TIMER       = 4'd3;
+  localparam DBG_SPI_BIT          = 4'd4;
 
-  // State and command processing
-  reg  [ 3:0] state;
-  reg  [ 3:0] prev_state;
-  wire        cmd_done;
-  wire        next_cmd;
-  wire [ 2:0] next_cmd_state;
-  wire        cancel_wait;
-  wire        error;
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // Internal Signals
+  ///////////////////////////////////////////////////////////////////////////////
+
+  //// ---- State machine and command control
+  // FSM state and previous state
+  reg  [3:0] state, prev_state;
+  // Command flow control
+  wire       cmd_done;
+  wire       next_cmd;
+  wire [2:0] next_cmd_state;
+  wire       cancel_wait;
+  wire       error;
   // Command word toggled bits
-  reg         do_ldac;
-  reg         wait_for_trig;
-  reg         expect_next;
-  // Delay timer
-  reg  [25:0] delay_timer;
-  // Calibration
-  reg  signed [15:0] cal_val [0:7]; // Calibration values for each channel
-  // DAC MOSI control signals
-  reg         read_next_dac_val_pair;
-  wire        start_spi_cmd;
-  reg         dac_wr_done;
-  wire        last_dac_channel;
-  wire        second_dac_channel_of_pair;
-  wire        dac_spi_cmd_done;
-  reg  [ 4:0] n_cs_timer;
-  reg         running_n_cs_timer; // Flag to indicate if CS timer is running
-  wire        cs_wait_done;
-  reg  [ 2:0] dac_channel;
-  reg  [ 4:0] spi_bit;
-  reg         running_spi_bit; // Flag to indicate if SPI bit counter is running
+  reg        do_ldac;
+  reg        wait_for_trig;
+  reg        expect_next;
+  // Delay timer and trigger counter
+  reg  [25:0] delay_timer, trigger_counter;
+  // Calibration values
+  reg  signed [15:0] cal_val [0:7];
+
+  //// ---- Calibrated DAC value calculation
+  reg  [1:0]  dac_load_stage;
   reg  signed [15:0] first_dac_val_signed;
   reg  signed [16:0] first_dac_val_cal_signed;
   reg  signed [15:0] second_dac_val_signed;
   reg  signed [16:0] second_dac_val_cal_signed;
-  reg  [47:0] mosi_shift_reg; // Shift register for DAC SPI data
-  reg  [14:0] abs_dac_val [0:7]; // Stored absolute DAC values for each channel
-  reg  [ 1:0] dac_load_stage;
-  // DAC MISO signals
-  reg  [14:0] miso_shift_reg; // Shift register for MISO data
-  wire [15:0] miso_data;
-  reg  [ 3:0] miso_bit; // MISO bit counter
-  reg         miso_buf_wr_en; // MISO buffer write enable
-  reg         start_miso_mosi_clk; // Indicate whether to read the MISO data (in MOSI clock domain)
-  wire        start_miso; // Indicate whether to read the MISO data
-  wire        n_miso_data_ready_mosi_clk; // Indicate whether the MISO data is ready to be read in MOSI clock domain
-  wire [15:0] miso_data_mosi_clk; // MISO data in MOSI clock domain
-  wire        boot_readback_match; // Indicate whether the readback matches the expected value
-  // Data buffer write signals
-  wire        debug_miso_data; // Debug write signal for MISO data
-  wire        debug_state_transition; // Debug signal for state transitions
-  wire        debug_n_cs_timer; // Debug signal for n_cs timer
-  wire        debug_spi_bit; // Debug signal for SPI bit counter
-  wire        try_data_write; // Try to write data to the output buffer
+  reg  [14:0] abs_dac_val [0:7];
 
+  //// ---- DAC MOSI SPI control
+  reg        read_next_dac_val_pair;
+  wire       start_spi_cmd;
+  reg        dac_wr_done;
+  wire       last_dac_channel;
+  wire       second_dac_channel_of_pair;
+  wire       dac_spi_cmd_done;
+  // Chip select control
+  reg  [4:0] n_cs_timer;
+  reg        running_n_cs_timer;
+  wire       cs_wait_done;
+  // SPI channel index and bit counter
+  reg  [2:0] dac_channel;
+  reg  [4:0] spi_bit;
+  reg        running_spi_bit;
+  // SPI MOSI shift register
+  reg  [47:0] mosi_shift_reg;
+
+  //// ---- DAC MISO SPI control
+  reg  [14:0] miso_shift_reg;
+  wire [15:0] miso_data;
+  reg  [3:0]  miso_bit;
+  reg         miso_buf_wr_en;
+  // MISO read synchronization
+  reg         start_miso_mosi_clk;
+  wire        start_miso;
+  wire        n_miso_data_ready_mosi_clk;
+  wire [15:0] miso_data_mosi_clk;
+  // Boot test readback match
+  wire        boot_readback_match;
+
+  //// ---- Data buffer write signals
+  wire        debug_miso_data;
+  wire        debug_state_transition;
+  wire        debug_n_cs_timer;
+  wire        debug_spi_bit;
+  wire        try_data_write;
+
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // Logic
+  ///////////////////////////////////////////////////////////////////////////////
 
   //// State machine transitions
   // Allows a cancel command to cancel a delay or trigger wait
@@ -172,7 +200,7 @@ module shim_ad5676_dac_ctrl #(
   // Current command is finished
   assign cmd_done = (state == S_IDLE && !cmd_buf_empty) 
                     || (state == S_DELAY && delay_timer == 0)
-                    || (state == S_TRIG_WAIT && trigger)
+                    || (state == S_TRIG_WAIT && trigger && trigger_counter == 0)
                     || (state == S_DAC_WR && dac_wr_done && !wait_for_trig && delay_timer == 0);
   assign next_cmd = cmd_done && !cmd_buf_empty;
   // Next state from upcoming command
@@ -236,16 +264,29 @@ module shim_ad5676_dac_ctrl #(
 
   //// Delay timer
   always @(posedge clk) begin
-    if (!resetn || state == S_ERROR) delay_timer <= 26'd0;
-    // If the next command is a DAC write or no-op with a delay wait, load the delay timer
+    if (!resetn || state == S_ERROR || cancel_wait) delay_timer <= 26'd0;
+    // If the next command is a DAC write or no-op with a delay wait, load the delay timer from command word
     else if (next_cmd 
              && ((cmd_word[31:30] == CMD_DAC_WR) || (cmd_word[31:30] == CMD_NO_OP)) 
-             && !cmd_word[TRIG_BIT]) delay_timer <= cmd_word[25:0]; // Load delay timer with delay value from command word
-    else if (delay_timer > 0) delay_timer <= delay_timer - 1; // Decrement delay timer to zero if nonzero
+             && !cmd_word[TRIG_BIT]) delay_timer <= cmd_word[25:0];
+    // Otherwise decrement delay timer to zero if nonzero
+    else if (delay_timer > 0) delay_timer <= delay_timer - 1;
   end
 
 
-  //// Errors
+  //// ---- Trigger counter
+  always @(posedge clk) begin
+    if (!resetn || state == S_ERROR || cancel_wait) trigger_counter <= 26'd0;
+    // If the next command is a DAC write or no-op with a trigger wait, load the trigger counter from command word
+    else if (next_cmd && ((cmd_word[31:30] == CMD_DAC_WR) || (cmd_word[31:30] == CMD_NO_OP)) && cmd_word[TRIG_BIT]) begin
+      trigger_counter <= cmd_word[25:0];
+    end
+    // Otherwise decrement trigger counter to zero if nonzero
+    else if (trigger_counter > 0 && trigger) trigger_counter <= trigger_counter - 1;
+  end
+
+
+  //// ---- Errors
   // Error flag
   assign error = (state == S_TEST_RD && ~n_miso_data_ready_mosi_clk && ~boot_readback_match) // Readback mismatch (boot fail)
                  || (state != S_TRIG_WAIT && trigger) // Unexpected trigger
@@ -296,7 +337,7 @@ module shim_ad5676_dac_ctrl #(
   end
 
 
-  //// DAC updating
+  //// ---- DAC updating
   // LDAC activation
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) ldac <= 1'b0;
@@ -317,7 +358,7 @@ module shim_ad5676_dac_ctrl #(
   end
 
 
-  //// Calibration
+  //// ---- Calibration
   // Calibration value set and out-of-bounds
   always @(posedge clk) begin
     if (!resetn) begin
@@ -339,7 +380,7 @@ module shim_ad5676_dac_ctrl #(
     end
   end
 
-  //// DAC word sequencing
+  //// ---- DAC word sequencing
   // DAC channel count status
   assign last_dac_channel = (dac_channel == 3'd7); // Last channel is when all bits are set
   assign second_dac_channel_of_pair = (dac_channel[0] == 1'b1); // Even channel is when the least significant bit is set (off by 1)
@@ -417,7 +458,7 @@ module shim_ad5676_dac_ctrl #(
   end
 
 
-  //// SPI MOSI control
+  //// ---- SPI MOSI control
   // Start the next SPI command
   assign start_spi_cmd = (next_cmd && cmd_word[31:30] == CMD_DAC_WR) 
                           || (state == S_INIT)
@@ -477,7 +518,7 @@ module shim_ad5676_dac_ctrl #(
     else start_miso_mosi_clk <= 1'b0;
   end
 
-  //// SPI MISO control
+  //// ---- SPI MISO control
   // Start MISO synchonization
   sync_incoherent start_miso_sync(
     .clk(miso_sck), // MISO clock
@@ -521,7 +562,7 @@ module shim_ad5676_dac_ctrl #(
     else miso_buf_wr_en <= 1'b0;
   end
 
-  //// DAC data output
+  //// ---- DAC data output
   // DEBUG: MISO data ready in MOSI clock domain
   assign debug_miso_data = (state == S_TEST_RD && ~n_miso_data_ready_mosi_clk && debug);
   // DEBUG: State transition
@@ -558,7 +599,7 @@ module shim_ad5676_dac_ctrl #(
     end else data_word <= 32'd0;
   end
 
-  //// Functions for conversions
+  //// ---- Functions for conversions
   // Convert from offset to signed     
   // Given a 16-bit 0-65535 number, treat 32767 as 0, 0 as -32767, 
   //   and 65535 as disallowed (return 0, handle the error before calling)

@@ -121,14 +121,17 @@ The core operates based on 32-bit word commands read from the command buffer. Th
 
 ### Command Word Structure
 
-- `[31:30]` - Command code (2 bits).
+- `[31:30]` — **Command Code** (2 bits).
+
 #### NO_OP (`2'b00`)
-- `[29]` — **TRIGGER WAIT**: If set, waits for external trigger (`trigger` input); otherwise, waits for delay timer.
+- `[29]` — **TRIGGER WAIT**: If set, waits for external trigger (`trigger` input); otherwise, uses value as delay timer.
 - `[28]` — **CONTINUE**: If set, expects next command immediately after current completes; if not, returns to IDLE unless buffer underflow.
 - `[27]` — **LDAC**: If set, pulses `ldac` output at end of command.
-- `[25:0]` — **Delay Timer**: Number of clock cycles to wait if TRIGGER WAIT is not set.
+- `[25:0]` — **Value**: If TRIGGER WAIT is set, this is the trigger counter (number of triggers to wait for, minus one); otherwise, it is the delay timer (number of clock cycles to wait, zero is allowed).
 
-This command does not update the DAC values, but can pulse LDAC if requested. If TRIGGER WAIT is set, the core waits for the external trigger signal to go high. Otherwise, it waits for the delay timer to expire.
+This command does not update DAC values, but can pulse LDAC if requested. If TRIGGER WAIT is set, the core waits for the specified number of external trigger events. Otherwise, it waits for the delay timer to expire.
+
+Note that the trigger counter is offset by one, so a value of 0 means wait for one trigger, and a value of 1 means wait for two triggers.
 
 **State transitions:**
 - `S_IDLE -> S_TRIG_WAIT/S_DELAY -> S_IDLE/S_ERROR/next_cmd_state`
@@ -138,9 +141,11 @@ This command does not update the DAC values, but can pulse LDAC if requested. If
 - `[29]` — **TRIGGER WAIT**
 - `[28]` — **CONTINUE**
 - `[27]` — **LDAC**
-- `[25:0]` — **Delay Timer** (if TRIGGER WAIT is not set)
+- `[25:0]` — **Value**: If TRIGGER WAIT is set, this is the trigger counter (number of triggers to wait for, minus one) after DAC update; otherwise, it is the delay timer (number of clock cycles to wait after DAC update, zero is allowed).
 
 Initiates a DAC update sequence. The core expects 4 subsequent words, each containing two 16-bit DAC values: `[31:16]` for channel N+1, `[15:0]` for channel N. Channels are updated in pairs: (0,1), (2,3), (4,5), (6,7). LDAC is pulsed after all channels are updated if the LDAC flag is set.
+
+After the DAC update, the core either waits for the specified number of triggers or delay cycles, depending on the TRIGGER WAIT flag. Again, note that the trigger counter is offset by one, so a value of 0 means wait for one trigger, and a value of 1 means wait for two triggers.
 
 **State transitions:**
 - `S_IDLE -> S_DAC_WR -> S_TRIG_WAIT/S_DELAY -> S_IDLE/S_ERROR/next_cmd_state`

@@ -120,13 +120,12 @@ The core operates based on 32-bit command words read from the command buffer. Ea
 ### Command Word Structure
 
 - `[31:30]` — Command code (2 bits).
-
 #### NO_OP (`2'b00`)
-- `[29]` — **TRIGGER WAIT**: If set, waits for external trigger (`trigger` input); otherwise, waits for delay timer.
+- `[29]` — **TRIGGER WAIT**: If set, waits for external trigger (`trigger` input); otherwise, uses value as delay timer.
 - `[28]` — **CONTINUE**: If set, expects next command immediately after current completes; if not, returns to IDLE unless buffer underflow.
-- `[25:0]` — **Delay Timer**: Number of clock cycles to wait if TRIGGER WAIT is not set.
+- `[25:0]` — **Value**: If TRIGGER WAIT is set, this is the trigger counter (number of triggers to wait for, minus one); otherwise, it is the delay timer (number of clock cycles to wait, zero is allowed).
 
-This command does not initiate SPI activity. If TRIGGER WAIT is set, the core waits for the external trigger signal to go high. Otherwise, it waits for the delay timer to expire. The core transitions to the next command if present; if CONTINUE is set and there is no next command, it goes to ERROR, otherwise returns to IDLE.
+This command does not initiate SPI activity. If TRIGGER WAIT is set, the core waits for the specified number of external trigger events. Otherwise, it waits for the delay timer to expire. The trigger counter is offset by one, so a value of 0 means wait for one trigger, and a value of 1 means wait for two triggers. The core transitions to the next command if present; if CONTINUE is set and there is no next command, it goes to ERROR, otherwise returns to IDLE.
 
 **State transitions:**
 - `S_IDLE -> S_TRIG_WAIT/S_DELAY -> S_IDLE/S_ERROR/next_cmd_state`
@@ -134,9 +133,9 @@ This command does not initiate SPI activity. If TRIGGER WAIT is set, the core wa
 #### ADC_RD (`2'b01`)
 - `[29]` — **TRIGGER WAIT**
 - `[28]` — **CONTINUE**
-- `[25:0]` — **Delay Timer** (if TRIGGER WAIT is not set)
+- `[25:0]` — **Value**: If TRIGGER WAIT is set, this is the trigger counter (number of triggers to wait for, minus one) after ADC read; otherwise, it is the delay timer (number of clock cycles to wait after ADC read, zero is allowed).
 
-Initiates an ADC read sequence for 8 channels in the configured order. In On-The-Fly mode, the core sends 8 SPI words of the form `{2'b10, ch, 11'd0}` (where `ch` is the channel index), followed by a dummy word to clock out the last sample (total 9 transactions). Each MISO word returns the sample for the previously requested channel (first word is garbage). After all samples are read, the core transitions to TRIGGER WAIT or DELAY as specified, then to the next command or IDLE/ERROR.
+Initiates an ADC read sequence for 8 channels in the configured order. In On-The-Fly mode, the core sends 8 SPI words of the form `{2'b10, ch, 11'd0}` (where `ch` is the channel index), followed by a dummy word to clock out the last sample (total 9 transactions). Each MISO word returns the sample for the previously requested channel (first word is garbage). After all samples are read, the core either waits for the specified number of triggers or delay cycles, depending on the TRIGGER WAIT flag. The trigger counter is offset by one, so a value of 0 means wait for one trigger, and a value of 1 means wait for two triggers. The core then transitions to the next command or IDLE/ERROR.
 
 **State transitions:**
 - `S_IDLE -> S_ADC_RD -> S_TRIG_WAIT/S_DELAY -> S_IDLE/S_ERROR/next_cmd_state`

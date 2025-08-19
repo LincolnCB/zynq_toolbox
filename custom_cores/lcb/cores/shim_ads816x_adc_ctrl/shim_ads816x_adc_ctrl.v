@@ -34,23 +34,21 @@ module shim_ads816x_adc_ctrl #(
 );
 
   ///////////////////////////////////////////////////////////////////////////////
-  
-  // TODO: Make this external and locked when the SPI system is on
-  // Minimum time for n_cs signal to be high (in clock cycles)
-  // Calculation (different for each ADC model):
+  // Timing Parameters
+  ///////////////////////////////////////////////////////////////////////////////
+
   // SPI clock frequency (Hz)
   localparam integer SPI_CLK_HZ = 20_000_000;
 
-  // Conversion time (ns) and cycle time (ns) for each model
-  localparam integer T_CONV_NS_ADS8168 = 660;
-  localparam integer T_CONV_NS_ADS8167 = 1200;
-  localparam integer T_CONV_NS_ADS8166 = 2500;
-
+  // Conversion and cycle times (ns) for each ADC model
+  localparam integer T_CONV_NS_ADS8168  = 660;
+  localparam integer T_CONV_NS_ADS8167  = 1200;
+  localparam integer T_CONV_NS_ADS8166  = 2500;
   localparam integer T_CYCLE_NS_ADS8168 = 1000;
   localparam integer T_CYCLE_NS_ADS8167 = 2000;
   localparam integer T_CYCLE_NS_ADS8166 = 4000;
 
-  // Select t_conv and t_cycle based on ADS_MODEL_ID
+  // Select conversion and cycle times based on ADS_MODEL_ID
   localparam integer t_conv_ns =
     (ADS_MODEL_ID == 8) ? T_CONV_NS_ADS8168 :
     (ADS_MODEL_ID == 7) ? T_CONV_NS_ADS8167 :
@@ -63,42 +61,50 @@ module shim_ads816x_adc_ctrl #(
     (ADS_MODEL_ID == 6) ? T_CYCLE_NS_ADS8166 :
     T_CYCLE_NS_ADS8166;
 
-  // Calculate cycles for t_conv and t_cycle
-  localparam integer n_conv_cycles = (t_conv_ns * SPI_CLK_HZ + 999_999_999) / 1_000_000_000;
+  // Calculate cycles for conversion and cycle times
+  localparam integer n_conv_cycles  = (t_conv_ns  * SPI_CLK_HZ + 999_999_999) / 1_000_000_000;
   localparam integer n_cycle_cycles = (t_cycle_ns * SPI_CLK_HZ + 999_999_999) / 1_000_000_000;
 
-  // 16 bits per on-the-fly SPI command
+  // SPI command bit width
   localparam integer OTF_CMD_BITS = 16;
 
-  // n_cs must be high for the maximum of (n_conv_cycles, n_cycle_cycles - OTF_CMD_BITS, 3)
+  // Calculate minimum n_cs high time (cycles)
   localparam integer n_cs_high_time_calc = (
     (n_conv_cycles > (n_cycle_cycles - OTF_CMD_BITS) ? n_conv_cycles : (n_cycle_cycles - OTF_CMD_BITS)) > 3
       ? (n_conv_cycles > (n_cycle_cycles - OTF_CMD_BITS) ? n_conv_cycles : (n_cycle_cycles - OTF_CMD_BITS))
       : 3
   );
 
-  ///////////////////////////////////////////////////////////////////////////////
-
-  // Set n_cs_high_time as a wire for use in logic
+  // n_cs high time as wire
   wire [8:0] n_cs_high_time = n_cs_high_time_calc[8:0];
 
-  // ADC SPI commands
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // SPI Command Bit Definitions
+  ///////////////////////////////////////////////////////////////////////////////
+
+  // SPI command opcodes and register addresses
   localparam SPI_CMD_REG_WRITE = 5'b00001;
   localparam SPI_CMD_REG_READ  = 5'b00010;
-  localparam ADDR_OTF_CFG = 11'h2A; // On-The-Fly configuration register
-  localparam SET_OTF_CFG_DATA = 8'h01; // Set On-The-Fly mode bit in the OTF configuration register
+  localparam ADDR_OTF_CFG      = 11'h2A;
+  localparam SET_OTF_CFG_DATA  = 8'h01;
 
-  // States
-  localparam S_RESET     = 4'd0; // Reset state
-  localparam S_INIT      = 4'd1; // Initialization state, starting a read/write check to the ADC
-  localparam S_TEST_WR   = 4'd2; // Setup -- Write first command (set On-The-Fly mode)
-  localparam S_REQ_RD    = 4'd3; // Setup -- Request read of the On-The-Fly mode register
-  localparam S_TEST_RD   = 4'd4; // Setup -- Read the On-The-Fly mode register
-  localparam S_IDLE      = 4'd5; // Idle state, waiting for commands
-  localparam S_DELAY     = 4'd6; // Delay state, waiting for delay timer to expire
-  localparam S_TRIG_WAIT = 4'd7; // Trigger wait state, waiting for a trigger signal
-  localparam S_ADC_RD    = 4'd8; // ADC read state, reading samples from the ADC
-  localparam S_ERROR     = 4'd9; // Error state, invalid command or unexpected condition
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // State Machine and Command Definitions
+  ///////////////////////////////////////////////////////////////////////////////
+
+  // FSM states
+  localparam S_RESET     = 4'd0;
+  localparam S_INIT      = 4'd1;
+  localparam S_TEST_WR   = 4'd2;
+  localparam S_REQ_RD    = 4'd3;
+  localparam S_TEST_RD   = 4'd4;
+  localparam S_IDLE      = 4'd5;
+  localparam S_DELAY     = 4'd6;
+  localparam S_TRIG_WAIT = 4'd7;
+  localparam S_ADC_RD    = 4'd8;
+  localparam S_ERROR     = 4'd9;
 
   // Command types
   localparam CMD_NO_OP   = 2'b00;
@@ -111,59 +117,82 @@ module shim_ads816x_adc_ctrl #(
   localparam CONT_BIT = 28;
 
   // Debug codes
-  localparam DBG_MISO_DATA = 4'd1; // Debug code for MISO data
-  localparam DBG_STATE_TRANSITION = 4'd2; // Debug code for state transition
-  localparam DBG_N_CS_TIMER = 4'd3; // Debug code for n_cs timer
-  localparam DBG_SPI_BIT = 4'd4; // Debug code for SPI bit counter
+  localparam DBG_MISO_DATA       = 4'd1;
+  localparam DBG_STATE_TRANSITION= 4'd2;
+  localparam DBG_N_CS_TIMER      = 4'd3;
+  localparam DBG_SPI_BIT         = 4'd4;
 
-  // State and command processing
-  reg  [ 3:0] state;
-  reg  [ 3:0] prev_state;
-  wire        cmd_done;
-  wire        next_cmd;
-  wire [ 2:0] next_cmd_state;
-  wire        cancel_wait;
-  wire        error;
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // Internal Signals
+  ///////////////////////////////////////////////////////////////////////////////
+
+  //// ---- State machine and command control
+  // FSM state and previous state
+  reg  [3:0] state, prev_state;
+  // Command flow control
+  wire       cmd_done;
+  wire       next_cmd;
+  wire [2:0] next_cmd_state;
+  wire       cancel_wait;
+  wire       error;
   // Command word toggled bits
-  reg         wait_for_trig;
-  reg         expect_next;
-  // Delay timer
-  reg  [25:0] delay_timer;
-  // Sample order for ADC
-  reg  [ 2:0] sample_order [0:7];
-  // ADC control signals
-  wire        start_spi_cmd;
-  reg         adc_rd_done;
-  wire        last_adc_word;
-  wire        adc_spi_cmd_done;
-  reg  [ 7:0] n_cs_timer;
-  reg         running_n_cs_timer;
-  wire        cs_wait_done;
-  reg  [ 3:0] adc_word_idx;
-  reg  [ 4:0] spi_bit;
-  reg         running_spi_bit;
-  reg  [23:0] mosi_shift_reg;
-  // ADC MISO signals
-  reg  [14:0] miso_shift_reg; // MISO shift register for reading ADC data
-  wire [15:0] miso_data; // MISO data output
-  reg  [ 3:0] miso_bit; // MISO bit counter
-  reg         miso_buf_wr_en; // MISO buffer write enable
-  reg         start_miso_mosi_clk; // Indicate whether to read the MISO data (in MOSI clock domain)
-  wire        start_miso; // Indicate whether to read the MISO data
-  wire        n_miso_data_ready_mosi_clk; // Indicate whether the MISO data is ready to be read in MOSI clock domain
-  wire [15:0] miso_data_mosi_clk; // MISO data in MOSI clock domain
-  wire        boot_readback_match; // Indicate whether the readback matches the expected value
-  reg  [15:0] miso_data_storage; // Store one 16-bit MISO word before writing to the data buffer
-  reg         miso_stored; // Indicate whether the MISO data has been stored
-  // Data buffer write signals (in priority order)
-  wire        adc_data_ready; // Indicate whether the ADC data is ready to be read
-  wire        debug_miso_data; // Debug write signal for MISO data
-  wire        debug_state_transition; // Debug signal for state transitions
-  wire        debug_n_cs_timer; // Debug signal for n_cs timer
-  wire        debug_spi_bit; // Debug signal for SPI bit counter
-  wire        try_data_write; // Try to write data to the output buffer
+  reg        wait_for_trig;
+  reg        expect_next;
+  // Delay timer and trigger counter
+  reg  [25:0] delay_timer, trigger_counter;
+  // ADC sample order
+  reg  [2:0] sample_order [0:7];
 
-  //// State machine transitions
+
+  //// ---- ADC MOSI SPI control
+  wire       start_spi_cmd;
+  reg        adc_rd_done;
+  wire       last_adc_word;
+  wire       adc_spi_cmd_done;
+  // Chip select control
+  reg  [7:0] n_cs_timer;
+  reg        running_n_cs_timer;
+  wire       cs_wait_done;
+  // SPI word index and bit counter
+  reg  [3:0] adc_word_idx;
+  reg  [4:0] spi_bit;
+  reg        running_spi_bit;
+  // SPI MOSI shift register
+  reg  [23:0] mosi_shift_reg;
+
+
+  //// ---- ADC MISO SPI control
+  reg  [14:0] miso_shift_reg;
+  wire [15:0] miso_data;
+  reg  [3:0]  miso_bit;
+  reg         miso_buf_wr_en;
+  // MISO read synchronization
+  reg         start_miso_mosi_clk;
+  wire        start_miso;
+  wire        n_miso_data_ready_mosi_clk;
+  wire [15:0] miso_data_mosi_clk;
+  // Boot test readback match
+  wire        boot_readback_match;
+  // MISO data storage
+  reg  [15:0] miso_data_storage;
+  reg         miso_stored;
+
+
+  //// ---- Data buffer write signals
+  wire        adc_data_ready;
+  wire        debug_miso_data;
+  wire        debug_state_transition;
+  wire        debug_n_cs_timer;
+  wire        debug_spi_bit;
+  wire        try_data_write;
+
+
+  ///////////////////////////////////////////////////////////////////////////////
+  // Logic
+  ///////////////////////////////////////////////////////////////////////////////
+
+  //// ---- State machine transitions
   // Allows a cancel command to cancel a delay or trigger wait
   assign cancel_wait = (state == S_DELAY || state == S_TRIG_WAIT || (state == S_ADC_RD && adc_rd_done))
                         && !cmd_buf_empty
@@ -171,7 +200,7 @@ module shim_ads816x_adc_ctrl #(
   // Current command is finished
   assign cmd_done = (state == S_IDLE && !cmd_buf_empty)
                     || (state == S_DELAY && delay_timer == 0)
-                    || (state == S_TRIG_WAIT && trigger)
+                    || (state == S_TRIG_WAIT && trigger && trigger_counter == 0)
                     || (state == S_ADC_RD && adc_rd_done && !wait_for_trig && delay_timer == 0);
   assign next_cmd = cmd_done && !cmd_buf_empty;
   // Next state from upcoming command
@@ -207,7 +236,8 @@ module shim_ads816x_adc_ctrl #(
     else if ((state == S_TEST_RD) && !n_miso_data_ready_mosi_clk && boot_readback_match) setup_done <= 1'b1;
   end
 
-  //// Command bits processing
+
+  //// ---- Command bits processing
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) begin
       wait_for_trig <= 1'b0;
@@ -226,16 +256,31 @@ module shim_ads816x_adc_ctrl #(
   assign cmd_word_rd_en = (state != S_ERROR) && !cmd_buf_empty
                           && (cmd_done || cancel_wait);
 
-  // Delay timer
+
+  //// ---- Delay timer
   always @(posedge clk) begin
-    if (!resetn || state == S_ERROR) delay_timer <= 26'd0;
+    if (!resetn || state == S_ERROR || cancel_wait) delay_timer <= 26'd0;
+    // If the next command is an ADC read or no-op with a delay wait, load the delay timer from command word
     else if (next_cmd
              && ((cmd_word[31:30] == CMD_ADC_RD) || (cmd_word[31:30] == CMD_NO_OP))
              && !cmd_word[TRIG_BIT]) delay_timer <= cmd_word[25:0];
+    // Otherwise decrement delay timer to zero if nonzero
     else if (delay_timer > 0) delay_timer <= delay_timer - 1;
   end
 
-  //// Errors
+ 
+  //// ---- Trigger counter
+  always @(posedge clk) begin
+    if (!resetn || state == S_ERROR || cancel_wait) trigger_counter <= 26'd0;
+    // If the next command is an ADC read or no-op with a trigger wait, load the trigger counter from command word
+    else if (next_cmd
+             && ((cmd_word[31:30] == CMD_ADC_RD) || (cmd_word[31:30] == CMD_NO_OP))
+             && cmd_word[TRIG_BIT]) trigger_counter <= cmd_word[25:0];
+    // Otherwise decrement trigger counter on trigger to zero if nonzero
+    else if (trigger_counter > 0 && trigger) trigger_counter <= trigger_counter - 1;
+  end
+
+  //// ---- Errors
   // Error flag
   assign error = (state == S_TEST_RD && !n_miso_data_ready_mosi_clk && ~boot_readback_match) // Readback mismatch (boot fail)
                  || (state != S_TRIG_WAIT && trigger)
@@ -269,7 +314,8 @@ module shim_ads816x_adc_ctrl #(
     else if (try_data_write && data_buf_full) data_buf_overflow <= 1'b1;
   end
 
-  //// Sample order
+
+  //// ---- Sample order
   // Set the sample order with the CMD_SET_ORD command
   integer i;
   always @(posedge clk) begin
@@ -288,7 +334,8 @@ module shim_ads816x_adc_ctrl #(
     end
   end
 
-  //// ADC word sequencing
+
+  //// ---- ADC word sequencing
   // ADC word count status (read comes in one word after writing the read request, so you need 8 + 1 = 9 words for 8 reads)
   assign last_adc_word = (adc_word_idx == 8);
   assign adc_spi_cmd_done = ((state == S_ADC_RD)
@@ -309,7 +356,8 @@ module shim_ads816x_adc_ctrl #(
     else if (state == S_ADC_RD && adc_spi_cmd_done && !last_adc_word) adc_word_idx <= adc_word_idx + 1;
   end
 
-  //// SPI MOSI control
+
+  //// ---- SPI MOSI control
   // Start the next SPI command
   assign start_spi_cmd = (next_cmd && cmd_word[31:30] == CMD_ADC_RD)
                           || (state == S_INIT)
@@ -374,7 +422,8 @@ module shim_ads816x_adc_ctrl #(
     else start_miso_mosi_clk <= 1'b0;
   end
 
-  //// SPI MISO
+
+  //// ---- SPI MISO
   // Start MISO synchonization
   sync_incoherent start_miso_sync(
     .clk(miso_sck), // MISO clock
@@ -418,7 +467,8 @@ module shim_ads816x_adc_ctrl #(
     else miso_buf_wr_en <= 1'b0;
   end
 
-  //// ADC data output
+
+  //// ---- ADC data output
   // When two data words are ready (one stored, one just read), adc data word is ready
   assign adc_data_ready = (state != S_TEST_RD && setup_done && !n_miso_data_ready_mosi_clk && miso_stored);
   // DEBUG: MISO data ready in MOSI clock domain
@@ -476,7 +526,8 @@ module shim_ads816x_adc_ctrl #(
     end else data_word <= 32'd0;
   end
 
-  //// Functions for command clarity
+
+  //// ---- Functions for command clarity
   // SPI command to write to an ADC register
   function [23:0] spi_reg_write_cmd(input [10:0] reg_addr, input [7:0] reg_data);
     spi_reg_write_cmd = {SPI_CMD_REG_WRITE, reg_addr, reg_data};
@@ -489,4 +540,5 @@ module shim_ads816x_adc_ctrl #(
   function [15:0] spi_req_otf_sample_cmd(input [2:0] ch);
     spi_req_otf_sample_cmd = {2'b10, ch, 11'd0};
   endfunction
+
 endmodule
