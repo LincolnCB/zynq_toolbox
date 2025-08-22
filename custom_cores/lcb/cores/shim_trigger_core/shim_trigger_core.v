@@ -36,6 +36,7 @@ module shim_trigger_core #(
   localparam CMD_CANCEL          = 3'd7;
 
   // State encoding
+  localparam S_RESET       = 3'd0;
   localparam S_IDLE        = 3'd1;
   localparam S_SYNC_CH     = 3'd2;
   localparam S_EXPECT_TRIG = 3'd3;
@@ -91,7 +92,8 @@ module shim_trigger_core #(
                           : S_ERROR;
   // State transition logic
   always @(posedge clk) begin
-    if (!resetn) state <= S_IDLE; // Reset to idle
+    if (!resetn) state <= S_RESET; // Reset to S_RESET state
+    else if (state == S_RESET) state <= S_IDLE; // After reset, go to idle
     else if (cmd_done) state <= next_cmd_state; // Transition based on command done
   end
 
@@ -140,7 +142,6 @@ module shim_trigger_core #(
     if (!resetn) data_buf_overflow <= 0;
     else if (do_trig && (data_buf_full || data_buf_almost_full)) data_buf_overflow <= 1;
   end
-
 
   //// Read enable
   assign cmd_word_rd_en = next_cmd;

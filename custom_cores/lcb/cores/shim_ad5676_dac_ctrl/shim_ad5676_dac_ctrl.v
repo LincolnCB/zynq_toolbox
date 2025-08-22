@@ -50,17 +50,22 @@ module shim_ad5676_dac_ctrl #(
 
   // Update time (ns) for AD5676 (datasheet: time between rising edges of n_cs)
   localparam integer T_UPDATE_NS_AD5676 = 830;
+  localparam integer T_MIN_N_CS_HIGH_NS = 30;
 
   // SPI command bit width
   localparam integer SPI_CMD_BITS = 24;
 
   // Calculate cycles for update time
   localparam integer t_update_cycles = (T_UPDATE_NS_AD5676 * SPI_CLK_HZ + 999_999_999) / 1_000_000_000;
+  // Calculate minimum n_cs high time in cycles (must be at least 4)
+  localparam integer t_min_n_cs_high_cycles = (T_MIN_N_CS_HIGH_NS * SPI_CLK_HZ + 999_999_999) / 1_000_000_000;
+  // Ensure minimum n_cs high time is at least 4 cycles
+  localparam integer t_min_n_cs_high_cycles_adjusted = (t_min_n_cs_high_cycles < 4) ? 4 : t_min_n_cs_high_cycles;
 
-  // Calculate minimum n_cs high time (cycles), must be at least 4, max 31 (5 bits)
+  // Calculate minimum n_cs high time (cycles), must be at least t_min_n_cs_high_cycles_adjusted
   localparam integer n_cs_high_time_calc =
-    (t_update_cycles < SPI_CMD_BITS) ? 4 :
-    (t_update_cycles - SPI_CMD_BITS < 4) ? 4 :
+    (t_update_cycles < SPI_CMD_BITS) ? t_min_n_cs_high_cycles_adjusted :
+    (t_update_cycles - SPI_CMD_BITS < t_min_n_cs_high_cycles_adjusted) ? t_min_n_cs_high_cycles_adjusted :
     (t_update_cycles - SPI_CMD_BITS > 31) ? 31 :
     (t_update_cycles - SPI_CMD_BITS);
 
