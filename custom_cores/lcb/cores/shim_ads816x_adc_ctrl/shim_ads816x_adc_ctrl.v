@@ -416,7 +416,7 @@ module shim_ads816x_adc_ctrl #(
     // Load the shift register with the next ADC word command
     end else if ((next_cmd && (next_cmd_state == S_ADC_RD))
                  || ((state == S_ADC_RD) && adc_spi_cmd_done)) begin
-      if (adc_word_idx < 8) mosi_shift_reg <= {spi_req_otf_sample_cmd(adc_word_idx[2:0]), 8'd0};
+      if (adc_word_idx < 8) mosi_shift_reg <= {spi_req_otf_sample_cmd(sample_order[adc_word_idx[2:0]]), 8'd0};
       else if (adc_word_idx == 8) mosi_shift_reg <= {spi_req_otf_sample_cmd(3'b0), 8'd0};
     end
   end
