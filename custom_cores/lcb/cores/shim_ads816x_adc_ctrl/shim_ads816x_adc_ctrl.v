@@ -24,6 +24,7 @@ module shim_ads816x_adc_ctrl #(
   output reg         cmd_buf_underflow,
   output reg         data_buf_overflow,
   output reg         unexp_trig,
+  output reg         delay_too_short,
   output reg         bad_cmd,
 
   output reg         n_cs,
@@ -283,10 +284,11 @@ module shim_ads816x_adc_ctrl #(
   //// ---- Errors
   // Error flag
   assign error = (state == S_TEST_RD && !n_miso_data_ready_mosi_clk && ~boot_readback_match) // Readback mismatch (boot fail)
-                 || (state != S_TRIG_WAIT && trigger)
-                 || (next_cmd && next_cmd_state == S_ERROR)
-                 || (cmd_done && expect_next && cmd_buf_empty)
-                 || (try_data_write && data_buf_full);
+                 || (state != S_TRIG_WAIT && trigger && trigger_counter == 0) // Unexpected trigger
+                 || (state == S_ADC_RD && !adc_rd_done && !wait_for_trig && delay_timer == 0) // Delay too short
+                 || (next_cmd && next_cmd_state == S_ERROR) // Bad command
+                 || (cmd_done && expect_next && cmd_buf_empty) // Command buffer underflow
+                 || (try_data_write && data_buf_full); // Data buffer overflow
   // Boot check fail
   assign boot_readback_match = (miso_data_mosi_clk[15:8] == SET_OTF_CFG_DATA); // Readback matches the test value
   always @(posedge clk) begin
@@ -296,7 +298,12 @@ module shim_ads816x_adc_ctrl #(
   // Unexpected trigger
   always @(posedge clk) begin
     if (!resetn) unexp_trig <= 1'b0;
-    else if (state != S_TRIG_WAIT && trigger) unexp_trig <= 1'b1;
+    else if (state != S_TRIG_WAIT && trigger && trigger_counter == 0) unexp_trig <= 1'b1;
+  end
+  // Delay too short
+  always @(posedge clk) begin
+    if (!resetn) delay_too_short <= 1'b0;
+    else if (state == S_ADC_RD && !adc_rd_done && !wait_for_trig && delay_timer == 0) delay_too_short <= 1'b1; // Delay too short if delay timer is zero before ADC read is done
   end
   // Bad command
   always @(posedge clk) begin

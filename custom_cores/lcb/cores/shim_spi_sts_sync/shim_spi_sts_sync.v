@@ -22,12 +22,15 @@ module shim_spi_sts_sync (
   input  wire [7:0]  dac_cmd_buf_underflow,
   input  wire [7:0]  dac_data_buf_overflow,
   input  wire [7:0]  unexp_dac_trig,
+  input  wire [7:0]  ldac_misalign,
+  input  wire [7:0]  dac_delay_too_short,
   // ADC channel status
   input  wire [7:0]  adc_boot_fail,
   input  wire [7:0]  bad_adc_cmd,
   input  wire [7:0]  adc_cmd_buf_underflow,
   input  wire [7:0]  adc_data_buf_overflow,
   input  wire [7:0]  unexp_adc_trig,
+  input  wire [7:0]  adc_delay_too_short,
 
   //// Synchronized outputs to AXI domain
   // SPI system status
@@ -47,12 +50,15 @@ module shim_spi_sts_sync (
   output wire [7:0]  dac_cmd_buf_underflow_sync,
   output wire [7:0]  dac_data_buf_overflow_sync,
   output wire [7:0]  unexp_dac_trig_sync,
+  output wire [7:0]  ldac_misalign_sync,
+  output wire [7:0]  dac_delay_too_short_sync,
   // ADC channel status
   output wire [7:0]  adc_boot_fail_sync,
   output wire [7:0]  bad_adc_cmd_sync,
   output wire [7:0]  adc_cmd_buf_underflow_sync,
   output wire [7:0]  adc_data_buf_overflow_sync,
-  output wire [7:0]  unexp_adc_trig_sync
+  output wire [7:0]  unexp_adc_trig_sync,
+  output wire [7:0]  adc_delay_too_short_sync
 );
 
   //// Synchronize each signal using a sync_incoherent module
@@ -167,6 +173,22 @@ module shim_spi_sts_sync (
     .din(unexp_dac_trig),
     .dout(unexp_dac_trig_sync)
   );
+  sync_incoherent #(
+    .WIDTH(8)
+  ) sync_ldac_misalign (
+    .clk(aclk),
+    .resetn(aresetn),
+    .din(ldac_misalign),
+    .dout(ldac_misalign_sync)
+  );
+  sync_incoherent #(
+    .WIDTH(8)
+  ) sync_dac_delay_too_short (
+    .clk(aclk),
+    .resetn(aresetn),
+    .din(dac_delay_too_short),
+    .dout(dac_delay_too_short_sync)
+  );
 
   // ADC channel status
   sync_incoherent #(
@@ -208,6 +230,14 @@ module shim_spi_sts_sync (
     .resetn(aresetn),
     .din(unexp_adc_trig),
     .dout(unexp_adc_trig_sync)
+  );
+  sync_incoherent #(
+    .WIDTH(8)
+  ) sync_adc_delay_too_short (
+    .clk(aclk),
+    .resetn(aresetn),
+    .din(adc_delay_too_short),
+    .dout(adc_delay_too_short_sync)
   );
 
 endmodule

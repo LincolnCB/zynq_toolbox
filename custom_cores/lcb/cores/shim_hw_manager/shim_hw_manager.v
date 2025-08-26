@@ -49,6 +49,8 @@ module shim_hw_manager #(
   input   wire  [ 7:0]  dac_data_buf_underflow, // DAC data buffer underflow
   input   wire  [ 7:0]  dac_data_buf_overflow,  // DAC data buffer overflow
   input   wire  [ 7:0]  unexp_dac_trig,         // Unexpected DAC trigger
+  input   wire  [ 7:0]  ldac_misalign,          // LDAC misalignment
+  input   wire  [ 7:0]  dac_delay_too_short,    // DAC delay too short
   // ADC buffers and commands (per board)
   input   wire  [ 7:0]  adc_boot_fail,          // ADC boot failure
   input   wire  [ 7:0]  bad_adc_cmd,            // Bad ADC command
@@ -57,6 +59,7 @@ module shim_hw_manager #(
   input   wire  [ 7:0]  adc_data_buf_underflow, // ADC data buffer underflow
   input   wire  [ 7:0]  adc_data_buf_overflow,  // ADC data buffer overflow
   input   wire  [ 7:0]  unexp_adc_trig,         // Unexpected ADC trigger
+  input   wire  [ 7:0]  adc_delay_too_short,    // ADC delay too short
 
   // Outputs
   output  reg           unlock_cfg,        // Lock configuration
@@ -131,7 +134,9 @@ module shim_hw_manager #(
               STS_DAC_CMD_BUF_OVERFLOW    = 25'h0605,
               STS_DAC_DATA_BUF_UNDERFLOW  = 25'h0606,
               STS_DAC_DATA_BUF_OVERFLOW   = 25'h0607,
-              STS_UNEXP_DAC_TRIG          = 25'h0608;
+              STS_UNEXP_DAC_TRIG          = 25'h0608,
+              STS_LDAC_MISALIGN           = 25'h0609,
+              STS_DAC_DELAY_TOO_SHORT     = 25'h060A;
   // ADC buffers and commands
   localparam  STS_ADC_BOOT_FAIL           = 25'h0700,
               STS_BAD_ADC_CMD             = 25'h0701,
@@ -139,7 +144,8 @@ module shim_hw_manager #(
               STS_ADC_CMD_BUF_OVERFLOW    = 25'h0703,
               STS_ADC_DATA_BUF_UNDERFLOW  = 25'h0704,
               STS_ADC_DATA_BUF_OVERFLOW   = 25'h0705,
-              STS_UNEXP_ADC_TRIG          = 25'h0706;
+              STS_UNEXP_ADC_TRIG          = 25'h0706,
+              STS_ADC_DELAY_TOO_SHORT     = 25'h0707;
 
   // Main state machine
   always @(posedge clk) begin
@@ -338,6 +344,8 @@ module shim_hw_manager #(
               || |dac_data_buf_underflow
               || |dac_data_buf_overflow
               || |unexp_dac_trig
+              || |ldac_misalign
+              || |dac_delay_too_short
               // ADC buffers and commands
               || |bad_adc_cmd
               || |adc_cmd_buf_underflow
@@ -345,6 +353,7 @@ module shim_hw_manager #(
               || |adc_data_buf_underflow
               || |adc_data_buf_overflow
               || |unexp_adc_trig
+              || |adc_delay_too_short
           ) begin
             //// Set the status code based on the error condition
             // Basic system
@@ -410,6 +419,14 @@ module shim_hw_manager #(
               status_code <= STS_UNEXP_DAC_TRIG;
               board_num <= extract_board_num(unexp_dac_trig);
             end
+            else if (|ldac_misalign) begin
+              status_code <= STS_LDAC_MISALIGN;
+              board_num <= extract_board_num(ldac_misalign);
+            end
+            else if (|dac_delay_too_short) begin
+              status_code <= STS_DAC_DELAY_TOO_SHORT;
+              board_num <= extract_board_num(dac_delay_too_short);
+            end
             // ADC buffers and commands
             else if (|bad_adc_cmd) begin
               status_code <= STS_BAD_ADC_CMD;
@@ -434,6 +451,10 @@ module shim_hw_manager #(
             else if (|unexp_adc_trig) begin
               status_code <= STS_UNEXP_ADC_TRIG;
               board_num <= extract_board_num(unexp_adc_trig);
+            end
+            else if (|adc_delay_too_short) begin
+              status_code <= STS_ADC_DELAY_TOO_SHORT;
+              board_num <= extract_board_num(adc_delay_too_short);
             end
             // Set the status code and halt the system
             state <= S_HALTING;
