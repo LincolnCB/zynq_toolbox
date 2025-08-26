@@ -167,9 +167,9 @@ help:
 tests: projects/${PROJECT}/tests/core_tests_summary
 
 # Write the SD card image to the mount point
-write_sd: sd
+write_sd:
 	@./scripts/make/status.sh "WRITING SD CARD IMAGE"
-	./scripts/make/write_sd.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(MOUNT_DIR)
+	./scripts/make/write_sd.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(MOUNT_DIR) --clean
 
 # Write or update the PetaLinux system configuration file
 petalinux_cfg: xsa
@@ -239,15 +239,11 @@ bit: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit
 
 # The compressed root filesystem
 # Made in the petalinux build
-rootfs: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz
-	mkdir -p out/$(BOARD)/$(BOARD_VER)/$(PROJECT)
-	cp tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/rootfs.tar.gz
+rootfs: out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/rootfs.tar.gz
 
 # The compressed boot files
 # Requires the petalinux build (which will make the rootfs)
-boot: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz
-	mkdir -p out/$(BOARD)/$(BOARD_VER)/$(PROJECT)
-	cp tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/BOOT.tar.gz
+boot: out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/BOOT.tar.gz
 
 #############################################
 
@@ -391,3 +387,13 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$
 tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz scripts/petalinux/package_boot.sh
 	@./scripts/make/status.sh "PACKAGING BOOT FILES FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	scripts/petalinux/package_boot.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+
+# The compressed boot files copied to the output directory
+out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/BOOT.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz
+	mkdir -p $(@D)
+	cp tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz $@
+
+# The compressed root filesystem copied to the output directory
+out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz
+	mkdir -p $(@D)
+	cp tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz $@

@@ -15,7 +15,7 @@ module shim_hw_manager #(
   // Inputs
   input   wire          sys_en,       // System enable (turn the system on)
   input   wire          spi_off,      // SPI system powered off
-  input   wire          ext_shutdown, // External shutdown
+  input   wire          ext_en,       // External enable (deadman shutdown)
   // Pre-start configuration values
   input   wire          lock_viol,            // Configuration lock violation
   input   wire          sys_en_oob,           // System enable register out of bounds
@@ -165,8 +165,12 @@ module shim_hw_manager #(
         // When enabled, lock the config registers and confirm the SPI subsystem is initialized
         S_IDLE: begin : idle_state
           if (sys_en) begin
+            // Check for the external enable before proceeding
+            if (!ext_en) begin
+              state <= S_HALTING;
+              status_code <= STS_EXT_SHUTDOWN;
             // Check for out of bounds configuration values
-            if (sys_en_oob) begin // System enable out of bounds
+            end else if (sys_en_oob) begin // System enable out of bounds
               state <= S_HALTING;
               status_code <= STS_SYS_EN_OOB;
             end else if (cmd_buf_reset_oob) begin // Command buffer reset out of bounds
@@ -207,7 +211,10 @@ module shim_hw_manager #(
         // Confirm the SPI subsystem is reset to its initial state, off
         // If the SPI subsystem is not reset to off, halt the system
         S_CONFIRM_SPI_RST: begin
-          if (timer >= 10 && spi_off) begin
+          if (!ext_en) begin
+            state <= S_HALTING;
+            status_code <= STS_EXT_SHUTDOWN;
+          end else if (timer >= 10 && spi_off) begin
             state <= S_POWER_ON_CRTL_BRD;
             timer <= 0;
             n_shutdown_force <= 1;
@@ -225,7 +232,10 @@ module shim_hw_manager #(
         //   timer
         //   n_shutdown_force
         S_POWER_ON_CRTL_BRD: begin
-          if (timer >= SHUTDOWN_FORCE_DELAY) begin
+          if (!ext_en) begin
+            state <= S_HALTING;
+            status_code <= STS_EXT_SHUTDOWN;
+          end else if (timer >= SHUTDOWN_FORCE_DELAY) begin
             state <= S_CONFIRM_SPI_START;
             timer <= 0;
             spi_en <= 1;
@@ -238,7 +248,10 @@ module shim_hw_manager #(
         // Wait for the SPI subsystem to start before running the system
         // If the SPI subsystem doesn't start in time, halt the system
         S_CONFIRM_SPI_START: begin
-          if (!spi_off) begin
+          if (!ext_en) begin
+            state <= S_HALTING;
+            status_code <= STS_EXT_SHUTDOWN;
+          end else if (!spi_off) begin
             state <= S_POWER_ON_AMP_BRD;
             timer <= 0;
             n_shutdown_rst <= 0;
@@ -263,7 +276,10 @@ module shim_hw_manager #(
 
         // Pulse the shutdown reset for a short time to power on the power stage
         S_POWER_ON_AMP_BRD: begin
-          if (timer >= SHUTDOWN_RESET_PULSE) begin
+          if (!ext_en) begin
+            state <= S_HALTING;
+            status_code <= STS_EXT_SHUTDOWN;
+          end else if (timer >= SHUTDOWN_RESET_PULSE) begin
             state <= S_AMP_POWER_WAIT;
             timer <= 0;
             n_shutdown_rst <= 1;
@@ -275,7 +291,10 @@ module shim_hw_manager #(
         // Wait for a delay after pulsing the shutdown reset before starting the system control
         //   (unblocking command/data buffers)
         S_AMP_POWER_WAIT: begin
-          if (timer >= SHUTDOWN_RESET_DELAY) begin
+          if (!ext_en) begin
+            state <= S_HALTING;
+            status_code <= STS_EXT_SHUTDOWN;
+          end else if (timer >= SHUTDOWN_RESET_DELAY) begin
             state <= S_RUNNING;
             timer <= 0;
             shutdown_sense_en <= 1;
@@ -300,7 +319,7 @@ module shim_hw_manager #(
               || miso_sck_pol_oob
               // Shutdown sense
               || |shutdown_sense
-              || ext_shutdown
+              || !ext_en
               // Integrator threshold core
               || |over_thresh
               || |thresh_underflow
@@ -339,7 +358,7 @@ module shim_hw_manager #(
               status_code <= STS_SHUTDOWN_SENSE;
               board_num <= extract_board_num(shutdown_sense);
             end
-            else if (ext_shutdown) status_code <= STS_EXT_SHUTDOWN;
+            else if (!ext_en) status_code <= STS_EXT_SHUTDOWN;
             // Integrator threshold core
             else if (|over_thresh) begin
               status_code <= STS_OVER_THRESH;
