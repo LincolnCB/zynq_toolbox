@@ -14,7 +14,6 @@
 // Addresses are defined in the hardware design Tcl file
 #define AXI_CFG  (uint32_t) 0x40000000
 #define CFG_SIZE (uint32_t) 64 / 8 // Size of the configuration register in bytes
-// Add to a header file or at the top of your C file
 #define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"
 #define BYTE_TO_BINARY(byte)   \
   ((byte) & 0x80 ? '1' : '0'), \
