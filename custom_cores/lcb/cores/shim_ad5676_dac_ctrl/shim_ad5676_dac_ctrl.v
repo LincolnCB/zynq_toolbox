@@ -11,11 +11,11 @@ module shim_ad5676_dac_ctrl #(
 
   output reg         setup_done,
 
-  output wire        cmd_word_rd_en,
-  input  wire [31:0] cmd_word,
+  output wire        cmd_buf_rd_en,
+  input  wire [31:0] cmd_buf_word,
   input  wire        cmd_buf_empty,
 
-  output reg         data_word_wr_en,
+  output reg         data_buf_wr_en,
   output reg  [31:0] data_word,
   input  wire        data_buf_full,
 
@@ -132,18 +132,20 @@ module shim_ad5676_dac_ctrl #(
 
   //// ---- State machine and command control
   // FSM state and previous state
-  reg  [3:0] state, prev_state;
+  reg  [ 3:0] state, prev_state;
   // Command flow control
-  wire [2:0] command;
-  wire       cmd_done;
-  wire       next_cmd;
-  wire [3:0] next_cmd_state;
-  wire       cancel_wait;
-  wire       error;
+  wire [ 2:0] command;
+  wire [31:0] cmd_word;
+  wire        next_cmd_ready;
+  wire        cmd_done;
+  wire        next_cmd;
+  wire [ 3:0] next_cmd_state;
+  wire        cancel_wait;
+  wire        error;
   // Command word toggled bits
-  reg        do_ldac;
-  reg        wait_for_trig;
-  reg        expect_next;
+  reg         do_ldac;
+  reg         wait_for_trig;
+  reg         expect_next;
   // Delay timer and trigger counter
   reg  [25:0] delay_timer, trigger_counter;
   // Calibration values
@@ -158,27 +160,27 @@ module shim_ad5676_dac_ctrl #(
   reg  [14:0] abs_dac_val [0:7];
 
   //// ---- DAC MOSI SPI control
-  reg        read_next_dac_val_pair;
-  wire       start_spi_cmd;
-  reg        dac_wr_done;
-  wire       last_dac_channel;
-  wire       second_dac_channel_of_pair;
-  wire       dac_spi_cmd_done;
+  reg         read_next_dac_val_pair;
+  wire        start_spi_cmd;
+  reg         dac_wr_done;
+  wire        last_dac_channel;
+  wire        second_dac_channel_of_pair;
+  wire        dac_spi_cmd_done;
   // Chip select control
-  reg  [4:0] n_cs_timer;
-  reg        running_n_cs_timer;
-  wire       cs_wait_done;
+  reg  [ 4:0] n_cs_timer;
+  reg         running_n_cs_timer;
+  wire        cs_wait_done;
   // SPI channel index and bit counter
-  reg  [2:0] dac_channel;
-  reg  [4:0] spi_bit;
-  reg        running_spi_bit;
+  reg  [ 2:0] dac_channel;
+  reg  [ 4:0] spi_bit;
+  reg         running_spi_bit;
   // SPI MOSI shift register
   reg  [47:0] mosi_shift_reg;
 
   //// ---- DAC MISO SPI control
   reg  [14:0] miso_shift_reg;
   wire [15:0] miso_data;
-  reg  [3:0]  miso_bit;
+  reg  [ 3:0] miso_bit;
   reg         miso_buf_wr_en;
   // MISO read synchronization
   reg         start_miso_mosi_clk;
@@ -201,7 +203,9 @@ module shim_ad5676_dac_ctrl #(
   ///////////////////////////////////////////////////////////////////////////////
 
   //// ---- Command word
-  assign command = cmd_buf_empty ? 2'b00 : cmd_word[31:30];
+  assign cmd_word = cmd_buf_empty ? 32'd0 : cmd_buf_word;
+  assign command = cmd_word[31:30];
+  assign next_cmd_ready = !cmd_buf_empty;
   // Command bits processing
   // do_ldac, wait_for_trig, expect_next
   always @(posedge clk) begin
@@ -222,22 +226,22 @@ module shim_ad5676_dac_ctrl #(
     end
   end
   // Command word read enable
-  assign cmd_word_rd_en = (state != S_ERROR) && !cmd_buf_empty && (read_next_dac_val_pair || cmd_done || cancel_wait);
+  assign cmd_buf_rd_en = (state != S_ERROR) && next_cmd_ready && (read_next_dac_val_pair || cmd_done || cancel_wait);
 
 
   //// ---- State machine transitions
   // Allows a cancel command to cancel a delay or trigger wait
   assign cancel_wait =  (state == S_DELAY || state == S_TRIG_WAIT || (state == S_DAC_WR && dac_wr_done))
-                        && !cmd_buf_empty 
+                        && next_cmd_ready 
                         && command == CMD_CANCEL;
   // Current command is finished
-  assign cmd_done = (state == S_IDLE && !cmd_buf_empty) 
+  assign cmd_done = (state == S_IDLE && next_cmd_ready) 
                     || (state == S_DELAY && delay_timer == 0)
                     || (state == S_TRIG_WAIT && trigger && trigger_counter == 0)
                     || (state == S_DAC_WR && dac_wr_done && !wait_for_trig && delay_timer == 0);
-  assign next_cmd = cmd_done && !cmd_buf_empty;
+  assign next_cmd = cmd_done && next_cmd_ready;
   // Next state from upcoming command
-  assign next_cmd_state =  cmd_buf_empty ? (expect_next ? S_ERROR : S_IDLE) // If buffer is empty, error if expecting next command, otherwise IDLE
+  assign next_cmd_state =  !next_cmd_ready ? (expect_next ? S_ERROR : S_IDLE) // If buffer is empty, error if expecting next command, otherwise IDLE
                            : (command == CMD_NO_OP) ? (cmd_word[TRIG_BIT] ? S_TRIG_WAIT : S_DELAY) // If command is NO_OP, either wait for trigger or delay depending on TRIG_BIT
                            : (command == CMD_DAC_WR) ? S_DAC_WR // If command is DAC write, go to DAC_WR state
                            : (command == CMD_SET_CAL) ? S_IDLE // If command is SET_CAL, go to IDLE
@@ -302,7 +306,7 @@ module shim_ad5676_dac_ctrl #(
                  || (state == S_DAC_WR && !dac_wr_done && !wait_for_trig && delay_timer == 0) // Delay too short
                  || (state == S_DAC_WR && ldac_shared && !ldac) // LDAC misalignment
                  || (next_cmd && next_cmd_state == S_ERROR) // Bad command
-                 || (((cmd_done && expect_next) || read_next_dac_val_pair) && cmd_buf_empty) // Command buffer underflow
+                 || (((cmd_done && expect_next) || read_next_dac_val_pair) && !next_cmd_ready) // Command buffer underflow
                  || (try_data_write && data_buf_full) // Data buffer overflow
                  || cal_oob // Calibration value out of bounds
                  || dac_val_oob; // DAC value out of bounds
@@ -335,7 +339,7 @@ module shim_ad5676_dac_ctrl #(
   // Command buffer underflow
   always @(posedge clk) begin
     if (!resetn) cmd_buf_underflow <= 1'b0;
-    else if (((cmd_done && expect_next) || read_next_dac_val_pair) && cmd_buf_empty) cmd_buf_underflow <= 1'b1; // Underflow if expecting buffer item but buffer is empty
+    else if (((cmd_done && expect_next) || read_next_dac_val_pair) && !next_cmd_ready) cmd_buf_underflow <= 1'b1; // Underflow if expecting buffer item but buffer is empty
   end
   // Data buffer overflow
   always @(posedge clk) begin
@@ -347,7 +351,7 @@ module shim_ad5676_dac_ctrl #(
     if (!resetn) dac_val_oob <= 1'b0; // Reset out of bounds flag on reset
     else begin // Set out of bounds flag if either of the following conditions are met:
       if (dac_load_stage == DAC_LOAD_STAGE_INIT
-          && read_next_dac_val_pair && !cmd_buf_empty 
+          && read_next_dac_val_pair && next_cmd_ready 
           && (cmd_word[15:0] == 16'hFFFF || cmd_word[31:16] == 16'hFFFF)) dac_val_oob <= 1'b1; // If incoming DAC value is 0xFFFF
       else if (dac_load_stage == DAC_LOAD_STAGE_CONV && 
                (first_dac_val_cal_signed < -16'sd32767 || first_dac_val_cal_signed > 16'sd32767 ||
@@ -452,7 +456,7 @@ module shim_ad5676_dac_ctrl #(
     end else 
       case (dac_load_stage)
         DAC_LOAD_STAGE_INIT: begin // Initial stage, waiting for the first DAC value to be loaded
-          if (read_next_dac_val_pair && !cmd_buf_empty) begin
+          if (read_next_dac_val_pair && next_cmd_ready) begin
             // Reject DAC value of 0xFFFF
             if (!(cmd_word[15:0] == 16'hFFFF || cmd_word[31:16] == 16'hFFFF))  begin
               first_dac_val_signed <= offset_to_signed(cmd_word[15:0]); // Load first DAC value from command word
@@ -598,9 +602,9 @@ module shim_ad5676_dac_ctrl #(
   // DAC data output write enable
   // Write MISO data to the data buffer when attempting a write and buffer isn't full
   always @(posedge clk) begin
-    if (!resetn) data_word_wr_en <= 1'b0; // Reset data word write enable on reset
-    else if (try_data_write && !data_buf_full) data_word_wr_en <= 1'b1; // Write data word when two words are ready and buffer isn't full
-    else data_word_wr_en <= 1'b0;
+    if (!resetn) data_buf_wr_en <= 1'b0; // Reset data word write enable on reset
+    else if (try_data_write && !data_buf_full) data_buf_wr_en <= 1'b1; // Write data word when two words are ready and buffer isn't full
+    else data_buf_wr_en <= 1'b0;
   end
   // MISO data word
   always @(posedge clk) begin

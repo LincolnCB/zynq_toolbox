@@ -9,11 +9,11 @@ module shim_ads816x_adc_ctrl #(
 
   output reg         setup_done,
 
-  output wire        cmd_word_rd_en,
-  input  wire [31:0] cmd_word,
+  output wire        cmd_buf_rd_en,
+  input  wire [31:0] cmd_buf_word,
   input  wire        cmd_buf_empty,
 
-  output reg         data_word_wr_en,
+  output reg         data_buf_wr_en,
   output reg  [31:0] data_word,
   input  wire        data_buf_full,
 
@@ -106,6 +106,7 @@ module shim_ads816x_adc_ctrl #(
   localparam S_TRIG_WAIT = 4'd7;
   localparam S_ADC_RD    = 4'd8;
   localparam S_ERROR     = 4'd9;
+  localparam S_LOOP_NEXT = 4'd10;
 
   // Command types
   localparam CMD_NO_OP   = 3'b000;
@@ -131,36 +132,42 @@ module shim_ads816x_adc_ctrl #(
 
   //// ---- State machine and command control
   // FSM state and previous state
-  reg  [3:0] state, prev_state;
+  reg  [ 3:0] state, prev_state;
   // Command flow control
-  wire [2:0] command;
-  wire       cmd_done;
-  wire       next_cmd;
-  wire [3:0] next_cmd_state;
-  wire       cancel_wait;
-  wire       error;
+  wire [ 2:0] command;
+  wire [31:0] cmd_word;
+  wire        next_cmd_ready;
+  wire        cmd_done;
+  wire        next_cmd;
+  wire [ 3:0] next_cmd_state;
+  wire        cancel_wait;
+  wire        error;
+  // Looping
+  wire        looping;
+  reg  [25:0] loop_counter;
+  reg  [31:0] loop_cmd_word;
   // Command word toggled bits
-  reg        wait_for_trig;
-  reg        expect_next;
+  reg         wait_for_trig;
+  reg         expect_next;
   // Delay timer and trigger counter
   reg  [25:0] delay_timer, trigger_counter;
   // ADC sample order
-  reg  [2:0] sample_order [0:7];
+  reg  [ 2:0] sample_order [0:7];
 
 
   //// ---- ADC MOSI SPI control
-  wire       start_spi_cmd;
-  reg        adc_rd_done;
-  wire       last_adc_word;
-  wire       adc_spi_cmd_done;
+  wire        start_spi_cmd;
+  reg         adc_rd_done;
+  wire        last_adc_word;
+  wire        adc_spi_cmd_done;
   // Chip select control
-  reg  [7:0] n_cs_timer;
-  reg        running_n_cs_timer;
-  wire       cs_wait_done;
+  reg  [ 7:0] n_cs_timer;
+  reg         running_n_cs_timer;
+  wire        cs_wait_done;
   // SPI word index and bit counter
-  reg  [3:0] adc_word_idx;
-  reg  [4:0] spi_bit;
-  reg        running_spi_bit;
+  reg  [ 3:0] adc_word_idx;
+  reg  [ 4:0] spi_bit;
+  reg         running_spi_bit;
   // SPI MOSI shift register
   reg  [23:0] mosi_shift_reg;
 
@@ -196,7 +203,19 @@ module shim_ads816x_adc_ctrl #(
   ///////////////////////////////////////////////////////////////////////////////
 
   //// ---- Command word
-  assign command = cmd_buf_empty ? 3'b000 : cmd_word[31:29];
+  assign cmd_word = cmd_buf_empty ? 32'd0
+                    : (looping) ? loop_cmd_word
+                    : cmd_buf_word;
+  assign command =  cmd_word[31:29];
+  assign next_cmd_ready = (looping) ? 1'b1 : !cmd_buf_empty;
+  // Allows a cancel command to cancel a delay or trigger wait
+  assign cancel_wait = (state == S_DELAY || state == S_TRIG_WAIT || (state == S_ADC_RD && adc_rd_done))
+                        && next_cmd_ready
+                        && command == CMD_CANCEL;
+  // Allows a cancel command to cancel a loop
+  assign cancel_loop = (loop_counter > 0 && !cmd_buf_empty && cmd_buf_word[31:29] == CMD_CANCEL);
+  // Command word read enable
+  assign cmd_buf_rd_en = (state != S_ERROR) && next_cmd_ready && !looping && (cmd_done || cancel_wait);
   // Command bits processing
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) begin
@@ -212,26 +231,22 @@ module shim_ads816x_adc_ctrl #(
       end
     end
   end
-  // Command word read enable
-  assign cmd_word_rd_en = (state != S_ERROR) && !cmd_buf_empty && (cmd_done || cancel_wait);
 
 
   //// ---- State machine transitions
-  // Allows a cancel command to cancel a delay or trigger wait
-  assign cancel_wait = (state == S_DELAY || state == S_TRIG_WAIT || (state == S_ADC_RD && adc_rd_done))
-                        && !cmd_buf_empty
-                        && command == CMD_CANCEL;
   // Current command is finished
-  assign cmd_done = (state == S_IDLE && !cmd_buf_empty)
+  assign cmd_done = (state == S_IDLE && next_cmd_ready)
                     || (state == S_DELAY && delay_timer == 0)
                     || (state == S_TRIG_WAIT && trigger && trigger_counter == 0)
-                    || (state == S_ADC_RD && adc_rd_done && !wait_for_trig && delay_timer == 0);
-  assign next_cmd = cmd_done && !cmd_buf_empty;
+                    || (state == S_ADC_RD && adc_rd_done && !wait_for_trig && delay_timer == 0)
+                    || (state == S_LOOP_NEXT && next_cmd_ready);
+  assign next_cmd = cmd_done && next_cmd_ready;
   // Next state from upcoming command
-  assign next_cmd_state = cmd_buf_empty ? (expect_next ? S_ERROR : S_IDLE) // If buffer is empty, error if expecting next command, otherwise IDLE
+  assign next_cmd_state = !next_cmd_ready ? (expect_next ? S_ERROR : S_IDLE) // If buffer is empty, error if expecting next command, otherwise IDLE
                            : (command == CMD_NO_OP) ? (cmd_word[TRIG_BIT] ? S_TRIG_WAIT : S_DELAY) // If command is NO_OP, either wait for trigger or delay depending on TRIG_BIT
                            : (command == CMD_ADC_RD) ? S_ADC_RD // If command is ADC read, go to ADC read state
-                           : (command == CMD_SET_ORD) ? S_IDLE // If command is SET_ORD, go to IDLE
+                           : (command == CMD_LOOP) ? ((loop_counter == 0) ? S_LOOP_NEXT : S_ERROR) // If command is LOOP, go to IDLE if not looping, otherwise ERROR
+                           : (command == CMD_SET_ORD) ? ((loop_counter == 0) ? S_IDLE : S_ERROR) // If command is SET_ORD, go to IDLE if not looping, otherwise ERROR
                            : (command == CMD_CANCEL) ? S_IDLE // If command is CANCEL, go to IDLE
                            : S_ERROR; // If command is unrecognized, go to ERROR state
   // Signal indicating the core is waiting for a trigger
@@ -259,6 +274,20 @@ module shim_ads816x_adc_ctrl #(
     else if (boot_test_skip) setup_done <= 1'b1; // If boot test is skipped, set setup done immediately
     else if ((state == S_TEST_RD) && !n_miso_data_ready_mosi_clk && boot_readback_match) setup_done <= 1'b1;
   end
+
+
+  //// ---- Looping
+  assign looping = (loop_counter > 0 && state != S_LOOP_NEXT);
+  always @(posedge clk) begin
+    if (!resetn || state == S_ERROR) loop_cmd_word <= 32'd0;
+    else if (state == S_LOOP_NEXT && loop_counter > 0 && next_cmd_ready) loop_cmd_word <= cmd_buf_word;
+    else if (!looping) loop_cmd_word <= 32'd0;
+  end
+  always @(posedge clk) begin
+    if (!resetn || state == S_ERROR) loop_counter <= 26'd0;
+    else if (next_cmd && command == CMD_LOOP) loop_counter <= cmd_word[25:0];
+    else if (loop_counter > 0 && cmd_done) loop_counter <= loop_counter - 1;
+  end 
 
 
   //// ---- Delay timer
@@ -290,7 +319,7 @@ module shim_ads816x_adc_ctrl #(
                  || (state != S_TRIG_WAIT && trigger && trigger_counter == 0) // Unexpected trigger
                  || (state == S_ADC_RD && !adc_rd_done && !wait_for_trig && delay_timer == 0) // Delay too short
                  || (next_cmd && next_cmd_state == S_ERROR) // Bad command
-                 || (cmd_done && expect_next && cmd_buf_empty) // Command buffer underflow
+                 || (cmd_done && expect_next && !next_cmd_ready) // Command buffer underflow
                  || (try_data_write && data_buf_full); // Data buffer overflow
   // Boot check fail
   assign boot_readback_match = (miso_data_mosi_clk[15:8] == SET_OTF_CFG_DATA); // Readback matches the test value
@@ -316,7 +345,7 @@ module shim_ads816x_adc_ctrl #(
   // Command buffer underflow
   always @(posedge clk) begin
     if (!resetn) cmd_buf_underflow <= 1'b0;
-    else if (cmd_done && expect_next && cmd_buf_empty) cmd_buf_underflow <= 1'b1;
+    else if (cmd_done && expect_next && !next_cmd_ready) cmd_buf_underflow <= 1'b1;
   end
   // Data buffer overflow
   always @(posedge clk) begin
@@ -498,9 +527,9 @@ module shim_ads816x_adc_ctrl #(
   // ADC data output write enable
   // Write MISO data to the data buffer when attempting a write and buffer isn't full
   always @(posedge clk) begin
-    if (!resetn) data_word_wr_en <= 1'b0; // Reset data word write enable on reset
-    else if (try_data_write && !data_buf_full) data_word_wr_en <= 1'b1; // Write data word when two words are ready and buffer isn't full
-    else data_word_wr_en <= 1'b0;
+    if (!resetn) data_buf_wr_en <= 1'b0; // Reset data word write enable on reset
+    else if (try_data_write && !data_buf_full) data_buf_wr_en <= 1'b1; // Write data word when two words are ready and buffer isn't full
+    else data_buf_wr_en <= 1'b0;
   end
   // MISO data stored flag
   // Alternate storing and writing MISO data
