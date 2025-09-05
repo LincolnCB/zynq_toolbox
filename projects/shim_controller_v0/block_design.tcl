@@ -168,16 +168,16 @@ wire shim_dac_0/spi_sequencer_0/spi_ref_clk ps_0/FCLK_CLK0
 ## Connect output buffers
 
 # Differential output buffer for CS
-cell lcb:user:differential_out_buffer:1.0 cs_o_buf {
-  DIFF_BUFFER_WIDTH 1
+cell lcb:user:diff_out_buf:1.0 cs_o_buf {
+  DIFF_BUF_WIDTH 1
 } {
   d_in /shim_dac_0/spi_sequencer_0/spi_cs
   diff_out_p cs_o_p
   diff_out_n cs_o_n
 }
 # Differential output buffer for SPI clock
-cell lcb:user:differential_out_buffer:1.0 spi_clk_o_buf {
-  DIFF_BUFFER_WIDTH 1
+cell lcb:user:diff_out_buf:1.0 spi_clk_o_buf {
+  DIFF_BUF_WIDTH 1
 } {
   d_in /shim_dac_0/spi_sequencer_0/spi_clk
   diff_out_p spi_clk_o_p
@@ -191,16 +191,16 @@ cell xilinx.com:ip:util_vector_logic ldac_inv {
 } {
   Op1 /shim_dac_0/spi_sequencer_0/spi_ldacn
 }
-cell lcb:user:differential_out_buffer:1.0 ldac_o_buf {
-  DIFF_BUFFER_WIDTH 1
+cell lcb:user:diff_out_buf:1.0 ldac_o_buf {
+  DIFF_BUF_WIDTH 1
 } {
   d_in ldac_inv/Res
   diff_out_p ldac_o_p
   diff_out_n ldac_o_n
 }
 # Differential output buffer for DAC MOSI
-cell lcb:user:differential_out_buffer:1.0 dac_mosi_o_buf {
-  DIFF_BUFFER_WIDTH 4
+cell lcb:user:diff_out_buf:1.0 dac_mosi_o_buf {
+  DIFF_BUF_WIDTH 4
 } {
   d_in /shim_dac_0/spiconcat_0/Dout
   diff_out_p dac_mosi_o_p

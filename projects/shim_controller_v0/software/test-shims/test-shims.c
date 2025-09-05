@@ -101,7 +101,7 @@ int main(int argc, char *argv[])
   char *linebuffer;
   unsigned int line_length;
   unsigned int line_counter = 0;
-  int **waveform_buffer = NULL;
+  int **waveform_buf = NULL;
 
   linebuffer = (char *) malloc(2048);
   
@@ -124,15 +124,15 @@ int main(int argc, char *argv[])
     }
     
     // Allocate memory -- 32 channels
-    waveform_buffer = (int **) malloc(32*sizeof(int *));
-    if(waveform_buffer == NULL) {
+    waveform_buf = (int **) malloc(32*sizeof(int *));
+    if(waveform_buf == NULL) {
       fprintf(stderr, "Error allocating waveform memory !\n");
       exit(-1);
     }
     
     for (int k=0; k<32; k++) {
-      waveform_buffer[k] = (int *) malloc(line_counter*sizeof(int));
-      if(waveform_buffer[k] == NULL) {
+      waveform_buf[k] = (int *) malloc(line_counter*sizeof(int));
+      if(waveform_buf[k] == NULL) {
         fprintf(stderr, "Error allocating waveform memory !\n");
         exit(-1);
       }
@@ -161,7 +161,7 @@ int main(int argc, char *argv[])
           exit(-1);
         }
         linebuffer_p = linebuffer_p + offset;
-        waveform_buffer[k][line_read_counter] = val;
+        waveform_buf[k][line_read_counter] = val;
       }
       fprintf(stdout, "."); fflush(stdout);
       line_read_counter++;
@@ -295,7 +295,7 @@ int main(int argc, char *argv[])
     for (int channel = 0; channel < 8; channel++) {
       for (int board = 0; board < 4; board++) {
         shim_memory[board * dbo + sample * 8 + channel] = \
-          ((channel | DAC_CMD) << 16) + (waveform_buffer[board * 8 + channel][sample] & 0xffff);
+          ((channel | DAC_CMD) << 16) + (waveform_buf[board * 8 + channel][sample] & 0xffff);
       }
     }
   }
@@ -315,8 +315,8 @@ int main(int argc, char *argv[])
 
         // Print the expected values
         dprintf(fd, "Expected:\n");
-        dprintf(fd, "  Ch%02d to %05d [0b", channel, waveform_buffer[board_to_log*8+channel][sample]);
-        cmd_word = ((channel | DAC_CMD) << 16) + (waveform_buffer[board_to_log*8+channel][sample] & 0xffff);
+        dprintf(fd, "  Ch%02d to %05d [0b", channel, waveform_buf[board_to_log*8+channel][sample]);
+        cmd_word = ((channel | DAC_CMD) << 16) + (waveform_buf[board_to_log*8+channel][sample] & 0xffff);
         for (int bit = 23; bit >= 0; bit--) {
           dprintf(fd, "%d", (cmd_word >> bit) & 0x1);
         }

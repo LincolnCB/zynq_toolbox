@@ -104,8 +104,8 @@ def sample_state_and_status_coverage(dut):
             bins = [True, False],
             rel = lambda x, y: x == y,
             at_least = 1)
-@CoverPoint("shim_hw_manager.block_buffers",
-            xf = lambda dut: int(dut.block_buffers.value),
+@CoverPoint("shim_hw_manager.block_bufs",
+            xf = lambda dut: int(dut.block_bufs.value),
             bins = [True, False],
             rel = lambda x, y: x == y,
             at_least = 1)

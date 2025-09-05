@@ -140,28 +140,34 @@ all: sd
 
 # Print all the available targets
 help:
+	@echo "Makefile for building Zynq-based projects"
+	@echo "Optionally set the variables PROJECT, BOARD, BOARD_VER, OFFLINE, and MOUNT_DIR"
+	@echo "  - e.g. 'make PROJECT=ex02_axi_interface BOARD=snickerdoodle_black BOARD_VER=1.0 OFFLINE=true'"
+	@echo ""
 	@echo "Available targets:"
 	@echo "  all                  - Build the SD card image for the project"
 	@echo "  tests                - Run all the tests for the custom cores necessary for the project"
-	@echo "  write_sd             - Write the SD card image to the mount point"
+	@echo "  write_sd             - Write the SD card image to the mount point (will clean first)"
+	@echo "                         (set custom MOUNT_DIR to the mount point of the SD card if needed)"
 	@echo "  petalinux_cfg        - Write or update the PetaLinux system configuration file"
 	@echo "  petalinux_rootfs_cfg - Write or update the PetaLinux root filesystem configuration file"
 	@echo "  petalinux_kernel_cfg - Write or update the PetaLinux kernel configuration file"
-	@echo "  clean_sd             - Clean the SD card"
+	@echo "  clean_sd             - Clean the SD card at the mount point"
+	@echo "                         (set custom MOUNT_DIR to the mount point of the SD card if needed)"
 	@echo "  clean_project        - Remove a single project's intermediate and temporary files, including cores"
 	@echo "  clean_build          - Remove all the intermediate and temporary files"
 	@echo "  clean_tests          - Remove all the result files from the tests, leaving the test status"
 	@echo "  clean_test_results   - Clean all test status and summary files from custom cores and projects"
 	@echo "  clean_all            - Remove all the output files too"
-	@echo "  bit                  - Build the bitstream file (system.bit)"
-	@echo "  sd                   - Build all the files necessary for a bootable SD card"
-	@echo "  rootfs               - Build the compressed root filesystem"
-	@echo "  boot                 - Build the compressed boot files"
-	@echo "  cores                - Build all the cores necessary for the project"
-	@echo "  xpr                  - Build the Xilinx project file"
-	@echo "  xsa                  - Build the hardware definition file"
-	@echo "  petalinux            - Create the PetaLinux project without building it"
-	@echo "  petalinux_build      - Build the PetaLinux project"
+	@echo "  bit                  - Build the bitstream file (system.bit) to the 'out' directory"
+	@echo "  sd                   - Build all the files necessary for a bootable SD card to the 'out' directory"
+	@echo "  rootfs               - Build the compressed root filesystem to the 'out' directory"
+	@echo "  boot                 - Build the compressed boot files to the 'out' directory"
+	@echo "  cores                - Build all the cores necessary for the project in the 'tmp' directory"
+	@echo "  xpr                  - Build the Xilinx project file (project.xpr) in the 'tmp' directory"
+	@echo "  xsa                  - Build the hardware definition file (hw_def.xsa) in the 'tmp' directory"
+	@echo "  petalinux            - Create the PetaLinux project without building it in the 'tmp' directory"
+	@echo "  petalinux_build      - Build the PetaLinux project in the 'tmp' directory"
 
 # Test summary for all the custom cores necessary for the project
 tests: projects/${PROJECT}/tests/core_tests_summary
@@ -169,7 +175,7 @@ tests: projects/${PROJECT}/tests/core_tests_summary
 # Write the SD card image to the mount point
 write_sd: sd
 	@./scripts/make/status.sh "WRITING SD CARD IMAGE"
-	./scripts/make/write_sd.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(MOUNT_DIR)
+	./scripts/make/write_sd.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(MOUNT_DIR) --clean
 
 # Write or update the PetaLinux system configuration file
 petalinux_cfg: xsa
@@ -233,21 +239,15 @@ sd: boot rootfs
 
 # The bitstream file (system.bit)
 # Built from the Vivado project (project.xpr)
-bit: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit
-	mkdir -p out/$(BOARD)/$(BOARD_VER)/$(PROJECT)
-	cp tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/system.bit
+bit: out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/system.bit
 
 # The compressed root filesystem
 # Made in the petalinux build
-rootfs: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz
-	mkdir -p out/$(BOARD)/$(BOARD_VER)/$(PROJECT)
-	cp tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/rootfs.tar.gz
+rootfs: out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/rootfs.tar.gz
 
 # The compressed boot files
 # Requires the petalinux build (which will make the rootfs)
-boot: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz
-	mkdir -p out/$(BOARD)/$(BOARD_VER)/$(PROJECT)
-	cp tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/BOOT.tar.gz
+boot: out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/BOOT.tar.gz
 
 #############################################
 
@@ -273,14 +273,10 @@ xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa
 
 # The PetaLinux project
 # This project is used to build the linux system
-petalinux: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux
+petalinux: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec
 
 # Build the PetaLinux project
-petalinux_build: petalinux
-	@./scripts/make/status.sh "MAKING LINUX SYSTEM FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
-	cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && \
-		source $(PETALINUX_PATH)/settings.sh && \
-		petalinux-build
+petalinux_build: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz
 
 #############################################
 
@@ -364,20 +360,19 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PRO
 			exit $$RESULT; \
 		fi
 
-# The PetaLinux project
+# The PetaLinux project specification directory
 # Requires the hardware definition file
 # Built using the scripts/petalinux/project.sh script
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa $(shell find projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION) -type f) $(shell find projects/$(PROJECT)/rootfs_include -type f) $(shell find projects/$(PROJECT)/software -type f) $(shell find scripts/petalinux -type f)
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa $(shell find projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION) -type f) $(shell find projects/$(PROJECT)/rootfs_include -type f) $(shell find projects/$(PROJECT)/software -type f) $(shell find scripts/petalinux -type f)
 	@./scripts/make/status.sh "MAKING CONFIGURED PETALINUX PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	scripts/petalinux/project.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(OFFLINE)
 	scripts/petalinux/software.sh $(BOARD) $(BOARD_VER) $(PROJECT)
 	scripts/petalinux/kernel_modules.sh $(BOARD) $(BOARD_VER) $(PROJECT)
 	scripts/petalinux/device_tree.sh $(BOARD) $(BOARD_VER) $(PROJECT)
-	
 
 # The compressed root filesystem
-# Requires the PetaLinux project
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux scripts/petalinux/package_rootfs_files.sh
+# Requires the PetaLinux project specification directory
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec scripts/petalinux/package_rootfs_files.sh
 	@./scripts/make/status.sh "MAKING LINUX SYSTEM FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && \
 		source $(PETALINUX_PATH)/settings.sh && \
@@ -391,3 +386,18 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$
 tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz scripts/petalinux/package_boot.sh
 	@./scripts/make/status.sh "PACKAGING BOOT FILES FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	scripts/petalinux/package_boot.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+
+# The bitstream file copied to the output directory
+out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/system.bit: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit
+	mkdir -p $(@D)
+	cp tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit $@
+
+# The compressed boot files copied to the output directory
+out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/BOOT.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz
+	mkdir -p $(@D)
+	cp tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz $@
+
+# The compressed root filesystem copied to the output directory
+out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz
+	mkdir -p $(@D)
+	cp tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz $@

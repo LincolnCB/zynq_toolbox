@@ -147,7 +147,7 @@ async def test_normal_startup(dut):
     assert dut.n_shutdown_rst.value == 1, "Shutdown reset should be released"
     assert dut.shutdown_sense_en.value == 1, "Shutdown sense should be enabled"
     assert dut.spi_en.value == 1, "SPI should be enabled"
-    assert dut.block_buffers.value == 0, "Buffers should be unblocked"
+    assert dut.block_bufs.value == 0, "Buffers should be unblocked"
     assert dut.ps_interrupt.value == 1, "Interrupt should be asserted"
 
     await RisingEdge(dut.clk)
@@ -180,7 +180,7 @@ async def test_halted_to_idle(dut):
     assert dut.shutdown_sense_en.value == 0, "Expected shutdown sense disabled"
     assert dut.spi_clk_gate.value == 0, "Expected SPI clock gate disabled"
     assert dut.spi_en.value == 0, "Expected SPI disabled"
-    assert dut.block_buffers.value == 1, "Expected buffers to be blocked"
+    assert dut.block_bufs.value == 1, "Expected buffers to be blocked"
     assert dut.ps_interrupt.value == 1, "Expected interrupt asserted"
 
     await RisingEdge(dut.clk)
@@ -249,7 +249,7 @@ async def test_runtime_errors(dut):
         assert dut.shutdown_sense_en.value == 0, "Expected shutdown sense disabled"
         assert dut.spi_clk_gate.value == 0, "Expected SPI clock gate disabled"
         assert dut.spi_en.value == 0, "Expected SPI disabled"
-        assert dut.block_buffers.value == 1, "Expected buffers to be blocked"
+        assert dut.block_bufs.value == 1, "Expected buffers to be blocked"
         assert dut.ps_interrupt.value == 1, "Expected interrupt asserted"
 
 # Test per board errors explicitly in S_RUNNING state, system should go to S_HALTED state with the error on corresponding board
@@ -308,7 +308,7 @@ async def test_per_board_errors(dut):
         assert dut.shutdown_sense_en.value == 0, "Expected shutdown sense disabled"
         assert dut.spi_clk_gate.value == 0, "Expected SPI clock gate disabled"
         assert dut.spi_en.value == 0, "Expected SPI disabled"
-        assert dut.block_buffers.value == 1, "Expected buffers to be blocked"
+        assert dut.block_bufs.value == 1, "Expected buffers to be blocked"
         assert dut.ps_interrupt.value == 1, "Expected interrupt asserted"
 
 # Test SPI reset timeout, the system should go to S_HALTED state
@@ -345,7 +345,7 @@ async def test_spi_reset_timeout(dut):
     assert dut.shutdown_sense_en.value == 0, "Expected shutdown sense disabled"
     assert dut.spi_clk_gate.value == 0, "Expected SPI clock gate disabled"
     assert dut.spi_en.value == 0, "Expected SPI disabled"
-    assert dut.block_buffers.value == 1, "Expected buffers to be blocked"
+    assert dut.block_bufs.value == 1, "Expected buffers to be blocked"
     assert dut.ps_interrupt.value == 1, "Expected interrupt asserted"
 
 # Test SPI start timeout, the system should go to S_HALTED state

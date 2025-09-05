@@ -36,6 +36,7 @@ module shim_trigger_core #(
   localparam CMD_CANCEL          = 3'd7;
 
   // State encoding
+  localparam S_RESET       = 3'd0;
   localparam S_IDLE        = 3'd1;
   localparam S_SYNC_CH     = 3'd2;
   localparam S_EXPECT_TRIG = 3'd3;
@@ -67,8 +68,9 @@ module shim_trigger_core #(
   wire do_trig;
 
   // Trigger timing tracking
-  reg [63:0] trig_timer;
-  reg        trig_data_second_word;
+  reg [63:0] trig_timer; // 64-bit timer to track trigger timing
+  reg [31:0] second_word; // Second word to write to data buffer
+  reg        trig_data_second_word; // Flag to indicate if the second word is being written
 
   // Checks for cancel command and synchronization conditions
   assign cancel = !cmd_buf_empty && cmd_type == CMD_CANCEL;
@@ -90,7 +92,8 @@ module shim_trigger_core #(
                           : S_ERROR;
   // State transition logic
   always @(posedge clk) begin
-    if (!resetn) state <= S_IDLE; // Reset to idle
+    if (!resetn) state <= S_RESET; // Reset to S_RESET state
+    else if (state == S_RESET) state <= S_IDLE; // After reset, go to idle
     else if (cmd_done) state <= next_cmd_state; // Transition based on command done
   end
 
@@ -140,7 +143,6 @@ module shim_trigger_core #(
     else if (do_trig && (data_buf_full || data_buf_almost_full)) data_buf_overflow <= 1;
   end
 
-
   //// Read enable
   assign cmd_word_rd_en = next_cmd;
 
@@ -157,17 +159,24 @@ module shim_trigger_core #(
     if (!resetn) begin
       data_word_wr_en <= 0;
       data_word <= 32'h0;
-    end else if (data_word_wr_en) begin // If already writing a word
+      second_word <= 32'h0;
+      trig_data_second_word <= 0;
+    // If already writing a word
+    end else if (data_word_wr_en) begin
+      // If already writing the second word, disable write and reset flag
       if (trig_data_second_word) begin
         data_word_wr_en <= 0; // Disable write after second word
         trig_data_second_word <= 0; // Reset second word flag
+      // If writing the first word, prepare to write the second word next cycle
       end else begin
-        data_word <= trig_timer[63:32]; // Second word is the upper 32 bits of the timer
+        data_word <= second_word; // Write second word
         trig_data_second_word <= 1; // Set flag to write second word next cycle
       end
-    end else if (do_trig && !data_buf_full && !data_buf_almost_full) begin // Write first word on trigger
+    // Write first word on trigger if buffer has at least two free entries
+    end else if (do_trig && !data_buf_full && !data_buf_almost_full) begin
       data_word_wr_en <= 1;
       data_word <= trig_timer[31:0]; // First word is the lower 32 bits of the timer
+      second_word <= trig_timer[63:32]; // Second word is the upper 32 bits of the timer
     end
   end
 

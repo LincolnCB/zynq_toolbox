@@ -3,10 +3,13 @@
 module shim_axi_sys_ctrl #
 (
   parameter integer AXI_ADDR_WIDTH = 16,
-  parameter integer INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT = 16384,
-  parameter integer INTEGRATOR_WINDOW_DEFAULT = 5000000, // 100 ms at 50MHz
-  parameter integer INTEGRATOR_EN_DEFAULT = 1,
-  parameter integer BOOT_TEST_SKIP_DEFAULT = 0 // Default to not skipping boot test for all 16 cores
+  parameter integer INTEG_THRESHOLD_AVERAGE_DEFAULT = 16384,
+  parameter integer INTEG_WINDOW_DEFAULT = 5000000, // 100 ms at 50MHz
+  parameter integer INTEG_EN_DEFAULT = 1,
+  parameter integer BOOT_TEST_SKIP_DEFAULT = 0, // Default to not skipping boot test for all 16 cores
+  parameter integer DEBUG = 0, // Default to no debug
+  parameter integer MOSI_SCK_POL_DEFAULT = 0, // Default to 0 MOSI SCK polarity (don't invert)
+  parameter integer MISO_SCK_POL_DEFAULT = 1 // Default to 1 MISO SCK polarity (invert)
 )
 (
   // System signals
@@ -17,19 +20,27 @@ module shim_axi_sys_ctrl #
 
   // Configuration outputs
   output wire                sys_en,
-  output reg  [25:0]         buffer_reset,
+  output reg  [16:0]         cmd_buf_reset,
+  output reg  [16:0]         data_buf_reset,
   output reg  [14:0]         integ_thresh_avg,
   output reg  [31:0]         integ_window,
   output reg                 integ_en,
   output reg  [15:0]         boot_test_skip,
+  output reg  [15:0]         debug,
+  output reg                 mosi_sck_pol,
+  output reg                 miso_sck_pol,
 
   // Configuration bounds
   output wire  sys_en_oob,
-  output wire  buffer_reset_oob,
+  output wire  cmd_buf_reset_oob,
+  output wire  data_buf_reset_oob,
   output wire  integ_thresh_avg_oob,
   output wire  integ_window_oob,
   output wire  integ_en_oob,
   output wire  boot_test_skip_oob,
+  output wire  debug_oob,
+  output wire  mosi_sck_pol_oob,
+  output wire  miso_sck_pol_oob,
   output reg   lock_viol,
 
   // AXI4-Line subordinate port
@@ -57,46 +68,67 @@ module shim_axi_sys_ctrl #
   endfunction
 
   // Localparams for bit offsets
-  localparam integer SYS_EN_32_OFFSET                       = 0;
-  localparam integer BUFFER_RESET_32_OFFSET                 = 1;
-  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET = 2;
-  localparam integer INTEGRATOR_WINDOW_32_OFFSET            = 3;
-  localparam integer INTEGRATOR_EN_32_OFFSET                = 4;
-  localparam integer BOOT_TEST_SKIP_32_OFFSET               = 5;
+  localparam integer SYS_EN_32_OFFSET                  = 0;
+  localparam integer CMD_BUF_RESET_32_OFFSET           = 1;
+  localparam integer DATA_BUF_RESET_32_OFFSET          = 2;
+  localparam integer INTEG_THRESHOLD_AVERAGE_32_OFFSET = 3;
+  localparam integer INTEG_WINDOW_32_OFFSET            = 4;
+  localparam integer INTEG_EN_32_OFFSET                = 5;
+  localparam integer BOOT_TEST_SKIP_32_OFFSET          = 6;
+  localparam integer DEBUG_32_OFFSET                   = 7;
+  localparam integer MOSI_SCK_POL_32_OFFSET            = 8;
+  localparam integer MISO_SCK_POL_32_OFFSET            = 9;
 
   // Localparams for widths
   localparam integer SYS_EN_WIDTH = 1;
-  localparam integer BUFFER_RESET_WIDTH = 26;
-  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_WIDTH = 15;
-  localparam integer INTEGRATOR_WINDOW_WIDTH = 32;
-  localparam integer INTEGRATOR_EN_WIDTH = 1;
+  localparam integer CMD_BUF_RESET_WIDTH = 17;
+  localparam integer DATA_BUF_RESET_WIDTH = 17;
+  localparam integer INTEG_THRESHOLD_AVERAGE_WIDTH = 15;
+  localparam integer INTEG_WINDOW_WIDTH = 32;
+  localparam integer INTEG_EN_WIDTH = 1;
   localparam integer BOOT_TEST_SKIP_WIDTH = 16;
+  localparam integer DEBUG_WIDTH = 16;
+  localparam integer MOSI_SCK_POL_WIDTH = 1;
+  localparam integer MISO_SCK_POL_WIDTH = 1;
 
   // Localparams for MIN/MAX values
-  localparam integer SYS_EN_MAX                       = {{SYS_EN_WIDTH{1'b1}}};
-  localparam integer BUFFER_RESET_MAX                 = {{BUFFER_RESET_WIDTH{1'b1}}};
-  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_MIN = {{(INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1){1'b0}}, 1'b1}; // Minimum is 1
-  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_MAX = {{INTEGRATOR_THRESHOLD_AVERAGE_WIDTH{1'b1}}};
-  localparam integer INTEGRATOR_WINDOW_MIN            = 2048;
-  localparam integer INTEGRATOR_WINDOW_MAX            = {{INTEGRATOR_WINDOW_WIDTH{1'b1}}};
-  localparam integer INTEGRATOR_EN_MAX                = {{INTEGRATOR_EN_WIDTH{1'b1}}};
-  localparam integer BOOT_TEST_SKIP_MAX               = {{BOOT_TEST_SKIP_WIDTH{1'b1}}};
+  localparam integer SYS_EN_MAX                  = {{SYS_EN_WIDTH{1'b1}}};
+  localparam integer CMD_BUF_RESET_MAX           = {{CMD_BUF_RESET_WIDTH{1'b1}}};
+  localparam integer DATA_BUF_RESET_MAX          = {{DATA_BUF_RESET_WIDTH{1'b1}}};
+  localparam integer INTEG_THRESHOLD_AVERAGE_MIN = {{(INTEG_THRESHOLD_AVERAGE_WIDTH-1){1'b0}}, 1'b1}; // Minimum is 1
+  localparam integer INTEG_THRESHOLD_AVERAGE_MAX = {{INTEG_THRESHOLD_AVERAGE_WIDTH{1'b1}}};
+  localparam integer INTEG_WINDOW_MIN            = 2048;
+  localparam integer INTEG_WINDOW_MAX            = {{INTEG_WINDOW_WIDTH{1'b1}}};
+  localparam integer INTEG_EN_MAX                = {{INTEG_EN_WIDTH{1'b1}}};
+  localparam integer BOOT_TEST_SKIP_MAX          = {{BOOT_TEST_SKIP_WIDTH{1'b1}}};
+  localparam integer DEBUG_MAX                   = {{DEBUG_WIDTH{1'b1}}};
+  localparam integer MOSI_SCK_POL_MAX            = {{MOSI_SCK_POL_WIDTH{1'b1}}};
+  localparam integer MISO_SCK_POL_MAX            = {{MISO_SCK_POL_WIDTH{1'b1}}};
 
   // Local capped default values
-  localparam integer INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT_CAPPED = 
-    (INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT < INTEGRATOR_THRESHOLD_AVERAGE_MIN) ? INTEGRATOR_THRESHOLD_AVERAGE_MIN :
-    (INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT > INTEGRATOR_THRESHOLD_AVERAGE_MAX) ? INTEGRATOR_THRESHOLD_AVERAGE_MAX :
-    INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT;
-  localparam integer INTEGRATOR_WINDOW_DEFAULT_CAPPED = 
-    (INTEGRATOR_WINDOW_DEFAULT < INTEGRATOR_WINDOW_MIN) ? INTEGRATOR_WINDOW_MIN :
-    (INTEGRATOR_WINDOW_DEFAULT > INTEGRATOR_WINDOW_MAX) ? INTEGRATOR_WINDOW_MAX :
-    INTEGRATOR_WINDOW_DEFAULT;
-  localparam integer INTEGRATOR_EN_DEFAULT_CAPPED = 
-    (INTEGRATOR_EN_DEFAULT > INTEGRATOR_EN_MAX) ? INTEGRATOR_EN_MAX :
-    INTEGRATOR_EN_DEFAULT;
+  localparam integer INTEG_THRESHOLD_AVERAGE_DEFAULT_CAPPED = 
+    (INTEG_THRESHOLD_AVERAGE_DEFAULT < INTEG_THRESHOLD_AVERAGE_MIN) ? INTEG_THRESHOLD_AVERAGE_MIN :
+    (INTEG_THRESHOLD_AVERAGE_DEFAULT > INTEG_THRESHOLD_AVERAGE_MAX) ? INTEG_THRESHOLD_AVERAGE_MAX :
+    INTEG_THRESHOLD_AVERAGE_DEFAULT;
+  localparam integer INTEG_WINDOW_DEFAULT_CAPPED = 
+    (INTEG_WINDOW_DEFAULT < INTEG_WINDOW_MIN) ? INTEG_WINDOW_MIN :
+    (INTEG_WINDOW_DEFAULT > INTEG_WINDOW_MAX) ? INTEG_WINDOW_MAX :
+    INTEG_WINDOW_DEFAULT;
+  localparam integer INTEG_EN_DEFAULT_CAPPED = 
+    (INTEG_EN_DEFAULT > INTEG_EN_MAX) ? INTEG_EN_MAX :
+    INTEG_EN_DEFAULT;
   localparam integer BOOT_TEST_SKIP_DEFAULT_CAPPED =
     (BOOT_TEST_SKIP_DEFAULT > BOOT_TEST_SKIP_MAX) ? BOOT_TEST_SKIP_MAX :
     BOOT_TEST_SKIP_DEFAULT;
+  localparam integer DEBUG_DEFAULT_CAPPED =
+    (DEBUG > DEBUG_MAX) ? DEBUG_MAX :
+    DEBUG;
+  localparam integer MOSI_SCK_POL_DEFAULT_CAPPED =
+    (MOSI_SCK_POL_DEFAULT > MOSI_SCK_POL_MAX) ? MOSI_SCK_POL_MAX :
+    MOSI_SCK_POL_DEFAULT;
+  localparam integer MISO_SCK_POL_DEFAULT_CAPPED =
+    (MISO_SCK_POL_DEFAULT > MISO_SCK_POL_MAX) ? MISO_SCK_POL_MAX :
+    MISO_SCK_POL_DEFAULT;
 
   // Local parameters for AXI configuration
   localparam integer CFG_DATA_WIDTH = 1024;
@@ -161,43 +193,58 @@ module shim_axi_sys_ctrl #
   // Initial values (shifted)
   assign int_data_wire = int_axi_data_wire | (~int_data_modified_wire & int_initial_data_wire);
   assign int_initial_data_wire[SYS_EN_32_OFFSET*32+SYS_EN_WIDTH-1:SYS_EN_32_OFFSET*32] = {SYS_EN_WIDTH{1'b0}}; // System enable defaults to 0
-  assign int_initial_data_wire[BUFFER_RESET_32_OFFSET*32+BUFFER_RESET_WIDTH-1-:BUFFER_RESET_WIDTH] = {BUFFER_RESET_WIDTH{1'b0}}; // Buffer reset defaults to 0 (but !aresetn will override them to 1)
-  assign int_initial_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH] = INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT_CAPPED[INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1:0];
-  assign int_initial_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1-:INTEGRATOR_WINDOW_WIDTH] = INTEGRATOR_WINDOW_DEFAULT_CAPPED[INTEGRATOR_WINDOW_WIDTH-1:0];
-  assign int_initial_data_wire[INTEGRATOR_EN_32_OFFSET*32+INTEGRATOR_EN_WIDTH-1:INTEGRATOR_EN_32_OFFSET*32] = INTEGRATOR_EN_DEFAULT_CAPPED[INTEGRATOR_EN_WIDTH-1:0];
+  assign int_initial_data_wire[CMD_BUF_RESET_32_OFFSET*32+CMD_BUF_RESET_WIDTH-1-:CMD_BUF_RESET_WIDTH] = {CMD_BUF_RESET_WIDTH{1'b0}}; // Command buffer reset defaults to 0
+  assign int_initial_data_wire[DATA_BUF_RESET_32_OFFSET*32+DATA_BUF_RESET_WIDTH-1-:DATA_BUF_RESET_WIDTH] = {DATA_BUF_RESET_WIDTH{1'b0}}; // Data buffer reset defaults to 0
+  assign int_initial_data_wire[INTEG_THRESHOLD_AVERAGE_32_OFFSET*32+INTEG_THRESHOLD_AVERAGE_WIDTH-1-:INTEG_THRESHOLD_AVERAGE_WIDTH] = INTEG_THRESHOLD_AVERAGE_DEFAULT_CAPPED[INTEG_THRESHOLD_AVERAGE_WIDTH-1:0];
+  assign int_initial_data_wire[INTEG_WINDOW_32_OFFSET*32+INTEG_WINDOW_WIDTH-1-:INTEG_WINDOW_WIDTH] = INTEG_WINDOW_DEFAULT_CAPPED[INTEG_WINDOW_WIDTH-1:0];
+  assign int_initial_data_wire[INTEG_EN_32_OFFSET*32+INTEG_EN_WIDTH-1:INTEG_EN_32_OFFSET*32] = INTEG_EN_DEFAULT_CAPPED[INTEG_EN_WIDTH-1:0];
   assign int_initial_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1-:BOOT_TEST_SKIP_WIDTH] = BOOT_TEST_SKIP_DEFAULT_CAPPED[BOOT_TEST_SKIP_WIDTH-1:0];
+  assign int_initial_data_wire[DEBUG_32_OFFSET*32+DEBUG_WIDTH-1-:DEBUG_WIDTH] = DEBUG_DEFAULT_CAPPED[DEBUG_WIDTH-1:0];
+  assign int_initial_data_wire[MOSI_SCK_POL_32_OFFSET*32+MOSI_SCK_POL_WIDTH-1:MOSI_SCK_POL_32_OFFSET*32] = MOSI_SCK_POL_DEFAULT_CAPPED[MOSI_SCK_POL_WIDTH-1:0];
+  assign int_initial_data_wire[MISO_SCK_POL_32_OFFSET*32+MISO_SCK_POL_WIDTH-1:MISO_SCK_POL_32_OFFSET*32] = MISO_SCK_POL_DEFAULT_CAPPED[MISO_SCK_POL_WIDTH-1:0];
 
   // Out of bounds checks. Use the whole word for the check to error on truncation
   assign sys_en_oob = $unsigned(int_data_wire[SYS_EN_32_OFFSET*32+SYS_EN_WIDTH-1:SYS_EN_32_OFFSET*32]) > SYS_EN_MAX;
-  assign buffer_reset_oob = $unsigned(int_data_wire[BUFFER_RESET_32_OFFSET*32+BUFFER_RESET_WIDTH-1:BUFFER_RESET_32_OFFSET*32]) > BUFFER_RESET_MAX;
-  assign integ_thresh_avg_oob = $unsigned(int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH]) < $unsigned(INTEGRATOR_THRESHOLD_AVERAGE_MIN) 
-                             || $unsigned(int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH]) > $unsigned(INTEGRATOR_THRESHOLD_AVERAGE_MAX)
-                             || $unsigned(int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1-:INTEGRATOR_THRESHOLD_AVERAGE_WIDTH]) > $unsigned(32767);
-  assign integ_window_oob = $unsigned(int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1-:INTEGRATOR_WINDOW_WIDTH]) < $unsigned(INTEGRATOR_WINDOW_MIN) 
-                         || $unsigned(int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1-:INTEGRATOR_WINDOW_WIDTH]) > $unsigned(INTEGRATOR_WINDOW_MAX);
-  assign integ_en_oob = $unsigned(int_data_wire[INTEGRATOR_EN_32_OFFSET*32+31:INTEGRATOR_EN_32_OFFSET*32]) > INTEGRATOR_EN_MAX;
+  assign cmd_buf_reset_oob = $unsigned(int_data_wire[CMD_BUF_RESET_32_OFFSET*32+CMD_BUF_RESET_WIDTH-1:CMD_BUF_RESET_32_OFFSET*32]) > CMD_BUF_RESET_MAX;
+  assign data_buf_reset_oob = $unsigned(int_data_wire[DATA_BUF_RESET_32_OFFSET*32+DATA_BUF_RESET_WIDTH-1:DATA_BUF_RESET_32_OFFSET*32]) > DATA_BUF_RESET_MAX;
+  assign integ_thresh_avg_oob = $unsigned(int_data_wire[INTEG_THRESHOLD_AVERAGE_32_OFFSET*32+INTEG_THRESHOLD_AVERAGE_WIDTH-1-:INTEG_THRESHOLD_AVERAGE_WIDTH]) < $unsigned(INTEG_THRESHOLD_AVERAGE_MIN) 
+                             || $unsigned(int_data_wire[INTEG_THRESHOLD_AVERAGE_32_OFFSET*32+INTEG_THRESHOLD_AVERAGE_WIDTH-1-:INTEG_THRESHOLD_AVERAGE_WIDTH]) > $unsigned(INTEG_THRESHOLD_AVERAGE_MAX)
+                             || $unsigned(int_data_wire[INTEG_THRESHOLD_AVERAGE_32_OFFSET*32+INTEG_THRESHOLD_AVERAGE_WIDTH-1-:INTEG_THRESHOLD_AVERAGE_WIDTH]) > $unsigned(32767);
+  assign integ_window_oob = $unsigned(int_data_wire[INTEG_WINDOW_32_OFFSET*32+INTEG_WINDOW_WIDTH-1-:INTEG_WINDOW_WIDTH]) < $unsigned(INTEG_WINDOW_MIN) 
+                         || $unsigned(int_data_wire[INTEG_WINDOW_32_OFFSET*32+INTEG_WINDOW_WIDTH-1-:INTEG_WINDOW_WIDTH]) > $unsigned(INTEG_WINDOW_MAX);
+  assign integ_en_oob = $unsigned(int_data_wire[INTEG_EN_32_OFFSET*32+31:INTEG_EN_32_OFFSET*32]) > INTEG_EN_MAX;
   assign boot_test_skip_oob = $unsigned(int_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1:BOOT_TEST_SKIP_32_OFFSET*32]) > BOOT_TEST_SKIP_MAX;
+  assign debug_oob = $unsigned(int_data_wire[DEBUG_32_OFFSET*32+DEBUG_WIDTH-1:DEBUG_32_OFFSET*32]) > DEBUG_MAX;
+  assign mosi_sck_pol_oob = $unsigned(int_data_wire[MOSI_SCK_POL_32_OFFSET*32+MOSI_SCK_POL_WIDTH-1:MOSI_SCK_POL_32_OFFSET*32]) > MOSI_SCK_POL_MAX;
+  assign miso_sck_pol_oob = $unsigned(int_data_wire[MISO_SCK_POL_32_OFFSET*32+MISO_SCK_POL_WIDTH-1:MISO_SCK_POL_32_OFFSET*32]) > MISO_SCK_POL_MAX;
 
   // Address and value bound compliance sent to write response
   // Send SLVERR if there are any violations
   assign int_bresp_wire = 
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == SYS_EN_32_OFFSET) ? (sys_en_oob ? 2'b10 : 2'b00) :
-    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == BUFFER_RESET_32_OFFSET) ? (buffer_reset_oob ? 2'b10 : 2'b00) :
-    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET) ? ((locked || integ_thresh_avg_oob) ? 2'b10 : 2'b00) :
-    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_WINDOW_32_OFFSET) ? ((locked || integ_window_oob) ? 2'b10 : 2'b00) :
-    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEGRATOR_EN_32_OFFSET) ? ((locked || integ_en_oob) ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == CMD_BUF_RESET_32_OFFSET) ? (cmd_buf_reset_oob ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == DATA_BUF_RESET_32_OFFSET) ? (data_buf_reset_oob ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEG_THRESHOLD_AVERAGE_32_OFFSET) ? ((locked || integ_thresh_avg_oob) ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEG_WINDOW_32_OFFSET) ? ((locked || integ_window_oob) ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEG_EN_32_OFFSET) ? ((locked || integ_en_oob) ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == BOOT_TEST_SKIP_32_OFFSET) ? ((locked || boot_test_skip_oob) ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == DEBUG_32_OFFSET) ? ((locked || debug_oob) ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == MOSI_SCK_POL_32_OFFSET) ? ((locked || mosi_sck_pol_oob) ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == MISO_SCK_POL_32_OFFSET) ? ((locked || miso_sck_pol_oob) ? 2'b10 : 2'b00) :
     2'b10;
   
   assign sys_en = int_data_wire[SYS_EN_32_OFFSET*32];
 
   // Lock violation wire
-  // sys_en and buffer_reset are not locked, so they are not checked
+  // sys_en, cmd_buf_reset, and data_buf_reset are not locked, so they are not checked
   assign int_lock_viol_wire = 
-            integ_thresh_avg != int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1:INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32]
-            || integ_window != int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1:INTEGRATOR_WINDOW_32_OFFSET*32]
-            || integ_en != int_data_wire[INTEGRATOR_EN_32_OFFSET*32]
-            || boot_test_skip != int_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1:BOOT_TEST_SKIP_32_OFFSET*32];
+            integ_thresh_avg != int_data_wire[INTEG_THRESHOLD_AVERAGE_32_OFFSET*32+INTEG_THRESHOLD_AVERAGE_WIDTH-1:INTEG_THRESHOLD_AVERAGE_32_OFFSET*32]
+            || integ_window != int_data_wire[INTEG_WINDOW_32_OFFSET*32+INTEG_WINDOW_WIDTH-1:INTEG_WINDOW_32_OFFSET*32]
+            || integ_en != int_data_wire[INTEG_EN_32_OFFSET*32]
+            || boot_test_skip != int_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1:BOOT_TEST_SKIP_32_OFFSET*32]
+            || debug != int_data_wire[DEBUG_32_OFFSET*32+DEBUG_WIDTH-1:DEBUG_32_OFFSET*32]
+            || mosi_sck_pol != int_data_wire[MOSI_SCK_POL_32_OFFSET*32]
+            || miso_sck_pol != int_data_wire[MISO_SCK_POL_32_OFFSET*32];
 
   // Configuration register sanitization logic
   always @(posedge aclk)
@@ -208,11 +255,15 @@ module shim_axi_sys_ctrl #
       int_rvalid_reg <= 1'b0;
       int_rdata_reg <= {(AXI_DATA_WIDTH){1'b0}};
 
-      buffer_reset <= {BUFFER_RESET_WIDTH{1'b1}}; // Buffer reset is high if reset is asserted, but defaults to 0 otherwise
-      integ_thresh_avg <= INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT_CAPPED;
-      integ_window <= INTEGRATOR_WINDOW_DEFAULT_CAPPED;
-      integ_en <= INTEGRATOR_EN_DEFAULT_CAPPED;
+      cmd_buf_reset <= {CMD_BUF_RESET_WIDTH{1'b1}}; // Command buffer reset is high if reset is asserted, but defaults to 0 otherwise
+      data_buf_reset <= {DATA_BUF_RESET_WIDTH{1'b1}}; // Data buffer reset is high if reset is asserted, but defaults to 0 otherwise
+      integ_thresh_avg <= INTEG_THRESHOLD_AVERAGE_DEFAULT_CAPPED;
+      integ_window <= INTEG_WINDOW_DEFAULT_CAPPED;
+      integ_en <= INTEG_EN_DEFAULT_CAPPED;
       boot_test_skip <= BOOT_TEST_SKIP_DEFAULT_CAPPED;
+      debug <= DEBUG_DEFAULT_CAPPED;
+      mosi_sck_pol <= MOSI_SCK_POL_DEFAULT_CAPPED;
+      miso_sck_pol <= MISO_SCK_POL_DEFAULT_CAPPED;
 
       locked <= 1'b0;
       lock_viol <= 1'b0;
@@ -224,15 +275,19 @@ module shim_axi_sys_ctrl #
       int_rdata_reg <= int_rdata_next;
 
       // Buffers are a register even though they're not locked to allow the reset value to be different than the default
-      buffer_reset <= int_data_wire[BUFFER_RESET_32_OFFSET*32+BUFFER_RESET_WIDTH-1:BUFFER_RESET_32_OFFSET*32];
+      cmd_buf_reset <= int_data_wire[CMD_BUF_RESET_32_OFFSET*32+CMD_BUF_RESET_WIDTH-1:CMD_BUF_RESET_32_OFFSET*32];
+      data_buf_reset <= int_data_wire[DATA_BUF_RESET_32_OFFSET*32+DATA_BUF_RESET_WIDTH-1:DATA_BUF_RESET_32_OFFSET*32];
 
       // Lock other registers if sys_en is set
       if(sys_en) begin
         locked <= 1'b1;
-        integ_thresh_avg <= int_data_wire[INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32+INTEGRATOR_THRESHOLD_AVERAGE_WIDTH-1:INTEGRATOR_THRESHOLD_AVERAGE_32_OFFSET*32];
-        integ_window <= int_data_wire[INTEGRATOR_WINDOW_32_OFFSET*32+INTEGRATOR_WINDOW_WIDTH-1:INTEGRATOR_WINDOW_32_OFFSET*32];
-        integ_en <= int_data_wire[INTEGRATOR_EN_32_OFFSET*32+INTEGRATOR_EN_WIDTH-1:INTEGRATOR_EN_32_OFFSET*32];
+        integ_thresh_avg <= int_data_wire[INTEG_THRESHOLD_AVERAGE_32_OFFSET*32+INTEG_THRESHOLD_AVERAGE_WIDTH-1:INTEG_THRESHOLD_AVERAGE_32_OFFSET*32];
+        integ_window <= int_data_wire[INTEG_WINDOW_32_OFFSET*32+INTEG_WINDOW_WIDTH-1:INTEG_WINDOW_32_OFFSET*32];
+        integ_en <= int_data_wire[INTEG_EN_32_OFFSET*32+INTEG_EN_WIDTH-1:INTEG_EN_32_OFFSET*32];
         boot_test_skip <= int_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1:BOOT_TEST_SKIP_32_OFFSET*32];
+        debug <= int_data_wire[DEBUG_32_OFFSET*32+DEBUG_WIDTH-1:DEBUG_32_OFFSET*32];
+        mosi_sck_pol <= int_data_wire[MOSI_SCK_POL_32_OFFSET*32];
+        miso_sck_pol <= int_data_wire[MISO_SCK_POL_32_OFFSET*32];
       end else if (unlock) begin
         locked <= 1'b0;
         lock_viol <= 1'b0;

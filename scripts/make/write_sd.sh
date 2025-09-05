@@ -1,28 +1,37 @@
 #!/bin/bash
 # Write an SD card image for the given board and project
-# Arguments: <board_name> <board_version> <project_name> [<mount_directory>]
-if [ $# -lt 3 ] || [ $# -gt 4 ]; then
+# Arguments: <board_name> <board_version> <project_name> [<mount_directory>] [--clean]
+
+CLEAN=0
+
+# Parse arguments and optional --clean flag
+ARGS=()
+for arg in "$@"; do
+  if [ "$arg" == "--clean" ]; then
+    CLEAN=1
+  else
+    ARGS+=("$arg")
+  fi
+done
+
+if [ ${#ARGS[@]} -lt 3 ] || [ ${#ARGS[@]} -gt 4 ]; then
   echo "[WRITE SD] ERROR:"
-  echo "Usage: $0 <board_name> <board_version> <project_name> [<mount_directory>]"
+  echo "Usage: $0 <board_name> <board_version> <project_name> [<mount_directory>] [--clean]"
   exit 1
 fi
 
-# Store the positional parameters in named variables
-BRD=${1}
-VER=${2}
-PRJ=${3}
-if [ $# -eq 4 ]; then
-  MNT=${4}
+BRD=${ARGS[0]}
+VER=${ARGS[1]}
+PRJ=${ARGS[2]}
+if [ ${#ARGS[@]} -eq 4 ]; then
+  MNT=${ARGS[3]}
 else
   MNT="/media/$(whoami)"
 fi
 PBV="project \"${PRJ}\" and board \"${BRD}\" v${VER}"
-set --
 
-# If any subsequent command fails, exit immediately
 set -e
 
-# Check that the output directory exists for `out/BRD/VER/PRJ`
 if [ ! -d "out/${BRD}/${VER}/${PRJ}" ]; then
   echo "[WRITE SD] ERROR:"
   echo "Missing project output directory for ${PBV}"
@@ -34,7 +43,6 @@ if [ ! -d "out/${BRD}/${VER}/${PRJ}" ]; then
   exit 1
 fi
 
-# Check that the necessary files exist in `out/BRD/VER/PRJ`
 if [ ! -f "out/${BRD}/${VER}/${PRJ}/BOOT.tar.gz" ] || [ ! -f "out/${BRD}/${VER}/${PRJ}/rootfs.tar.gz" ]; then
   echo "[WRITE SD] ERROR:"
   echo "Missing required files for ${PBV}"
@@ -48,14 +56,12 @@ if [ ! -f "out/${BRD}/${VER}/${PRJ}/BOOT.tar.gz" ] || [ ! -f "out/${BRD}/${VER}/
   exit 1
 fi
 
-# Check that the media directory exists
 if [ ! -d "${MNT}" ]; then
   echo "[WRITE SD] ERROR:"
   echo "Media/mount directory does not exist: ${MNT}"
   exit 1
 fi
 
-# Check that BOOT and RootFS directories exist
 if [ ! -d "${MNT}/BOOT" ]; then
   echo "[WRITE SD] ERROR:"
   echo "Missing BOOT directory in mount point: ${MNT}/BOOT"
@@ -69,10 +75,14 @@ if [ ! -d "${MNT}/RootFS" ]; then
   exit 1
 fi
 
-# Unpack the BOOT image
+if [ $CLEAN -eq 1 ]; then
+  echo "[WRITE SD] --clean flag detected, running clean_sd.sh..."
+  SCRIPT_DIR="$(dirname "$0")"
+  bash "${SCRIPT_DIR}/clean_sd.sh" "${MNT}"
+fi
+
 echo "[WRITE SD] Unpacking BOOT image for ${PBV} to ${MNT}/BOOT (needs sudo)"
 sudo tar -xzf out/${BRD}/${VER}/${PRJ}/BOOT.tar.gz -C ${MNT}/BOOT
 
-# Unpack the RootFS image
 echo "[WRITE SD] Unpacking RootFS image for ${PBV} to ${MNT}/RootFS (needs sudo)"
 sudo tar -xzf out/${BRD}/${VER}/${PRJ}/rootfs.tar.gz -C ${MNT}/RootFS

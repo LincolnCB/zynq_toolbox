@@ -25,6 +25,7 @@ The `shim_spi_sts_sync` module synchronizes a variety of status signals from the
   - `dac_cal_oob [7:0]`: DAC calibration out-of-bounds.
   - `dac_val_oob [7:0]`: DAC value out-of-bounds.
   - `dac_cmd_buf_underflow [7:0]`: DAC command buffer underflow.
+  - `dac_data_buf_overflow [7:0]`: DAC data buffer overflow.
   - `unexp_dac_trig [7:0]`: Unexpected DAC trigger.
   - `adc_boot_fail [7:0]`: ADC boot failure status.
   - `bad_adc_cmd [7:0]`: Bad ADC command detected.
@@ -46,6 +47,7 @@ The `shim_spi_sts_sync` module synchronizes a variety of status signals from the
   - `dac_cal_oob_sync [7:0]`: Synchronized DAC calibration out-of-bounds status.
   - `dac_val_oob_sync [7:0]`: Synchronized DAC value out-of-bounds status.
   - `dac_cmd_buf_underflow_sync [7:0]`: Synchronized DAC command buffer underflow status.
+  - `dac_data_buf_overflow_sync [7:0]`: Synchronized DAC data buffer overflow status.
   - `unexp_dac_trig_sync [7:0]`: Synchronized unexpected DAC trigger status.
   - `adc_boot_fail_sync [7:0]`: Synchronized ADC boot failure status.
   - `bad_adc_cmd_sync [7:0]`: Synchronized bad ADC command status.

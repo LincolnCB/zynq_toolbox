@@ -25,7 +25,10 @@ create_bd_pin -dir I spi_en
 create_bd_pin -dir I -from 14 -to 0 integ_thresh_avg
 create_bd_pin -dir I -from 31 -to 0 integ_window
 create_bd_pin -dir I integ_en
+create_bd_pin -dir I -from  4 -to 0 dac_n_cs_high_time
+create_bd_pin -dir I -from  7 -to 0 adc_n_cs_high_time
 create_bd_pin -dir I -from 15 -to 0 boot_test_skip
+create_bd_pin -dir I -from 15 -to 0 debug
 
 ## Status signals (need synchronization)
 # SPI system status
@@ -43,13 +46,17 @@ create_bd_pin -dir O -from 7 -to 0 bad_dac_cmd
 create_bd_pin -dir O -from 7 -to 0 dac_cal_oob
 create_bd_pin -dir O -from 7 -to 0 dac_val_oob
 create_bd_pin -dir O -from 7 -to 0 dac_cmd_buf_underflow
+create_bd_pin -dir O -from 7 -to 0 dac_data_buf_overflow
 create_bd_pin -dir O -from 7 -to 0 unexp_dac_trig
+create_bd_pin -dir O -from 7 -to 0 ldac_misalign
+create_bd_pin -dir O -from 7 -to 0 dac_delay_too_short
 # ADC channel status
 create_bd_pin -dir O -from 7 -to 0 adc_boot_fail
 create_bd_pin -dir O -from 7 -to 0 bad_adc_cmd
 create_bd_pin -dir O -from 7 -to 0 adc_cmd_buf_underflow
 create_bd_pin -dir O -from 7 -to 0 adc_data_buf_overflow
 create_bd_pin -dir O -from 7 -to 0 unexp_adc_trig
+create_bd_pin -dir O -from 7 -to 0 adc_delay_too_short
 
 # Commands and data
 for {set i 0} {$i < $board_count} {incr i} {
@@ -57,6 +64,11 @@ for {set i 0} {$i < $board_count} {incr i} {
   create_bd_pin -dir I -from 31 -to 0 dac_ch${i}_cmd
   create_bd_pin -dir O dac_ch${i}_cmd_rd_en
   create_bd_pin -dir I dac_ch${i}_cmd_empty
+
+  # DAC data channel
+  create_bd_pin -dir O -from 31 -to 0 dac_ch${i}_data
+  create_bd_pin -dir O dac_ch${i}_data_wr_en
+  create_bd_pin -dir I dac_ch${i}_data_full
 
   # ADC command channel
   create_bd_pin -dir I -from 31 -to 0 adc_ch${i}_cmd
@@ -82,7 +94,7 @@ create_bd_pin -dir I trig_data_almost_full
 create_bd_pin -dir I ext_trig
 
 # Block buffers on the SPI side (until HW Manager is ready)
-create_bd_pin -dir I block_buffers
+create_bd_pin -dir I block_bufs
 
 # SPI interface signals (out)
 create_bd_pin -dir O ldac
@@ -110,11 +122,8 @@ cell xilinx.com:ip:xlconstant:1.1 const_1 {
 
 ## SPI clock domain crossing reset (first reset)
 # Create proc_sys_reset for the synchronization reset
-cell xilinx.com:ip:proc_sys_reset:5.0 sync_rst_core {
-  C_AUX_RESET_HIGH.VALUE_SRC USER
-  C_AUX_RESET_HIGH 0
-} {
-  aux_reset_in spi_en
+cell xilinx.com:ip:proc_sys_reset:5.0 sync_rst_core {} {
+  ext_reset_in spi_en
   slowest_sync_clk spi_clk
 }
 ## SPI system configuration synchronization
@@ -124,22 +133,21 @@ cell lcb:user:shim_spi_cfg_sync spi_cfg_sync {} {
   spi_clk spi_clk
   spi_resetn sync_rst_core/peripheral_aresetn
   spi_en spi_en
-  block_buffers block_buffers
+  block_bufs block_bufs
   integ_thresh_avg integ_thresh_avg
   integ_window integ_window
   integ_en integ_en
+  dac_n_cs_high_time dac_n_cs_high_time
+  adc_n_cs_high_time adc_n_cs_high_time
   boot_test_skip boot_test_skip
+  debug debug
 }
 ## SPI system reset
 # Create proc_sys_reset for SPI-system-wide reset
-cell xilinx.com:ip:proc_sys_reset:5.0 spi_rst_core {
-  C_AUX_RESET_HIGH.VALUE_SRC USER
-  C_AUX_RESET_HIGH 0
-} {
-  aux_reset_in spi_cfg_sync/spi_en_sync
+cell xilinx.com:ip:proc_sys_reset:5.0 spi_rst_core {} {
+  ext_reset_in spi_cfg_sync/spi_en_sync
   slowest_sync_clk spi_clk
 }
-
 
 
 ## SPI system status synchronization
@@ -157,7 +165,10 @@ cell lcb:user:shim_spi_sts_sync spi_sts_sync {} {
   dac_cal_oob_sync dac_cal_oob
   dac_val_oob_sync dac_val_oob
   dac_cmd_buf_underflow_sync dac_cmd_buf_underflow
+  dac_data_buf_overflow_sync dac_data_buf_overflow
   unexp_dac_trig_sync unexp_dac_trig
+  ldac_misalign_sync ldac_misalign
+  dac_delay_too_short_sync dac_delay_too_short
   adc_boot_fail_sync adc_boot_fail
   bad_adc_cmd_sync bad_adc_cmd
   adc_cmd_buf_underflow_sync adc_cmd_buf_underflow
@@ -168,20 +179,20 @@ cell lcb:user:shim_spi_sts_sync spi_sts_sync {} {
 ##################################################
 
 ### Trigger core
-## Block the command and data buffers if needed (OR block_buffers_sync with cmd_buf_empty and data_buf_full)
+## Block the command and data buffers if needed (OR block_bufs_sync with cmd_buf_empty and data_buf_full)
 cell xilinx.com:ip:util_vector_logic trig_cmd_empty_blocked {
   C_SIZE 1
   C_OPERATION or
 } {
   Op1 trig_cmd_empty
-  Op2 spi_cfg_sync/block_buffers_sync
+  Op2 spi_cfg_sync/block_bufs_sync
 }
 cell xilinx.com:ip:util_vector_logic trig_data_full_blocked {
   C_SIZE 1
   C_OPERATION or
 } {
   Op1 trig_data_full
-  Op2 spi_cfg_sync/block_buffers_sync
+  Op2 spi_cfg_sync/block_bufs_sync
 }
 ## Trigger core
 cell lcb:user:shim_trigger_core trig_core {
@@ -212,23 +223,28 @@ for {set i 0} {$i < $board_count} {incr i} {
     integ_window spi_cfg_sync/integ_window_sync
     integ_thresh_avg spi_cfg_sync/integ_thresh_avg_sync
     integ_en spi_cfg_sync/integ_en_sync
+    dac_n_cs_high_time spi_cfg_sync/dac_n_cs_high_time_sync
     dac_cmd dac_ch${i}_cmd
     dac_cmd_rd_en dac_ch${i}_cmd_rd_en
     dac_cmd_empty dac_ch${i}_cmd_empty
-    block_buffers spi_cfg_sync/block_buffers_sync
+    dac_data dac_ch${i}_data
+    dac_data_wr_en dac_ch${i}_data_wr_en
+    dac_data_full dac_ch${i}_data_full
+    block_bufs spi_cfg_sync/block_bufs_sync
     trigger trig_core/trig_out
   }
   ## ADC Channel
   module spi_adc_channel adc_ch$i {
     spi_clk spi_clk
     resetn spi_rst_core/peripheral_aresetn
+    adc_n_cs_high_time spi_cfg_sync/adc_n_cs_high_time_sync
     adc_cmd adc_ch${i}_cmd
     adc_cmd_rd_en adc_ch${i}_cmd_rd_en
     adc_cmd_empty adc_ch${i}_cmd_empty
     adc_data adc_ch${i}_data
     adc_data_wr_en adc_ch${i}_data_wr_en
     adc_data_full adc_ch${i}_data_full
-    block_buffers spi_cfg_sync/block_buffers_sync
+    block_bufs spi_cfg_sync/block_bufs_sync
     trigger trig_core/trig_out
   }
 }
@@ -249,6 +265,25 @@ for {set i 0} {$i < $board_count} {incr i} {
   } {
     din spi_cfg_sync/boot_test_skip_sync
     dout adc_ch${i}/boot_test_skip
+  }
+}
+# Debug signals
+for {set i 0} {$i < $board_count} {incr i} {
+  cell xilinx.com:ip:xlslice:1.0 dac_ch${i}_debug {
+    DIN_WIDTH 16
+    DIN_FROM [expr {2*$i}]
+    DIN_TO [expr {2*$i}]
+  } {
+    din spi_cfg_sync/debug_sync
+    dout dac_ch${i}/debug
+  }
+  cell xilinx.com:ip:xlslice:1.0 adc_ch${i}_debug {
+    DIN_WIDTH 16
+    DIN_FROM [expr {2*$i + 1}]
+    DIN_TO [expr {2*$i + 1}]
+  } {
+    din spi_cfg_sync/debug_sync
+    dout adc_ch${i}/debug
   }
 }
   
@@ -547,6 +582,19 @@ for {set i $board_count} {$i < 8} {incr i} {
   wire dac_cmd_buf_underflow_concat/In${i} const_0/dout
 }
 
+## dac_data_buf_overflow
+cell xilinx.com:ip:xlconcat:2.1 dac_data_buf_overflow_concat {
+  NUM_PORTS 8
+} {
+  dout spi_sts_sync/dac_data_buf_overflow
+}
+for {set i 0} {$i < $board_count} {incr i} {
+  wire dac_data_buf_overflow_concat/In${i} dac_ch${i}/data_buf_overflow
+}
+for {set i $board_count} {$i < 8} {incr i} {
+  wire dac_data_buf_overflow_concat/In${i} const_0/dout
+}
+
 ## unexp_dac_trig
 cell xilinx.com:ip:xlconcat:2.1 unexp_dac_trig_concat {
   NUM_PORTS 8
@@ -558,6 +606,32 @@ for {set i 0} {$i < $board_count} {incr i} {
 }
 for {set i $board_count} {$i < 8} {incr i} {
   wire unexp_dac_trig_concat/In${i} const_0/dout
+}
+
+## ldac_misalign
+cell xilinx.com:ip:xlconcat:2.1 ldac_misalign_concat {
+  NUM_PORTS 8
+} {
+  dout spi_sts_sync/ldac_misalign
+}
+for {set i 0} {$i < $board_count} {incr i} {
+  wire ldac_misalign_concat/In${i} dac_ch${i}/ldac_misalign
+}
+for {set i $board_count} {$i < 8} {incr i} {
+  wire ldac_misalign_concat/In${i} const_0/dout
+}
+
+## dac_delay_too_short
+cell xilinx.com:ip:xlconcat:2.1 dac_delay_too_short_concat {
+  NUM_PORTS 8
+} {
+  dout spi_sts_sync/dac_delay_too_short
+}
+for {set i 0} {$i < $board_count} {incr i} {
+  wire dac_delay_too_short_concat/In${i} dac_ch${i}/delay_too_short
+}
+for {set i $board_count} {$i < 8} {incr i} {
+  wire dac_delay_too_short_concat/In${i} const_0/dout
 }
 
 ## adc_boot_fail
@@ -623,4 +697,17 @@ for {set i 0} {$i < $board_count} {incr i} {
 }
 for {set i $board_count} {$i < 8} {incr i} {
   wire unexp_adc_trig_concat/In${i} const_0/dout
+}
+
+## adc_delay_too_short
+cell xilinx.com:ip:xlconcat:2.1 adc_delay_too_short_concat {
+  NUM_PORTS 8
+} {
+  dout spi_sts_sync/adc_delay_too_short
+}
+for {set i 0} {$i < $board_count} {incr i} {
+  wire adc_delay_too_short_concat/In${i} adc_ch${i}/delay_too_short
+}
+for {set i $board_count} {$i < 8} {incr i} {
+  wire adc_delay_too_short_concat/In${i} const_0/dout
 }

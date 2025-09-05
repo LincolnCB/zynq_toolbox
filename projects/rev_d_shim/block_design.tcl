@@ -1,5 +1,5 @@
 ## Variably define the channel count (MUST BE 1 TO 8 INCLUSIVE)
-set board_count 1
+set board_count 3
 
 # If the board count is not 8, then error out
 if {$board_count < 1 || $board_count > 8} {
@@ -15,6 +15,26 @@ if {$use_ext_clk != 0 && $use_ext_clk != 1} {
   puts "Error: use_ext_clk must be 0 or 1."
   exit 1
 }
+
+## Variably define the default SPI clock frequency (MHz)
+set spi_clk_freq_mhz 20.000
+
+# If the default SPI clock frequency is not between 1 and 50 MHz, then error out
+if {$spi_clk_freq_mhz < 1.0 || $spi_clk_freq_mhz > 50.0} {
+  puts "Error: spi_clk_freq_mhz must be between 1.0 and 50.0."
+  exit 1
+}
+
+## Variably define the FIFO address widths (10 to 17 inclusive)
+# This sets the depth of the FIFOs as 2^ADDR_WIDTH
+# Larger FIFOs use more FPGA resources, but allow for longer bursts and more buffering.
+# This can hit the cap fast!
+set dac_cmd_fifo_addr_width 11
+set dac_data_fifo_addr_width 10
+set adc_cmd_fifo_addr_width 10
+set adc_data_fifo_addr_width 11
+set trig_cmd_fifo_addr_width 10
+set trig_data_fifo_addr_width 10
 
 ###############################################################################
 #
@@ -33,8 +53,8 @@ create_bd_port -dir I -type clk -freq_hz 10000000 Scanner_10Mhz_In
 create_bd_port -dir I -type data Shutdown_Sense
 # (Trigger_In)
 create_bd_port -dir I Trigger_In
-# (Shutdown_Button)
-create_bd_port -dir I Shutdown_Button
+# (Manual_Enable)
+create_bd_port -dir I Manual_Enable
 
 
 #------------------------------------------------------------
@@ -162,7 +182,7 @@ cell xilinx.com:ip:proc_sys_reset:5.0 ps_rst {} {
 ### AXI Smart Connect
 cell xilinx.com:ip:smartconnect:1.0 sys_cfg_axi_intercon {
   NUM_SI 1
-  NUM_MI 4
+  NUM_MI 3
 } {
   aclk ps/FCLK_CLK0
   S00_AXI ps/M_AXI_GP0
@@ -180,9 +200,11 @@ cell xilinx.com:ip:smartconnect:1.0 sys_cfg_axi_intercon {
 # +4 Integrator enable (1b cap)
 # +5 Boot test skip (16b cap)
 cell lcb:user:shim_axi_sys_ctrl axi_sys_ctrl {
-  INTEGRATOR_THRESHOLD_AVERAGE_DEFAULT 16384
-  INTEGRATOR_WINDOW_DEFAULT 5000000
+  INTEG_THRESHOLD_AVERAGE_DEFAULT 16384
+  INTEG_WINDOW_DEFAULT 5000000
   INTEG_EN_DEFAULT 1
+  MOSI_SCK_POL_DEFAULT 0
+  MISO_SCK_POL_DEFAULT 1
 } {
   aclk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn
@@ -198,14 +220,17 @@ cell lcb:user:shim_hw_manager hw_manager {} {
   clk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn
   sys_en axi_sys_ctrl/sys_en
-  ext_shutdown Shutdown_Button
-  lock_viol axi_sys_ctrl/lock_viol
+  ext_en Manual_Enable
   sys_en_oob axi_sys_ctrl/sys_en_oob
-  buffer_reset_oob axi_sys_ctrl/buffer_reset_oob
+  cmd_buf_reset_oob axi_sys_ctrl/cmd_buf_reset_oob
+  data_buf_reset_oob axi_sys_ctrl/data_buf_reset_oob
   integ_thresh_avg_oob axi_sys_ctrl/integ_thresh_avg_oob
   integ_window_oob axi_sys_ctrl/integ_window_oob
   integ_en_oob axi_sys_ctrl/integ_en_oob
   boot_test_skip_oob axi_sys_ctrl/boot_test_skip_oob
+  debug_oob axi_sys_ctrl/debug_oob
+  mosi_sck_pol_oob axi_sys_ctrl/mosi_sck_pol_oob
+  miso_sck_pol_oob axi_sys_ctrl/miso_sck_pol_oob
   unlock_cfg axi_sys_ctrl/unlock
   n_shutdown_force n_Shutdown_Force
   n_shutdown_rst n_Shutdown_Reset
@@ -244,13 +269,13 @@ if {$use_ext_clk} {
     USE_DYN_RECONFIG true
     USE_SAFE_CLOCK_STARTUP true
     PRIM_IN_FREQ 10
-    CLKOUT1_REQUESTED_OUT_FREQ 50.000
+    CLKOUT1_REQUESTED_OUT_FREQ ${spi_clk_freq_mhz}
     FEEDBACK_SOURCE FDBK_AUTO
     CLKOUT1_DRIVES BUFGCE
   } {
     s_axi_aclk ps/FCLK_CLK0
     s_axi_aresetn ps_rst/peripheral_aresetn
-    s_axi_lite sys_cfg_axi_intercon/M03_AXI
+    s_axi_lite sys_cfg_axi_intercon/M02_AXI
     clk_in1 Scanner_10Mhz_In
   }
 } else {
@@ -261,24 +286,75 @@ if {$use_ext_clk} {
     USE_DYN_RECONFIG true
     USE_SAFE_CLOCK_STARTUP true
     PRIM_IN_FREQ 99.999893
-    CLKOUT1_REQUESTED_OUT_FREQ 50.000
+    CLKOUT1_REQUESTED_OUT_FREQ ${spi_clk_freq_mhz}
     FEEDBACK_SOURCE FDBK_AUTO
     CLKOUT1_DRIVES BUFGCE
   } {
     s_axi_aclk ps/FCLK_CLK0
     s_axi_aresetn ps_rst/peripheral_aresetn
-    s_axi_lite sys_cfg_axi_intercon/M03_AXI
+    s_axi_lite sys_cfg_axi_intercon/M02_AXI
     clk_in1 ps/FCLK_CLK0
   }
 }
 addr 0x40200000 2048 spi_clk/s_axi_lite ps/M_AXI_GP0
-
-## SPI clock input
-# If use_ext_clk is 1, then use the external clock input
-# otherwise use the 10MHz FCLK_CLK1 
   
 
 ###############################################################################
+
+### Calculate timing from SPI clock frequency
+## Constant block for SPI clock frequency in Hz
+cell xilinx.com:ip:xlconstant:1.1 spi_clk_freq_hz_const {
+  CONST_VAL [expr {int($spi_clk_freq_mhz * 1000000 + 0.5)}]
+  CONST_WIDTH 32
+} {}
+## Negate unlock_cfg to get calc signal
+cell xilinx.com:ip:util_vector_logic n_unlock_cfg {
+  C_SIZE 1
+  C_OPERATION not
+} {
+  Op1 axi_sys_ctrl/unlock
+}
+## Timing calculation cores
+cell lcb:user:shim_ad5676_dac_timing_calc dac_timing_calc {} {
+  clk spi_clk/clk_out1
+  resetn ps_rst/peripheral_aresetn
+  spi_clk_freq_hz spi_clk_freq_hz_const/dout
+  calc n_unlock_cfg/Res
+}
+cell lcb:user:shim_ads816x_adc_timing_calc adc_timing_calc {
+  ADS_MODEL_ID 8
+} {
+  clk spi_clk/clk_out1
+  resetn ps_rst/peripheral_aresetn
+  spi_clk_freq_hz spi_clk_freq_hz_const/dout
+  calc n_unlock_cfg/Res
+}
+## OR the done signals together
+cell xilinx.com:ip:util_vector_logic calc_n_cs_done_or {
+  C_SIZE 1
+  C_OPERATION or
+} {
+  Op1 dac_timing_calc/done
+  Op2 adc_timing_calc/done
+  Res hw_manager/calc_n_cs_done
+}
+## OR the lock violation signals together with axi_sys_ctrl/lock_viol as well (two OR stages)
+cell xilinx.com:ip:util_vector_logic calc_n_cs_lock_viol_or {
+  C_SIZE 1
+  C_OPERATION or
+} {
+  Op1 dac_timing_calc/lock_viol
+  Op2 adc_timing_calc/lock_viol
+}
+cell xilinx.com:ip:util_vector_logic lock_viol_or {
+  C_SIZE 1
+  C_OPERATION or
+} {
+  Op1 calc_n_cs_lock_viol_or/Res
+  Op2 axi_sys_ctrl/lock_viol
+  Res hw_manager/lock_viol
+}
+  
 
 ### SPI clock domain
 module spi_clk_domain spi_clk_domain {
@@ -289,7 +365,10 @@ module spi_clk_domain spi_clk_domain {
   integ_thresh_avg axi_sys_ctrl/integ_thresh_avg
   integ_window axi_sys_ctrl/integ_window
   integ_en axi_sys_ctrl/integ_en
+  dac_n_cs_high_time dac_timing_calc/n_cs_high_time
+  adc_n_cs_high_time adc_timing_calc/n_cs_high_time
   boot_test_skip axi_sys_ctrl/boot_test_skip
+  debug axi_sys_ctrl/debug
   spi_off hw_manager/spi_off
   over_thresh hw_manager/over_thresh
   thresh_underflow hw_manager/thresh_underflow
@@ -301,14 +380,18 @@ module spi_clk_domain spi_clk_domain {
   dac_cal_oob hw_manager/dac_cal_oob
   dac_val_oob hw_manager/dac_val_oob
   dac_cmd_buf_underflow hw_manager/dac_cmd_buf_underflow
+  dac_data_buf_overflow hw_manager/dac_data_buf_overflow
   unexp_dac_trig hw_manager/unexp_dac_trig
+  ldac_misalign hw_manager/ldac_misalign
+  dac_delay_too_short hw_manager/dac_delay_too_short
   adc_boot_fail hw_manager/adc_boot_fail
   bad_adc_cmd hw_manager/bad_adc_cmd
   adc_cmd_buf_underflow hw_manager/adc_cmd_buf_underflow
   adc_data_buf_overflow hw_manager/adc_data_buf_overflow
   unexp_adc_trig hw_manager/unexp_adc_trig
+  adc_delay_too_short hw_manager/adc_delay_too_short
   ext_trig Trigger_In
-  block_buffers hw_manager/block_buffers
+  block_bufs hw_manager/block_bufs
 }
 
 ###############################################################################
@@ -317,7 +400,8 @@ module spi_clk_domain spi_clk_domain {
 module axi_spi_interface axi_spi_interface {
   aclk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn
-  buffer_reset axi_sys_ctrl/buffer_reset
+  cmd_buf_reset axi_sys_ctrl/cmd_buf_reset
+  data_buf_reset axi_sys_ctrl/data_buf_reset
   spi_clk spi_clk/clk_out1
   S_AXI ps/M_AXI_GP1
 }
@@ -327,6 +411,9 @@ for {set i 0} {$i < $board_count} {incr i} {
   wire axi_spi_interface/dac_ch${i}_cmd spi_clk_domain/dac_ch${i}_cmd
   wire axi_spi_interface/dac_ch${i}_cmd_rd_en spi_clk_domain/dac_ch${i}_cmd_rd_en
   wire axi_spi_interface/dac_ch${i}_cmd_empty spi_clk_domain/dac_ch${i}_cmd_empty
+  wire axi_spi_interface/dac_ch${i}_data spi_clk_domain/dac_ch${i}_data
+  wire axi_spi_interface/dac_ch${i}_data_wr_en spi_clk_domain/dac_ch${i}_data_wr_en
+  wire axi_spi_interface/dac_ch${i}_data_full spi_clk_domain/dac_ch${i}_data_full
   wire axi_spi_interface/adc_ch${i}_cmd spi_clk_domain/adc_ch${i}_cmd
   wire axi_spi_interface/adc_ch${i}_cmd_rd_en spi_clk_domain/adc_ch${i}_cmd_rd_en
   wire axi_spi_interface/adc_ch${i}_cmd_empty spi_clk_domain/adc_ch${i}_cmd_empty
@@ -346,16 +433,15 @@ wire axi_spi_interface/trig_data_almost_full spi_clk_domain/trig_data_almost_ful
 ## Address assignment
 # DAC and ADC FIFOs
 for {set i 0} {$i < $board_count} {incr i} {
-  addr 0x800${i}0000 128 axi_spi_interface/dac_cmd_fifo_${i}_axi_bridge/S_AXI ps/M_AXI_GP1
-  addr 0x800${i}1000 128 axi_spi_interface/adc_cmd_fifo_${i}_axi_bridge/S_AXI ps/M_AXI_GP1
-  addr 0x800${i}2000 128 axi_spi_interface/adc_data_fifo_${i}_axi_bridge/S_AXI ps/M_AXI_GP1
+  addr 0x800${i}0000 128 axi_spi_interface/dac_fifo_${i}_axi_bridge/S_AXI ps/M_AXI_GP1
+  addr 0x800${i}1000 128 axi_spi_interface/adc_fifo_${i}_axi_bridge/S_AXI ps/M_AXI_GP1
 }
 # Trigger command and data FIFOs
-addr 0x80100000 128 axi_spi_interface/trig_cmd_fifo_axi_bridge/S_AXI ps/M_AXI_GP1
-addr 0x80101000 128 axi_spi_interface/trig_data_fifo_axi_bridge/S_AXI ps/M_AXI_GP1
+addr 0x80100000 128 axi_spi_interface/trig_fifo_axi_bridge/S_AXI ps/M_AXI_GP1
 
 ## AXI-domain over/underflow detection
 wire axi_spi_interface/dac_cmd_buf_overflow hw_manager/dac_cmd_buf_overflow
+wire axi_spi_interface/dac_data_buf_underflow hw_manager/dac_data_buf_underflow
 wire axi_spi_interface/adc_cmd_buf_overflow hw_manager/adc_cmd_buf_overflow
 wire axi_spi_interface/adc_data_buf_underflow hw_manager/adc_data_buf_underflow
 wire axi_spi_interface/trig_cmd_buf_overflow hw_manager/trig_cmd_buf_overflow
@@ -365,27 +451,25 @@ wire axi_spi_interface/trig_data_buf_underflow hw_manager/trig_data_buf_underflo
 
 ### Status register
 cell pavel-demin:user:axi_sts_register status_reg {
-  STS_DATA_WIDTH 1024
+  STS_DATA_WIDTH 2048
 } {
   aclk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn
   S_AXI sys_cfg_axi_intercon/M01_AXI
 }
-addr 0x40100000 128 status_reg/S_AXI ps/M_AXI_GP0
+addr 0x40100000 256 status_reg/S_AXI ps/M_AXI_GP0
 ## Concatenation
-#             31 : 0             -- 32b Hardware status code (31:29 board num, 28:4 status code, 3:0 internal state)
-#  (63+96*(n-1)) : (32+96*(n-1)) -- 32b DAC ch(n) command FIFO status word (n=1..8)
-#  (95+96*(n-1)) : (64+96*(n-1)) -- 32b ADC ch(n) command FIFO status word (n=1..8)
-# (127+96*(n-1)) : (96+96*(n-1)) -- 32b ADC ch(n) data FIFO status word    (n=1..8)
-#            831 : 800           -- 32b Trigger command FIFO status word
-#            863 : 832           -- 32b Trigger data FIFO status word
-#            895 : 864           -- 32b Debug 1 (see below)
-#           1023 : 896           -- 128b reserved bits (4x32b)
+#    31 : 0    --  32b Hardware status code (31:29 board num, 28:4 status code, 3:0 internal state)
+#   575 : 32   -- 544b Command FIFO status (32 bits per buffer, ordered as DAC0, ADC0, ..., DAC7, ADC7, Trigger)
+#  1119 : 576  -- 544b Data FIFO status (32 bits per buffer, ordered as DAC0, ADC0, ..., DAC7, ADC7, Trigger)
+#  1151 : 1120 --  32b Debug 1 (SPI clock locked, spi_off, 28 reserved bits)
+#  2047 : 1152 -- RESERVED (0)
 cell xilinx.com:ip:xlconcat:2.1 sts_concat {
-  NUM_PORTS 7
+  NUM_PORTS 5
 } {
   In0 hw_manager/status_word
-  In1 axi_spi_interface/fifo_sts
+  In1 axi_spi_interface/cmd_fifo_sts
+  In2 axi_spi_interface/data_fifo_sts
   dout status_reg/sts_data
 }
 # Debug 1 tracks the following:
@@ -396,7 +480,7 @@ cell xilinx.com:ip:xlconcat:2.1 debug_1 {
 } {
   In0 spi_clk/locked
   In1 hw_manager/spi_off
-  dout sts_concat/In2
+  dout sts_concat/In3
 }
 cell xilinx.com:ip:xlconstant:1.1 pad_30 {
   CONST_VAL 0
@@ -405,45 +489,57 @@ cell xilinx.com:ip:xlconstant:1.1 pad_30 {
   dout debug_1/In2
 }
 # Pad reserved bits
-cell xilinx.com:ip:xlconstant:1.1 pad_32 {
+cell xilinx.com:ip:xlconstant:1.1 pad_sts_reserved {
   CONST_VAL 0
-  CONST_WIDTH 32
-} {}
-for {set i 3} {$i < 7} {incr i} {
-  wire sts_concat/In${i} pad_32/dout
-}
-
-### Alert status register (tracking FIFO unavailability)
-cell lcb:user:axi_sts_alert_reg fifo_unavailable_reg {
-  STS_DATA_WIDTH 32
+  CONST_WIDTH [expr {2048 - 1152}]
 } {
-  aclk ps/FCLK_CLK0
-  aresetn ps_rst/peripheral_aresetn
-  S_AXI sys_cfg_axi_intercon/M02_AXI
-  sts_data axi_spi_interface/fifo_ps_side_unavailable
+  dout sts_concat/In4
 }
-addr 0x40110000 128 fifo_unavailable_reg/S_AXI ps/M_AXI_GP0
 
 ## IRQ interrupt concat
 cell xilinx.com:ip:xlconcat:2.1 irq_concat {
-  NUM_PORTS 2
+  NUM_PORTS 1
 } {
   In0 hw_manager/ps_interrupt
-  In1 fifo_unavailable_reg/alert
   dout ps/IRQ_F2P
 }
 
 ###############################################################################
 
-### Gate the SPI clock output
-cell lcb:user:clock_gate spi_clk_gate {} {
+### Gate the SPI clocks (MISO and MOSI SCK)
+cell lcb:user:clock_gate spi_mosi_sck_gate {} {
   clk spi_clk/clk_out1
   en hw_manager/spi_clk_gate
 }
-  
+cell lcb:user:clock_gate spi_miso_sck_gate {} {
+  en hw_manager/spi_clk_gate
+}
+## Potentially invert the clocks based on register settings
+cell xilinx.com:ip:util_vector_logic mosi_sck_pol {
+  C_SIZE 1
+  C_OPERATION xor
+} {
+  Op1 spi_mosi_sck_gate/clk_gated
+  Op2 axi_sys_ctrl/mosi_sck_pol
+}
+# Extend the MISO SCK polarity to 8 bits of the same value
+cell xilinx.com:ip:xlconcat:2.1 miso_sck_ext {
+  NUM_PORTS 8
+} {}
+for {set i 0} {$i < 8} {incr i} {
+  wire miso_sck_ext/In${i} spi_miso_sck_gate/clk_gated
+}
+cell xilinx.com:ip:util_vector_logic miso_sck_pol {
+  C_SIZE 8
+  C_OPERATION xor
+} {
+  Op1 miso_sck_ext/dout
+  Op2 axi_sys_ctrl/miso_sck_pol
+  Res spi_clk_domain/miso_sck
+}
 
 ### Create I/O buffers for differential signals
-module io_buffers io_buffers {
+module io_bufs io_bufs {
   ldac spi_clk_domain/ldac
   n_dac_cs spi_clk_domain/n_dac_cs
   dac_mosi spi_clk_domain/dac_mosi
@@ -451,8 +547,8 @@ module io_buffers io_buffers {
   n_adc_cs spi_clk_domain/n_adc_cs
   adc_mosi spi_clk_domain/adc_mosi
   adc_miso spi_clk_domain/adc_miso
-  miso_sck spi_clk_domain/miso_sck
-  n_mosi_sck spi_clk_gate/clk_gated
+  miso_sck spi_miso_sck_gate/clk
+  n_mosi_sck mosi_sck_pol/Res
   ldac_p LDAC_p
   ldac_n LDAC_n
   n_dac_cs_p n_DAC_CS_p
