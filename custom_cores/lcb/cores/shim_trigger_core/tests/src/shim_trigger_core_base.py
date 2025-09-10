@@ -128,7 +128,7 @@ class shim_trigger_core_base:
                 assert int(self.dut.cmd_done.value) == 1, \
                     f"cmd_done should be asserted when state is not S_ERROR and cancel is 1, but got {int(self.dut.cmd_done.value)}"
                 
-
+    # Can add here data buf overflow , trig_out and bad command monitoring if needed
     async def monitor_state_transitions(self):
         """Check if state transitions are done correctly."""
         prev_cmd_done = 0

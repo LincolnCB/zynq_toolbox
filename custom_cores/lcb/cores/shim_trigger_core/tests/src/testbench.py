@@ -44,9 +44,11 @@ async def test_set_lockout_cmd(dut):
     # Command to set lockout with an invalid value
     cmd_list.append(tb.command_word_generator(2, tb.TRIGGER_LOCKOUT_MIN -1))
 
-    # Start the command buffer model
+    # Start the command buffer model, data buffer model and trig timer tracker
     await RisingEdge(dut.clk)
     cmd_buf_task = cocotb.start_soon(tb.command_buf_model())
+    data_buf_task = cocotb.start_soon(tb.data_buf_model())
+    trig_timer_task = cocotb.start_soon(tb.trig_timer_tracker())
 
     # Start the scoreboard to monitor command execution
     scoreboard_executing_cmd_task = cocotb.start_soon(tb.executing_command_scoreboard(len(cmd_list)))
@@ -54,6 +56,10 @@ async def test_set_lockout_cmd(dut):
     # Send the commands to the command buffer
     await tb.send_commands(cmd_list)
     await scoreboard_executing_cmd_task
+
+    # Start data buffer scoreboard to check the expected trigger timing data
+    data_buf_scoreboard_task = cocotb.start_soon(tb.data_buf_scoreboard())
+    await data_buf_scoreboard_task
 
     # Give time before ending the test and ensure we don't collide with other tests
     await RisingEdge(dut.clk)
@@ -64,6 +70,9 @@ async def test_set_lockout_cmd(dut):
     monitor_cmd_done_task.kill()
     monitor_state_transitions_task.kill()
     scoreboard_executing_cmd_task.kill()
+    trig_timer_task.kill()
+    data_buf_task.kill()
+    data_buf_scoreboard_task.kill()
 
 @cocotb.test()
 async def test_sync_ch_cmd(dut):
@@ -84,9 +93,11 @@ async def test_sync_ch_cmd(dut):
     # Command to sync channels
     cmd_list.append(tb.command_word_generator(1, 0))
 
-    # Start the command buffer model
+    # Start the command buffer model, data buffer model and trig timer tracker
     await RisingEdge(dut.clk)
     cmd_buf_task = cocotb.start_soon(tb.command_buf_model())
+    data_buf_task = cocotb.start_soon(tb.data_buf_model())
+    trig_timer_task = cocotb.start_soon(tb.trig_timer_tracker())
 
     # Start the scoreboard to monitor command execution
     scoreboard_executing_cmd_task = cocotb.start_soon(tb.executing_command_scoreboard(len(cmd_list)))
@@ -102,6 +113,11 @@ async def test_sync_ch_cmd(dut):
     tb.dut.adc_waiting_for_trig.value = 0xFF
 
     await scoreboard_executing_cmd_task
+
+    # Start data buffer scoreboard to check the expected trigger timing data
+    data_buf_scoreboard_task = cocotb.start_soon(tb.data_buf_scoreboard())
+    await data_buf_scoreboard_task
+
     # Give time before ending the test and ensure we don't collide with other tests
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
@@ -111,6 +127,9 @@ async def test_sync_ch_cmd(dut):
     monitor_cmd_done_task.kill()
     monitor_state_transitions_task.kill()
     scoreboard_executing_cmd_task.kill()
+    trig_timer_task.kill()
+    data_buf_task.kill()
+    data_buf_scoreboard_task.kill()
 
 @cocotb.test()
 async def test_expect_ext_trig_cmd(dut):
@@ -246,9 +265,11 @@ async def test_force_trig_cmd(dut):
     # Command to force trigger
     cmd_list.append(tb.command_word_generator(5, 0))
 
-    # Start the command buffer model
+    # Start the command buffer model, data buffer model and trig timer tracker
     await RisingEdge(dut.clk)
     cmd_buf_task = cocotb.start_soon(tb.command_buf_model())
+    data_buf_task = cocotb.start_soon(tb.data_buf_model())
+    trig_timer_task = cocotb.start_soon(tb.trig_timer_tracker())
 
     # Start the scoreboard to monitor command execution
     scoreboard_executing_cmd_task = cocotb.start_soon(tb.executing_command_scoreboard(len(cmd_list)))
@@ -257,6 +278,10 @@ async def test_force_trig_cmd(dut):
     await tb.send_commands(cmd_list)
 
     await scoreboard_executing_cmd_task
+
+    # Start data buffer scoreboard to check the expected trigger timing data
+    data_buf_scoreboard_task = cocotb.start_soon(tb.data_buf_scoreboard())
+    await data_buf_scoreboard_task
 
     # Give time before ending the test and ensure we don't collide with other tests
     await RisingEdge(dut.clk)
@@ -267,6 +292,9 @@ async def test_force_trig_cmd(dut):
     monitor_cmd_done_task.kill()
     monitor_state_transitions_task.kill()
     scoreboard_executing_cmd_task.kill()
+    trig_timer_task.kill()
+    data_buf_task.kill()
+    data_buf_scoreboard_task.kill()
 
 @cocotb.test()
 async def test_cancel_cmd(dut):
@@ -288,9 +316,11 @@ async def test_cancel_cmd(dut):
     # Command to send delay of 50 clock cycles
     cmd_list.append(tb.command_word_generator(4, 50))
 
-    # Start the command buffer model
+    # Start the command buffer model, data buffer model and trig timer tracker
     await RisingEdge(dut.clk)
     cmd_buf_task = cocotb.start_soon(tb.command_buf_model())
+    data_buf_task = cocotb.start_soon(tb.data_buf_model())
+    trig_timer_task = cocotb.start_soon(tb.trig_timer_tracker())
 
     # Start the scoreboard to monitor command execution
     scoreboard_executing_cmd_task = cocotb.start_soon(tb.executing_command_scoreboard(2))
@@ -308,6 +338,10 @@ async def test_cancel_cmd(dut):
 
     await scoreboard_executing_cmd_task
 
+    # Start data buffer scoreboard to check the expected trigger timing data
+    data_buf_scoreboard_task = cocotb.start_soon(tb.data_buf_scoreboard())
+    await data_buf_scoreboard_task
+
     # Give time before ending the test and ensure we don't collide with other tests
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
@@ -317,3 +351,6 @@ async def test_cancel_cmd(dut):
     monitor_cmd_done_task.kill()
     monitor_state_transitions_task.kill()
     scoreboard_executing_cmd_task.kill()
+    trig_timer_task.kill()
+    data_buf_task.kill()
+    data_buf_scoreboard_task.kill()
