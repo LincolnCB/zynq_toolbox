@@ -363,7 +363,7 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PRO
 # The PetaLinux project specification directory
 # Requires the hardware definition file
 # Built using the scripts/petalinux/project.sh script
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa $(shell find projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION) -type f) $(shell find projects/$(PROJECT)/rootfs_include -type f) $(shell find projects/$(PROJECT)/software -type f) $(shell find scripts/petalinux -type f)
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa $(shell find projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION) -type f) $(shell find projects/$(PROJECT)/software -type f) $(shell find scripts/petalinux -type f)
 	@./scripts/make/status.sh "MAKING CONFIGURED PETALINUX PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	scripts/petalinux/project.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(OFFLINE)
 	scripts/petalinux/software.sh $(BOARD) $(BOARD_VER) $(PROJECT)
@@ -372,7 +372,7 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec: tmp/$(BOARD)/$(BOAR
 
 # The compressed root filesystem
 # Requires the PetaLinux project specification directory
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec scripts/petalinux/package_rootfs_files.sh
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec scripts/petalinux/package_rootfs_files.sh $(wildcard projects/$(PROJECT)/rootfs_include/*)
 	@./scripts/make/status.sh "MAKING LINUX SYSTEM FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && \
 		source $(PETALINUX_PATH)/settings.sh && \

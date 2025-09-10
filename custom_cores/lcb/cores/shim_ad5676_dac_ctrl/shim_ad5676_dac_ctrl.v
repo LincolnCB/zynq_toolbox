@@ -190,7 +190,7 @@ module shim_ad5676_dac_ctrl #(
 
   //// ---- Command word
   assign cmd_word = cmd_buf_empty ? 32'd0 : cmd_buf_word;
-  assign command = cmd_word[31:30];
+  assign command = cmd_word[31:29];
   assign next_cmd_ready = !cmd_buf_empty;
   // Command word read enable
   assign cmd_buf_rd_en = (state != S_ERROR) && next_cmd_ready && (read_next_dac_val_pair || cmd_done || cancel_wait);
