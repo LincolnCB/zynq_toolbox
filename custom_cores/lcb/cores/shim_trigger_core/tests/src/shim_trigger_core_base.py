@@ -240,7 +240,9 @@ class shim_trigger_core_base:
         cmd_value = cmd_word & 0x1FFFFFFF
         return cmd_type, cmd_value
     
+    # TO DO:
     # Update all with regard to cancel command
+    # Consider command values with 0
     async def executing_command_scoreboard(self, num_of_commands=0):
         """
         Scoreboard to keep track of the currently executing command in the DUT.
@@ -320,6 +322,12 @@ class shim_trigger_core_base:
             while True:
                 await RisingEdge(self.dut.clk)
                 await ReadOnly()
+
+                # Cancel exit condition
+                if int(self.dut.cancel.value) == 1:
+                    self.dut._log.info(f"For command index:{command_i} Command was cancelled during SYNC_CH waiting.")
+                    return
+                
                 cycles_waiting += 1
                 adc_waiting = int(self.dut.adc_waiting_for_trig.value) & 0xFF
                 dac_waiting = int(self.dut.dac_waiting_for_trig.value) & 0xFF
@@ -366,11 +374,21 @@ class shim_trigger_core_base:
         assert int(self.dut.trig_counter.value) == expected_trig_counter, \
             f"For command index:{command_i} Trigger counter mismatch: expected {expected_trig_counter} but got {int(self.dut.trig_counter.value)}"
         
+        # Cancel exit condition
+        if int(self.dut.cancel.value) == 1:
+            self.dut._log.info(f"For command index:{command_i} Command was cancelled before starting trigger countdown.")
+            return
+        
         while True:
             await RisingEdge(self.dut.clk)
             previous_do_trig = int(self.dut.do_trig.value)
             previous_lockout_counter = int(self.dut.lockout_counter.value)
             await ReadOnly()
+
+            # Cancel exit condition
+            if int(self.dut.cancel.value) == 1:
+                self.dut._log.info(f"For command index:{command_i} Command was cancelled during trigger countdown.")
+                return
 
             # Assert that we are still in EXPECT_TRIG state
             assert int(self.dut.state.value) == 3, \
@@ -419,9 +437,19 @@ class shim_trigger_core_base:
         assert int(self.dut.delay_counter.value) == expected_delay_counter, \
             f"For command index:{command_i} Delay counter mismatch: expected {expected_delay_counter} but got {int(self.dut.delay_counter.value)}"
         
+        # Cancel exit condition
+        if int(self.dut.cancel.value) == 1:
+            self.dut._log.info(f"For command index:{command_i} Command was cancelled before starting delay countdown.")
+            return
+        
         while True:
             await RisingEdge(self.dut.clk)
             await ReadOnly()
+
+            # Cancel exit condition
+            if int(self.dut.cancel.value) == 1:
+                self.dut._log.info(f"For command index:{command_i} Command was cancelled during delay countdown.")
+                return
 
             # Assert that we are still in DELAY state
             assert int(self.dut.state.value) == 4, \
@@ -440,9 +468,33 @@ class shim_trigger_core_base:
                 break
 
     async def cmd_force_trig_scoreboard(self, cmd_value, command_i):
-        pass
+        """ Scoreboard to verify FORCE_TRIG command."""
+        self.dut._log.info(f"Verifying FORCE_TRIG command for command index:{command_i} with value {cmd_value}")
+        assert int(self.dut.do_trig.value) == 1, "do_trig should be asserted immediately for FORCE_TRIG command"
+
+        await RisingEdge(self.dut.clk)
+        await ReadOnly()
+        assert int(self.dut.state.value) == 1, \
+            f"For command index:{command_i} State should be S_IDLE after FORCE_TRIG command, but got {self.get_state_name(int(self.dut.state.value))}"
+
     async def cmd_cancel_scoreboard(self, cmd_value, command_i):
-        pass
+        """ Scoreboard to verify CANCEL command."""
+        self.dut._log.info(f"Verifying CANCEL command for command index:{command_i} with value {cmd_value}")
+        assert int(self.dut.cancel.value) == 1, "cancel should be asserted immediately for CANCEL command"
+
+        await RisingEdge(self.dut.clk)
+        await ReadOnly()
+        assert int(self.dut.trig_counter.value) == 0, \
+            f"For command index:{command_i} trig_counter should be 0 after CANCEL command, but got {int(self.dut.trig_counter.value)}"
+        
+        assert int(self.dut.delay_counter.value) == 0, \
+            f"For command index:{command_i} delay_counter should be 0 after CANCEL command, but got {int(self.dut.delay_counter.value)}"
+        
+        assert int(self.dut.trig_out.value) == 0, \
+            f"For command index:{command_i} trig_out should be 0 after CANCEL command, but got {int(self.dut.trig_out.value)}"
+        
+        assert int(self.dut.state.value) == 1, \
+            f"For command index:{command_i} State should be S_IDLE after CANCEL command, but got {self.get_state_name(int(self.dut.state.value))}"
 
     async def data_fifo_model(self):
         """

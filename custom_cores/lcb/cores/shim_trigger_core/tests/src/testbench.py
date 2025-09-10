@@ -210,3 +210,95 @@ async def test_delay_cmd(dut):
     monitor_cmd_done_task.kill()
     monitor_state_transitions_task.kill()
     scoreboard_executing_cmd_task.kill()
+
+@cocotb.test()
+async def test_force_trig_cmd(dut):
+    tb = await setup_testbench(dut)
+    tb.dut._log.info("STARTING TEST: test_force_trig_cmd")
+
+    # First have the DUT at a known state
+    await tb.reset()
+
+    # Start monitor_cmd_done and monitor_state_transitions tasks
+    monitor_cmd_done_task = cocotb.start_soon(tb.monitor_cmd_done())
+    monitor_state_transitions_task = cocotb.start_soon(tb.monitor_state_transitions())
+
+    # Actual Reset
+    await tb.reset()
+
+    cmd_list = []
+
+    # Command to force trigger
+    cmd_list.append(tb.command_word_generator(5, 0))
+
+    # Start the command buffer model
+    await RisingEdge(dut.clk)
+    cmd_buf_task = cocotb.start_soon(tb.command_buf_model())
+
+    # Start the scoreboard to monitor command execution
+    scoreboard_executing_cmd_task = cocotb.start_soon(tb.executing_command_scoreboard(len(cmd_list)))
+
+    # Send the commands to the command buffer
+    await tb.send_commands(cmd_list)
+
+    await scoreboard_executing_cmd_task
+
+    # Give time before ending the test and ensure we don't collide with other tests
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    cmd_buf_task.kill()
+    monitor_cmd_done_task.kill()
+    monitor_state_transitions_task.kill()
+    scoreboard_executing_cmd_task.kill()
+
+@cocotb.test()
+async def test_cancel_cmd(dut):
+    tb = await setup_testbench(dut)
+    tb.dut._log.info("STARTING TEST: test_cancel_cmd")
+
+    # First have the DUT at a known state
+    await tb.reset()
+
+    # Start monitor_cmd_done and monitor_state_transitions tasks
+    monitor_cmd_done_task = cocotb.start_soon(tb.monitor_cmd_done())
+    monitor_state_transitions_task = cocotb.start_soon(tb.monitor_state_transitions())
+
+    # Actual Reset
+    await tb.reset()
+
+    cmd_list = []
+
+    # Command to send delay of 50 clock cycles
+    cmd_list.append(tb.command_word_generator(4, 50))
+
+    # Start the command buffer model
+    await RisingEdge(dut.clk)
+    cmd_buf_task = cocotb.start_soon(tb.command_buf_model())
+
+    # Start the scoreboard to monitor command execution
+    scoreboard_executing_cmd_task = cocotb.start_soon(tb.executing_command_scoreboard(2))
+
+    # Send the commands to the command buffer
+    await tb.send_commands(cmd_list)
+
+    # Wait for some time and then send cancel command
+    for _ in range(10):
+        await RisingEdge(dut.clk)
+
+    cmd_list.clear()
+    cmd_list.append(tb.command_word_generator(7, 0))
+    await tb.send_commands(cmd_list)
+
+    await scoreboard_executing_cmd_task
+
+    # Give time before ending the test and ensure we don't collide with other tests
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    await RisingEdge(dut.clk)
+    cmd_buf_task.kill()
+    monitor_cmd_done_task.kill()
+    monitor_state_transitions_task.kill()
+    scoreboard_executing_cmd_task.kill()
