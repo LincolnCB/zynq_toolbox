@@ -103,7 +103,7 @@ module shim_ads816x_adc_ctrl (
   wire [31:0] cmd_word;
   wire        next_cmd_ready;
   wire        cmd_done;
-  wire        next_cmd;
+  wire        do_next_cmd;
   wire [ 3:0] next_cmd_state;
   wire        cancel_wait;
   wire        error;
@@ -188,7 +188,7 @@ module shim_ads816x_adc_ctrl (
     if (!resetn || state == S_ERROR) begin
       wait_for_trig <= 1'b0;
       expect_next <= 1'b0;
-    end else if (next_cmd) begin
+    end else if (do_next_cmd) begin
       // Set wait_for_trig and expect_next flags from command bits if NO_OP or ADC_RD command
       if ((command == CMD_NO_OP) || (command == CMD_ADC_RD)) begin
         wait_for_trig <= cmd_word[TRIG_BIT];
@@ -222,7 +222,7 @@ module shim_ads816x_adc_ctrl (
                     || (state == S_ADC_RD && adc_rd_done && (wait_for_trig ? trig_wait_done : delay_wait_done))
                     || (state == S_ADC_RD_CH && adc_rd_done)
                     || (state == S_LOOP_NEXT && next_cmd_ready);
-  assign next_cmd = cmd_done && next_cmd_ready;
+  assign do_next_cmd = cmd_done && next_cmd_ready;
   // Next state from upcoming command
   assign next_cmd_state = !next_cmd_ready ? (expect_next ? S_ERROR : S_IDLE) // If buffer is empty, error if expecting next command, otherwise IDLE
                           : (command == CMD_NO_OP) ? (cmd_word[TRIG_BIT] ? S_TRIG_WAIT : S_DELAY) // If command is NO_OP, either wait for trigger or delay depending on TRIG_BIT
@@ -268,7 +268,7 @@ module shim_ads816x_adc_ctrl (
   end
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) loop_counter <= 26'd0;
-    else if (next_cmd && command == CMD_LOOP) loop_counter <= cmd_word[25:0];
+    else if (do_next_cmd && command == CMD_LOOP) loop_counter <= cmd_word[25:0];
     else if (loop_counter > 0 && cmd_done) loop_counter <= loop_counter - 1;
   end 
 
@@ -277,7 +277,7 @@ module shim_ads816x_adc_ctrl (
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR || cancel_wait) delay_timer <= 25'd0;
     // If the next command is an ADC read or no-op with a delay wait, load the delay timer from command word
-    else if (next_cmd
+    else if (do_next_cmd
              && ((command == CMD_ADC_RD) || (command == CMD_NO_OP))
              && !cmd_word[TRIG_BIT]) begin
       delay_timer <= cmd_word[24:0];
@@ -290,12 +290,12 @@ module shim_ads816x_adc_ctrl (
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR || cancel_wait) trigger_counter <= 25'd0;
     // If the next command is an ADC read or no-op with a trigger wait, load the trigger counter from command word
-    else if (next_cmd
+    else if (do_next_cmd
              && ((command == CMD_ADC_RD) || (command == CMD_NO_OP))
              && cmd_word[TRIG_BIT]) begin
       trigger_counter <= cmd_word[24:0];
     // Single-channel ADC read commands immediately finish
-    end else if (next_cmd && command == CMD_ADC_RD_CH) begin
+    end else if (do_next_cmd && command == CMD_ADC_RD_CH) begin
       trigger_counter <= 25'd0;
     // Otherwise decrement trigger counter on trigger to zero if nonzero
     end else if (trigger_counter > 0 && trigger) trigger_counter <= trigger_counter - 1;
@@ -306,7 +306,7 @@ module shim_ads816x_adc_ctrl (
   assign error = (state == S_TEST_RD && !n_miso_data_ready_mosi_clk && ~boot_readback_match) // Readback mismatch (boot fail)
                  || (state != S_TRIG_WAIT && trigger && trigger_counter <= 1) // Unexpected trigger
                  || (state == S_ADC_RD && !adc_rd_done && !wait_for_trig && delay_wait_done) // Delay too short
-                 || (next_cmd && next_cmd_state == S_ERROR) // Bad command
+                 || (do_next_cmd && next_cmd_state == S_ERROR) // Bad command
                  || (cmd_done && expect_next && !next_cmd_ready) // Command buffer underflow
                  || (try_data_write && data_buf_full); // Data buffer overflow
   // Boot check fail
@@ -328,7 +328,7 @@ module shim_ads816x_adc_ctrl (
   // Bad command
   always @(posedge clk) begin
     if (!resetn) bad_cmd <= 1'b0;
-    else if (next_cmd && next_cmd_state == S_ERROR) bad_cmd <= 1'b1;
+    else if (do_next_cmd && next_cmd_state == S_ERROR) bad_cmd <= 1'b1;
   end
   // Command buffer underflow
   always @(posedge clk) begin
@@ -349,7 +349,7 @@ module shim_ads816x_adc_ctrl (
     if (!resetn) begin
       for (i = 0; i < 8; i = i + 1)
         sample_order[i] <= i[2:0];
-    end else if (next_cmd && command == CMD_SET_ORD) begin
+    end else if (do_next_cmd && command == CMD_SET_ORD) begin
       sample_order[0] <= cmd_word[2:0];
       sample_order[1] <= cmd_word[5:3];
       sample_order[2] <= cmd_word[8:6];
@@ -380,7 +380,7 @@ module shim_ads816x_adc_ctrl (
   // ADC SPI word index
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) adc_word_idx <= 4'd0;
-    else if (next_cmd && (command == CMD_ADC_RD || command == CMD_ADC_RD_CH)) adc_word_idx <= 4'd0;
+    else if (do_next_cmd && (command == CMD_ADC_RD || command == CMD_ADC_RD_CH)) adc_word_idx <= 4'd0;
     else if ((state == S_ADC_RD || state == S_ADC_RD_CH) && adc_spi_cmd_done) begin
       if (!last_adc_word) adc_word_idx <= adc_word_idx + 1;
       else adc_word_idx <= 4'd0;
@@ -390,8 +390,8 @@ module shim_ads816x_adc_ctrl (
 
   //// ---- SPI MOSI control
   // Start the next SPI command
-  assign start_spi_cmd =  (next_cmd && command == CMD_ADC_RD)
-                          || (next_cmd && command == CMD_ADC_RD_CH)
+  assign start_spi_cmd =  (do_next_cmd && command == CMD_ADC_RD)
+                          || (do_next_cmd && command == CMD_ADC_RD_CH)
                           || (state == S_INIT)
                           || (state == S_TEST_WR && adc_spi_cmd_done)
                           || (state == S_REQ_RD && adc_spi_cmd_done)
@@ -445,11 +445,11 @@ module shim_ads816x_adc_ctrl (
     end else if (state == S_REQ_RD && adc_spi_cmd_done) begin
       mosi_shift_reg <= 24'd0; 
     // Load the shift register with the next ADC word command
-    end else if ((next_cmd && (next_cmd_state == S_ADC_RD))
+    end else if ((do_next_cmd && (next_cmd_state == S_ADC_RD))
                  || ((state == S_ADC_RD) && adc_spi_cmd_done)) begin
       if (!last_adc_word) mosi_shift_reg <= {spi_req_otf_sample_cmd(sample_order[adc_word_idx[2:0]]), 8'd0};
       else if (last_adc_word) mosi_shift_reg <= {spi_req_otf_sample_cmd(3'b0), 8'd0};
-    end else if ((next_cmd && (next_cmd_state == S_ADC_RD_CH))
+    end else if ((do_next_cmd && (next_cmd_state == S_ADC_RD_CH))
                   || ((state == S_ADC_RD_CH) && adc_spi_cmd_done)) begin
       if (!last_adc_word) mosi_shift_reg <= {spi_req_otf_sample_cmd(cmd_word[2:0]), 8'd0};
       else if (last_adc_word) mosi_shift_reg <= {spi_req_otf_sample_cmd(3'b0), 8'd0};
@@ -520,7 +520,7 @@ module shim_ads816x_adc_ctrl (
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) single_reads <= 2'b0;
     // Increment the count by 1 if CMD_ADC_RD_CH command is received
-    else if (next_cmd && command == CMD_ADC_RD_CH) begin
+    else if (do_next_cmd && command == CMD_ADC_RD_CH) begin
       // Leave as is if trying to increment and decrement at the same time
       if (adc_ch_data_ready) single_reads <= single_reads;
       else single_reads <= single_reads + 1;
