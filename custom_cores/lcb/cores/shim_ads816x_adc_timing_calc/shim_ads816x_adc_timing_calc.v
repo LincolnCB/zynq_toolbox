@@ -188,29 +188,29 @@ module shim_ads816x_adc_timing_calc #(
               final_result <= min_cycles_for_t_conv;
             end
             state <= S_DONE;
-            end
-            end
+          end
+        end
 
-            //// ---- Stay in this state to check if calc goes low or frequency changes
-            S_DONE: begin
-            // Check for frequency change during calculation
-            if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
-              lock_viol <= 1'b1;
-              state <= S_IDLE;
-            end else if (!calc) begin
-              // calc went low, reset
-              state <= S_IDLE;
+        //// ---- Stay in this state to check if calc goes low or frequency changes
+        S_DONE: begin
+          // Check for frequency change during calculation
+          if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
+            lock_viol <= 1'b1;
+            state <= S_IDLE;
+          end else if (!calc) begin
+            // calc went low, reset
+            state <= S_IDLE;
+          end else begin
+            // Cap n_cs_high_time at 255 (at the maximum 50MHz SPI clock, this plus the command bits is 5420ns, which is over the maximum 4000ns required)
+            if (final_result > 255) begin
+            n_cs_high_time <= 8'd255;
             end else begin
-              // Cap n_cs_high_time at 255 (at the maximum 50MHz SPI clock, this plus the command bits is 5420ns, which is over the maximum 4000ns required)
-              if (final_result > 255) begin
-              n_cs_high_time <= 8'd255;
-              end else begin
-              n_cs_high_time <= final_result[7:0]; // Truncate to 8 bits
-              end
-              done <= 1'b1;
-              // Stay in this state until calc goes low
+            n_cs_high_time <= final_result[7:0]; // Truncate to 8 bits
             end
-            end
+            done <= 1'b1;
+            // Stay in this state until calc goes low
+          end
+        end
 
         default: begin
           state <= S_IDLE;
