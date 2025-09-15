@@ -74,11 +74,12 @@ module shim_ad5676_dac_ctrl #(
   localparam S_TEST_WR   = 4'd2;
   localparam S_REQ_RD    = 4'd3;
   localparam S_TEST_RD   = 4'd4;
-  localparam S_IDLE      = 4'd5;
-  localparam S_DELAY     = 4'd6;
-  localparam S_TRIG_WAIT = 4'd7;
-  localparam S_DAC_WR    = 4'd8;
-  localparam S_DAC_WR_CH = 4'd9;
+  localparam S_SET_MID   = 4'd5;
+  localparam S_IDLE      = 4'd6;
+  localparam S_DELAY     = 4'd7;
+  localparam S_TRIG_WAIT = 4'd8;
+  localparam S_DAC_WR    = 4'd9;
+  localparam S_DAC_WR_CH = 4'd10;
   localparam S_ERROR     = 4'd15;
 
   // Command types
@@ -256,7 +257,8 @@ module shim_ad5676_dac_ctrl #(
     else if (state == S_INIT)                                   state <= S_TEST_WR; // Transition to TEST_WR first in initialization
     else if (state == S_TEST_WR && dac_spi_cmd_done)            state <= S_REQ_RD; // Transition to REQ_RD after writing test value
     else if (state == S_REQ_RD && dac_spi_cmd_done)             state <= S_TEST_RD; // Transition to TEST_RD after requesting read
-    else if (state == S_TEST_RD && ~n_miso_data_ready_mosi_clk) state <= S_IDLE; // Transition to IDLE after reading test value (mismatch will set error flag)
+    else if (state == S_TEST_RD && ~n_miso_data_ready_mosi_clk) state <= boot_readback_match ? S_SET_MID : S_ERROR; // Transition to SET_MID if readback matches, otherwise error
+    else if (state == S_SET_MID && dac_wr_done)                 state <= S_IDLE; // Transition to IDLE after setting values to midrange
     else if (cancel_wait)                                       state <= S_IDLE; // Cancel the current wait state if cancel command is received
     else if (cmd_done)                                          state <= next_cmd_state; // Transition to state of next command if command is finished (allows skipping wait state if no wait is needed)
     else if (state == S_DAC_WR && dac_wr_done)                  state <= wait_for_trig ? S_TRIG_WAIT : S_DELAY; // If the DAC write is done, go to the proper wait state
@@ -269,7 +271,7 @@ module shim_ad5676_dac_ctrl #(
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) setup_done <= 1'b0; // Reset setup done on reset or error
     else if (boot_test_skip) setup_done <= 1'b1; // If boot test is skipped, set setup done immediately
-    else if ((state == S_TEST_RD) && ~n_miso_data_ready_mosi_clk && boot_readback_match) setup_done <= 1'b1;
+    else if (state == S_SET_MID && dac_wr_done) setup_done <= 1'b1;
   end
 
 
@@ -414,7 +416,8 @@ module shim_ad5676_dac_ctrl #(
                              || (state == S_DAC_WR_CH)
                              || (state == S_TEST_WR)
                              || (state == S_REQ_RD)
-                             || (state == S_TEST_RD))
+                             || (state == S_TEST_RD)
+                             || (state == S_SET_MID))
                             && !n_cs && !running_n_cs_timer && spi_bit == 0; // SPI command is done when CS is deasserted and SPI bit counter is zero
   // Read next DAC word from command buffer
   always @(posedge clk) begin
@@ -432,7 +435,7 @@ module shim_ad5676_dac_ctrl #(
   // DAC write done
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) dac_wr_done <= 1'b0;
-    else if (state == S_DAC_WR && dac_spi_cmd_done && last_dac_channel) dac_wr_done <= 1'b1; // Ready when all channels are written
+    else if ((state == S_DAC_WR || state == S_SET_MID) && dac_spi_cmd_done && last_dac_channel) dac_wr_done <= 1'b1; // Ready when all channels are written
     else if (state == S_DAC_WR_CH && dac_spi_cmd_done) dac_wr_done <= 1'b1; // Ready when single channel is written
     else dac_wr_done <= 1'b0; // Not ready otherwise
   end
@@ -441,7 +444,7 @@ module shim_ad5676_dac_ctrl #(
     if (!resetn || state == S_ERROR) dac_channel <= 3'd0;
     else if (do_next_cmd && command == CMD_DAC_WR) dac_channel <= 3'd0;
     else if (do_next_cmd && command == CMD_DAC_WR_CH) dac_channel <= cmd_word[18:16]; // Set channel from command word for single-channel write
-    else if (state == S_DAC_WR && dac_spi_cmd_done) dac_channel <= dac_channel + 1; // Increment channel when timer is done
+    else if ((state == S_DAC_WR || state == S_SET_MID) && dac_spi_cmd_done) dac_channel <= dac_channel + 1; // Increment channel when timer is done
   end
   // DAC value loading
   always @(posedge clk) begin
@@ -507,6 +510,8 @@ module shim_ad5676_dac_ctrl #(
                           || (state == S_INIT)
                           || (state == S_TEST_WR && dac_spi_cmd_done)
                           || (state == S_REQ_RD && dac_spi_cmd_done)
+                          || (state == S_TEST_RD && dac_spi_cmd_done)
+                          || (state == S_SET_MID && dac_spi_cmd_done && !last_dac_channel)
                           || (state == S_DAC_WR && dac_spi_cmd_done && !last_dac_channel);
   // Latch ~(Chip Select) high time when coming out of reset
   always @(posedge clk) begin
@@ -549,7 +554,13 @@ module shim_ad5676_dac_ctrl #(
     // If finished with the test write, load the shift register with two commands: the read request and a write to reset the test value
     end else if (state == S_TEST_WR && dac_spi_cmd_done) begin
       mosi_shift_reg <= {spi_read_cmd(DAC_TEST_CH), spi_write_cmd(DAC_TEST_CH, DAC_MIDRANGE)};
-    // Load the shift register with the first DAC value and the second DAC value
+    // If finished with the read request and overwrite, initialize all channels to midrange
+    end else if (state == S_TEST_RD && dac_spi_cmd_done) begin
+      mosi_shift_reg <= {spi_write_cmd(0, DAC_MIDRANGE), spi_write_cmd(1, DAC_MIDRANGE)};
+    // When finished setting midrange values for a channel pair, load the next pair until all channels are set
+    end else if (state == S_SET_MID && dac_spi_cmd_done && !last_dac_channel) begin
+      mosi_shift_reg <= {spi_write_cmd(dac_channel + 1, DAC_MIDRANGE), spi_write_cmd(dac_channel + 2, DAC_MIDRANGE)};
+    // For full 8-channel DAC commands, load the shift register with the first DAC value and the second DAC value
     end else if (state == S_DAC_WR && dac_load_stage == DAC_LOAD_STAGE_CONV) begin
       mosi_shift_reg <= {spi_write_cmd(dac_channel, signed_to_offset(first_dac_val_cal_signed)), 
                         spi_write_cmd(dac_channel + 1, signed_to_offset(second_dac_val_cal_signed))};
