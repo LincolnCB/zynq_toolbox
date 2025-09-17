@@ -19,28 +19,42 @@ module shim_ads816x_adc_timing_calc #(
   ///////////////////////////////////////////////////////////////////////////////
 
   // Conversion and cycle times (ns) for each ADC model
-  localparam integer T_CONV_NS_ADS8168  = 660;
-  localparam integer T_CONV_NS_ADS8167  = 1200;
-  localparam integer T_CONV_NS_ADS8166  = 2500;
-  localparam integer T_CYCLE_NS_ADS8168 = 1000;
-  localparam integer T_CYCLE_NS_ADS8167 = 2000;
-  localparam integer T_CYCLE_NS_ADS8166 = 4000;
+  // Use a power of 2 unit for easier calculations -- calling these NiS
+  // 2^30 (0x4000_0000) NiS = 10^9 (1000_000_000) NS = 1 second
+  // Round up to make sure we don't underestimate
+  // This allows the overall calculation to be: f(Hz) * T(nis) / 2^30
+  //   which changes a division into a bit-shift right by 30
+  // ADS8168:  660 ns  conv, 1000 ns  cycle
+  //       ->  709 nis conv, 1074 nis cycle
+  // ADS8167: 1200 ns  conv, 2000 ns  cycle
+  //       -> 1289 nis conv, 2148 nis cycle
+  // ADS8166: 2500 ns  conv, 4000 ns  cycle
+  //       -> 2685 nis conv, 4295 nis cycle
+  // Select conversion and cycle times based on ADS_MODEL_ID at compile time
+  localparam integer  T_CONV_NiS =
+    (ADS_MODEL_ID == 8) ? 709 :
+    (ADS_MODEL_ID == 7) ? 1289 :
+    (ADS_MODEL_ID == 6) ? 2685 :
+    2685;
+  localparam integer T_CYCLE_NiS =
+    (ADS_MODEL_ID == 8) ? 1074 :
+    (ADS_MODEL_ID == 7) ? 2148 :
+    (ADS_MODEL_ID == 6) ? 4295 :
+    4295;
+  // Indicate the bitwidth of the conversion and cycle times to optimize multiplication
+  localparam integer T_CONV_NiS_BITS =
+    (ADS_MODEL_ID == 8) ? 10 :
+    (ADS_MODEL_ID == 7) ? 11 :
+    (ADS_MODEL_ID == 6) ? 12 :
+    12;
+  localparam integer T_CYCLE_NiS_BITS =
+    (ADS_MODEL_ID == 8) ? 11 :
+    (ADS_MODEL_ID == 7) ? 12 :
+    (ADS_MODEL_ID == 6) ? 13 :
+    13;
 
   // SPI command bit width
   localparam integer OTF_CMD_BITS = 16;
-
-  // Select conversion and cycle times based on ADS_MODEL_ID at compile time
-  localparam integer T_CONV_NS =
-    (ADS_MODEL_ID == 8) ? T_CONV_NS_ADS8168 :
-    (ADS_MODEL_ID == 7) ? T_CONV_NS_ADS8167 :
-    (ADS_MODEL_ID == 6) ? T_CONV_NS_ADS8166 :
-    T_CONV_NS_ADS8166;
-
-  localparam integer T_CYCLE_NS =
-    (ADS_MODEL_ID == 8) ? T_CYCLE_NS_ADS8168 :
-    (ADS_MODEL_ID == 7) ? T_CYCLE_NS_ADS8167 :
-    (ADS_MODEL_ID == 6) ? T_CYCLE_NS_ADS8166 :
-    T_CYCLE_NS_ADS8166;
 
   ///////////////////////////////////////////////////////////////////////////////
   // Internal Signals
@@ -61,12 +75,12 @@ module shim_ads816x_adc_timing_calc #(
   reg [31:0] min_cycles_for_t_cycle;
   reg [31:0] final_result;
   
-  // Division state machine
-  reg [ 5:0] div_count;
-  reg [63:0] dividend;
-  reg [31:0] divisor;
-  reg [31:0] quotient;
-  reg [63:0] remainder;
+  // Multiplication state machine (shift-add algorithm)
+  reg [ 3:0] mult_count;      // 4 bits sufficient for max 16 bits
+  reg [31:0] multiplicand;    // The constant (T_CONV_NiS or T_CYCLE_NiS)
+  reg [31:0] multiplier;      // The frequency value
+  reg [63:0] mult_result;
+  reg [63:0] mult_accumulator;
 
   ///////////////////////////////////////////////////////////////////////////////
   // Logic
@@ -77,16 +91,16 @@ module shim_ads816x_adc_timing_calc #(
       state <= S_IDLE;
       done <= 1'b0;
       lock_viol <= 1'b0;
-      n_cs_high_time <= 9'd0;
+      n_cs_high_time <= 8'd0;
       spi_clk_freq_hz_latched <= 32'd0;
       min_cycles_for_t_conv <= 32'd0;
       min_cycles_for_t_cycle <= 32'd0;
       final_result <= 32'd0;
-      div_count <= 6'd0;
-      dividend <= 64'd0;
-      divisor <= 32'd0;
-      quotient <= 32'd0;
-      remainder <= 64'd0;
+      mult_count <= 4'd0;
+      multiplicand <= 32'd0;
+      multiplier <= 32'd0;
+      mult_result <= 64'd0;
+      mult_accumulator <= 64'd0;
     end else begin
       case (state)
         S_IDLE: begin
@@ -96,16 +110,15 @@ module shim_ads816x_adc_timing_calc #(
             spi_clk_freq_hz_latched <= spi_clk_freq_hz;
             state <= S_CALC_CONV;
             
-            // Setup division for min_cycles_for_t_conv
-            dividend <= T_CONV_NS * spi_clk_freq_hz + 64'd999_999_999;
-            divisor <= 32'd1_000_000_000;
-            div_count <= 6'd0;
-            quotient <= 32'd0;
-            remainder <= 64'd0;
+            // Setup multiplication for T_CONV_NiS * spi_clk_freq_hz
+            multiplicand <= T_CONV_NiS;
+            multiplier <= spi_clk_freq_hz;
+            mult_count <= 4'd0;
+            mult_accumulator <= 64'd0;
           end
         end
 
-        //// ---- Calculate the minimum cycles to get at least the required t_conv time (minimum 3 cycles for the core to anticipate starting the MISO read)
+        //// ---- Multiply T_CONV_NiS * spi_clk_freq_hz using shift-add
         S_CALC_CONV: begin
           // Check for frequency change during calculation
           if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
@@ -115,33 +128,29 @@ module shim_ads816x_adc_timing_calc #(
             // calc went low, reset
             state <= S_IDLE;
           end else begin
-            // Perform division for number of cycles for t_conv (non-restoring division)
-            if (div_count < 32) begin
-              remainder <= {remainder[62:0], dividend[63-div_count]};
-              if (remainder >= {32'd0, divisor}) begin
-                remainder <= remainder - {32'd0, divisor};
-                quotient[31-div_count] <= 1'b1;
-              end else begin
-                quotient[31-div_count] <= 1'b0;
+            if (mult_count < T_CONV_NiS_BITS) begin
+              // Shift-add multiplication: if current bit of multiplicand is 1, add shifted multiplier
+              if (multiplicand[mult_count]) begin
+                mult_accumulator <= mult_accumulator + ({32'd0, multiplier} << mult_count);
               end
-              div_count <= div_count + 1;
+              mult_count <= mult_count + 1;
             end else begin
-              // Division complete for the number of cycles for t_conv
-              min_cycles_for_t_conv <= quotient < 3 ? 3 : quotient;
+              // Multiplication complete, shift right by 30 bits (equivalent to divide by 2^30)
+              mult_result <= mult_accumulator;
+              min_cycles_for_t_conv <= mult_accumulator[61:30] < 3 ? 3 : mult_accumulator[61:30];
               
-              // Setup division for min_cycles_for_t_cycle
-              dividend <= T_CYCLE_NS * spi_clk_freq_hz_latched + 64'd999_999_999;
-              divisor <= 32'd1_000_000_000;
-              div_count <= 6'd0;
-              quotient <= 32'd0;
-              remainder <= 64'd0;
+              // Setup multiplication for T_CYCLE_NiS * spi_clk_freq_hz_latched
+              multiplicand <= T_CYCLE_NiS;
+              multiplier <= spi_clk_freq_hz_latched;
+              mult_count <= 4'd0;
+              mult_accumulator <= 64'd0;
               
               state <= S_CALC_CYCLE;
             end
           end
         end
 
-        //// ---- Calculate the minimum cycles to get at least the required t_cycle time (past the required OTF_CMD_BITS, as this time includes the command)
+        //// ---- Multiply T_CYCLE_NiS * spi_clk_freq_hz using shift-add
         S_CALC_CYCLE: begin
           // Check for frequency change during calculation
           if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
@@ -151,19 +160,16 @@ module shim_ads816x_adc_timing_calc #(
             // calc went low, reset
             state <= S_IDLE;
           end else begin
-            // Perform division for t_cycle cycles
-            if (div_count < 32) begin
-              remainder <= {remainder[62:0], dividend[63-div_count]};
-              if (remainder >= {32'd0, divisor}) begin
-                remainder <= remainder - {32'd0, divisor};
-                quotient[31-div_count] <= 1'b1;
-              end else begin
-                quotient[31-div_count] <= 1'b0;
+            if (mult_count < T_CYCLE_NiS_BITS) begin
+              // Shift-add multiplication: if current bit of multiplicand is 1, add shifted multiplier
+              if (multiplicand[mult_count]) begin
+                mult_accumulator <= mult_accumulator + ({32'd0, multiplier} << mult_count);
               end
-              div_count <= div_count + 1;
+              mult_count <= mult_count + 1;
             end else begin
-              // Division complete for t_cycle cycles - store (quotient - OTF_CMD_BITS)
-              min_cycles_for_t_cycle <= quotient > OTF_CMD_BITS ? (quotient - OTF_CMD_BITS) : 0;
+              // Multiplication complete, shift right by 30 bits (equivalent to divide by 2^30)
+              mult_result <= mult_accumulator;
+              min_cycles_for_t_cycle <= mult_accumulator[61:30] > OTF_CMD_BITS ? (mult_accumulator[61:30] - OTF_CMD_BITS) : 0;
               
               state <= S_CALC_RESULT;
             end

@@ -16,9 +16,19 @@ module shim_ad5676_dac_timing_calc (
   // Constants
   ///////////////////////////////////////////////////////////////////////////////
 
-  // Update time (ns) for AD5676 (datasheet: time between rising edges of n_cs)
-  localparam integer T_UPDATE_NS_AD5676 = 830;
-  localparam integer T_MIN_N_CS_HIGH_NS = 30;
+  // Update time (datasheet: time between rising edges of n_cs) and minimum n_cs high time for AD5676
+  // Use a power of 2 unit for easier calculations -- calling these NiS
+  // 2^30 (0x4000_0000) NiS = 10^9 (1000_000_000) NS = 1 second
+  // Round up to make sure we don't underestimate
+  // This allows the overall calculation to be: f(Hz) * T(nis) / 2^30
+  //   which changes a division into a bit-shift right by 30
+  // AD5676: 830 ns  update, 30 ns  min n_cs high
+  //      -> 892 nis update, 33 nis min n_cs high
+  localparam integer T_UPDATE_NiS = 892;
+  localparam integer T_MIN_N_CS_HIGH_NiS = 33;
+  // Indicate the bitwidth of the constants to optimize multiplication
+  localparam integer T_UPDATE_NiS_BITS = 10;
+  localparam integer T_MIN_N_CS_HIGH_NiS_BITS = 6;
 
   // SPI command bit width
   localparam integer SPI_CMD_BITS = 24;
@@ -42,12 +52,12 @@ module shim_ad5676_dac_timing_calc (
   reg [31:0] min_cycles_for_t_min_n_cs_high;
   reg [31:0] final_result;
   
-  // Division state machine
-  reg [ 5:0] div_count;
-  reg [63:0] dividend;
-  reg [31:0] divisor;
-  reg [31:0] quotient;
-  reg [63:0] remainder;
+  // Multiplication state machine (shift-add algorithm)
+  reg [ 3:0] mult_count;
+  reg [31:0] multiplicand;  // The constant (T_UPDATE_NiS or T_MIN_N_CS_HIGH_NiS)
+  reg [31:0] multiplier;    // The frequency value
+  reg [63:0] mult_result;
+  reg [63:0] mult_accumulator;
 
   ///////////////////////////////////////////////////////////////////////////////
   // Logic
@@ -63,11 +73,11 @@ module shim_ad5676_dac_timing_calc (
       min_cycles_for_t_update <= 32'd0;
       min_cycles_for_t_min_n_cs_high <= 32'd0;
       final_result <= 32'd0;
-      div_count <= 6'd0;
-      dividend <= 64'd0;
-      divisor <= 32'd0;
-      quotient <= 32'd0;
-      remainder <= 64'd0;
+      mult_count <= 4'd0;
+      multiplicand <= 32'd0;
+      multiplier <= 32'd0;
+      mult_result <= 64'd0;
+      mult_accumulator <= 64'd0;
     end else begin
       case (state)
         S_IDLE: begin
@@ -77,16 +87,15 @@ module shim_ad5676_dac_timing_calc (
             spi_clk_freq_hz_latched <= spi_clk_freq_hz;
             state <= S_CALC_UPDATE;
             
-            // Setup division for min_cycles_for_t_update
-            dividend <= T_UPDATE_NS_AD5676 * spi_clk_freq_hz + 64'd999_999_999;
-            divisor <= 32'd1_000_000_000;
-            div_count <= 6'd0;
-            quotient <= 32'd0;
-            remainder <= 64'd0;
+            // Setup multiplication for T_UPDATE_NiS * spi_clk_freq_hz
+            multiplicand <= T_UPDATE_NiS;
+            multiplier <= spi_clk_freq_hz;
+            mult_count <= 4'd0;
+            mult_accumulator <= 64'd0;
           end
         end
 
-        //// ---- Calcuate the minimum cycles to get at least the required t_update time
+        //// ---- Multiply T_UPDATE_NiS * spi_clk_freq_hz using shift-add
         S_CALC_UPDATE: begin
           // Check for frequency change during calculation
           if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
@@ -96,33 +105,29 @@ module shim_ad5676_dac_timing_calc (
             // calc went low, reset
             state <= S_IDLE;
           end else begin
-            // Perform division for number of cycles for an update (non-restoring division)
-            if (div_count < 32) begin
-              remainder <= {remainder[62:0], dividend[63-div_count]};
-              if (remainder >= {32'd0, divisor}) begin
-                remainder <= remainder - {32'd0, divisor};
-                quotient[31-div_count] <= 1'b1;
-              end else begin
-                quotient[31-div_count] <= 1'b0;
+            if (mult_count < T_UPDATE_NiS_BITS) begin
+              // Shift-add multiplication: if current bit of multiplicand is 1, add shifted multiplier
+              if (multiplicand[mult_count]) begin
+                mult_accumulator <= mult_accumulator + ({32'd0, multiplier} << mult_count);
               end
-              div_count <= div_count + 1;
+              mult_count <= mult_count + 1;
             end else begin
-              // Division complete for the number of cycles for an update
-              min_cycles_for_t_update <= quotient > SPI_CMD_BITS ? quotient : 0;
+              // Multiplication complete, shift right by 30 bits (equivalent to divide by 2^30)
+              mult_result <= mult_accumulator;
+              min_cycles_for_t_update <= mult_accumulator[61:30] > SPI_CMD_BITS ? mult_accumulator[61:30] : 0;
               
-              // Setup division for min_cycles_for_t_min_n_cs_high
-              dividend <= T_MIN_N_CS_HIGH_NS * spi_clk_freq_hz_latched + 64'd999_999_999;
-              divisor <= 32'd1_000_000_000;
-              div_count <= 6'd0;
-              quotient <= 32'd0;
-              remainder <= 64'd0;
+              // Setup multiplication for T_MIN_N_CS_HIGH_NiS * spi_clk_freq_hz_latched
+              multiplicand <= T_MIN_N_CS_HIGH_NiS;
+              multiplier <= spi_clk_freq_hz_latched;
+              mult_count <= 4'd0;
+              mult_accumulator <= 64'd0;
               
               state <= S_CALC_MIN_HIGH;
             end
           end
         end
 
-        //// ---- Calculate the minimum cycles to get at least the required t_min_n_cs_high time (also ensure at least 4 cycles)
+        //// ---- Multiply T_MIN_N_CS_HIGH_NiS * spi_clk_freq_hz using shift-add
         S_CALC_MIN_HIGH: begin
           // Check for frequency change during calculation
           if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
@@ -132,22 +137,20 @@ module shim_ad5676_dac_timing_calc (
             // calc went low, reset
             state <= S_IDLE;
           end else begin
-            // Perform division for min_cycles_for_t_min_n_cs_high
-            if (div_count < 32) begin
-              remainder <= {remainder[62:0], dividend[63-div_count]};
-              if (remainder >= {32'd0, divisor}) begin
-                remainder <= remainder - {32'd0, divisor};
-                quotient[31-div_count] <= 1'b1;
-              end else begin
-                quotient[31-div_count] <= 1'b0;
+            if (mult_count < T_MIN_N_CS_HIGH_NiS_BITS) begin
+              // Shift-add multiplication: if current bit of multiplicand is 1, add shifted multiplier
+              if (multiplicand[mult_count]) begin
+                mult_accumulator <= mult_accumulator + ({32'd0, multiplier} << mult_count);
               end
-              div_count <= div_count + 1;
+              mult_count <= mult_count + 1;
             end else begin
+              // Multiplication complete, shift right by 30 bits (equivalent to divide by 2^30)
+              mult_result <= mult_accumulator;
               // Ensure n_cs high time is at least 4 cycles to do DAC value loading and calibration
-              if (quotient < 4) begin
+              if (mult_accumulator[61:30] < 4) begin
                 min_cycles_for_t_min_n_cs_high <= 32'd4;
               end else begin
-                min_cycles_for_t_min_n_cs_high <= quotient;
+                min_cycles_for_t_min_n_cs_high <= mult_accumulator[61:30];
               end
               
               state <= S_CALC_RESULT;
@@ -164,7 +167,7 @@ module shim_ad5676_dac_timing_calc (
           end else if (!calc) begin
             // calc went low, reset
             state <= S_IDLE;
-            end else begin
+          end else begin
             // Calculate final result based on the following logic:
             // final_result = max(min_cycles_for_t_update, min_cycles_for_t_min_n_cs_high);
             if (min_cycles_for_t_update < min_cycles_for_t_min_n_cs_high) begin
@@ -173,19 +176,19 @@ module shim_ad5676_dac_timing_calc (
               final_result <= min_cycles_for_t_update;
             end
             state <= S_DONE;
-            end
           end
+        end
 
-          //// ---- Stay in this state to check if calc goes low or frequency changes
-          S_DONE: begin
-            // Check for frequency change during calculation
-            if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
+        //// ---- Stay in this state to check if calc goes low or frequency changes
+        S_DONE: begin
+          // Check for frequency change during calculation
+          if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
             lock_viol <= 1'b1;
             state <= S_IDLE;
-            end else if (!calc) begin
+          end else if (!calc) begin
             // calc went low, reset
             state <= S_IDLE;
-            end else begin
+          end else begin
             // Cap n_cs_high_time at 31 (at the maximum 50MHz SPI clock, this plus the command bits is 1120ns, which is >830ns required)
             if (final_result > 31) begin
               n_cs_high_time <= 5'd31;
@@ -194,8 +197,8 @@ module shim_ad5676_dac_timing_calc (
             end
             done <= 1'b1;
             // Stay in this state until calc goes low
-            end
           end
+        end
 
         default: begin
           state <= S_IDLE;

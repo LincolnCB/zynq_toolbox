@@ -399,7 +399,7 @@ module shim_ads816x_adc_ctrl (
                           || (state == S_ADC_RD_CH && adc_spi_cmd_done && !last_adc_word);
   // Latch ~(Chip Select) high time when coming out of reset
   always @(posedge clk) begin
-    if (!resetn) n_cs_high_time_latched <= 8'd0;
+    if (!resetn) n_cs_high_time_latched <= 8'd8; // Default to 8 clock cycles if not set
     else if (state == S_RESET) n_cs_high_time_latched <= n_cs_high_time;
   end
   // ~(Chip Select) timer
@@ -422,8 +422,8 @@ module shim_ads816x_adc_ctrl (
     if (!resetn || state == S_ERROR) spi_bit <= 5'd0;
     else if (spi_bit > 0) spi_bit <= spi_bit - 1; // Shift out bits
     else if (cs_wait_done) begin
-      if (state == S_ADC_RD || state == S_TEST_RD) spi_bit <= 5'd15; // Start with 16 bits for ADC read
-      else spi_bit <= 5'd23; // Start with 24 bits for boot-up tests
+      if (state == S_ADC_RD || state == S_TEST_RD || state == S_ADC_RD_CH) spi_bit <= 5'd15; // Start with 16 bits for any OTF commands or reads
+      else spi_bit <= 5'd23; // Start with 24 bits for register write/read commands (boot test)
     end
     running_spi_bit <= (spi_bit > 0); // Flag to indicate if SPI bit counter is running
   end
@@ -440,7 +440,7 @@ module shim_ads816x_adc_ctrl (
       mosi_shift_reg <= spi_reg_write_cmd(ADDR_OTF_CFG, SET_OTF_CFG_DATA);
     // Read back the On-the-Fly mode register
     end else if (state == S_TEST_WR && adc_spi_cmd_done) begin
-      mosi_shift_reg <= spi_reg_read_cmd(ADDR_OTF_CFG); 
+      mosi_shift_reg <= spi_reg_read_cmd(ADDR_OTF_CFG);
     // No-op during the word when reading back the On-the-Fly mode register
     end else if (state == S_REQ_RD && adc_spi_cmd_done) begin
       mosi_shift_reg <= 24'd0; 
