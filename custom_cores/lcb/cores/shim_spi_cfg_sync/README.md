@@ -1,4 +1,4 @@
-***Updated 2025-09-01***
+***Updated 2025-09-22***
 # SPI Configuration Synchronization Core
 
 The `shim_spi_cfg_sync` module synchronizes configuration signals from the AXI clock domain to the SPI clock domain.
@@ -23,6 +23,7 @@ The `shim_spi_cfg_sync` module synchronizes configuration signals from the AXI c
   - `adc_n_cs_high_time [7:0]`: ADC chip select high time configuration.
   - `boot_test_skip [15:0]`: Boot test skip mask (per-core).
   - `debug [15:0]`: Debug mask (per-core).
+  - `dac_cal_init [15:0]`: DAC calibration initialization value (signed).
 
 ### Outputs
 
@@ -36,6 +37,7 @@ The `shim_spi_cfg_sync` module synchronizes configuration signals from the AXI c
   - `adc_n_cs_high_time_sync [7:0]`: Synchronized ADC chip select high time.
   - `boot_test_skip_sync [15:0]`: Synchronized boot test skip mask.
   - `debug_sync [15:0]`: Synchronized debug mask.
+  - `dac_cal_init_sync [15:0]`: Synchronized DAC calibration initialization value (signed).
 
 ## Operation
 
@@ -52,6 +54,7 @@ The `shim_spi_cfg_sync` module synchronizes configuration signals from the AXI c
   - `adc_n_cs_high_time_sync`: 255 (capped max)
   - `boot_test_skip_sync`: 0
   - `debug_sync`: 0
+  - `dac_cal_init_sync`: 0
 
 ## Notes
 

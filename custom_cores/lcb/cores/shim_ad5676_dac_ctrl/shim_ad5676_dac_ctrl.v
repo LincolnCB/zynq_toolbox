@@ -10,6 +10,8 @@ module shim_ad5676_dac_ctrl #(
   input  wire        debug, // Debug mode flag
   input  wire [4:0]  n_cs_high_time, // n_cs high time in clock cycles (max 31)
 
+  input  wire signed [15:0] cal_init_val, // Default calibration value for all channels on reset (in 2's complement)
+
   output reg         setup_done,
 
   output wire        cmd_buf_rd_en,
@@ -87,6 +89,7 @@ module shim_ad5676_dac_ctrl #(
   localparam CMD_SET_CAL   = 3'd1;
   localparam CMD_DAC_WR    = 3'd2;
   localparam CMD_DAC_WR_CH = 3'd3;
+  localparam CMD_GET_CAL   = 3'd4;
   localparam CMD_CANCEL    = 3'd7;
 
   // Command bit positions
@@ -104,6 +107,7 @@ module shim_ad5676_dac_ctrl #(
   localparam DBG_STATE_TRANSITION = 4'd2;
   localparam DBG_N_CS_TIMER       = 4'd3;
   localparam DBG_SPI_BIT          = 4'd4;
+  localparam CAL_DATA             = 4'd8;
 
 
   ///////////////////////////////////////////////////////////////////////////////
@@ -178,6 +182,7 @@ module shim_ad5676_dac_ctrl #(
   wire        boot_readback_match;
 
   //// ---- Data buffer write signals
+  wire        write_cal;
   wire        debug_miso_data;
   wire        debug_state_transition;
   wire        debug_n_cs_timer;
@@ -245,6 +250,7 @@ module shim_ad5676_dac_ctrl #(
                           : (command == CMD_DAC_WR) ? S_DAC_WR // If command is DAC write, go to DAC_WR state
                           : (command == CMD_DAC_WR_CH) ? S_DAC_WR_CH // If command is single-channel DAC write, go to DAC_WR_CH state
                           : (command == CMD_CANCEL) ? S_IDLE // If command is CANCEL, go to IDLE 
+                          : (command == CMD_GET_CAL) ? S_IDLE // If command is GET_CAL, go to IDLE
                           : S_ERROR; // If command is not recognized, go to ERROR state
   // Waiting for trigger flag
   assign waiting_for_trig = (state == S_TRIG_WAIT);
@@ -390,14 +396,14 @@ module shim_ad5676_dac_ctrl #(
   // Calibration value set and out-of-bounds
   always @(posedge clk) begin
     if (!resetn) begin
-      cal_val[0] <= 16'd0;
-      cal_val[1] <= 16'd0;
-      cal_val[2] <= 16'd0;
-      cal_val[3] <= 16'd0;
-      cal_val[4] <= 16'd0;
-      cal_val[5] <= 16'd0;
-      cal_val[6] <= 16'd0;
-      cal_val[7] <= 16'd0;
+      cal_val[0] <= cal_init_val;
+      cal_val[1] <= cal_init_val;
+      cal_val[2] <= cal_init_val;
+      cal_val[3] <= cal_init_val;
+      cal_val[4] <= cal_init_val;
+      cal_val[5] <= cal_init_val;
+      cal_val[6] <= cal_init_val;
+      cal_val[7] <= cal_init_val;
       cal_oob <= 1'b0;
     end else if (do_next_cmd && command == CMD_SET_CAL) begin
       if ($signed(cmd_word[15:0]) <= $signed(ABS_CAL_MAX) && $signed(cmd_word[15:0]) >= -$signed(ABS_CAL_MAX)) begin
@@ -624,6 +630,8 @@ module shim_ad5676_dac_ctrl #(
   end
 
   //// ---- DAC data output
+  // Write calibration value to data buffer
+  assign write_cal = do_next_cmd && command == CMD_GET_CAL;
   // DEBUG: MISO data ready in MOSI clock domain
   assign debug_miso_data = (state == S_TEST_RD && ~n_miso_data_ready_mosi_clk && debug);
   // DEBUG: State transition
@@ -633,7 +641,8 @@ module shim_ad5676_dac_ctrl #(
   // DEBUG: SPI bit counter when it changes from 0 to nonzero
   assign debug_spi_bit = (!running_spi_bit && spi_bit > 0 && debug); 
   // Attempt to write data to the data buffer if any of the following are true
-  assign try_data_write = debug_miso_data
+  assign try_data_write = write_cal
+                          || debug_miso_data
                           || debug_state_transition
                           || debug_n_cs_timer
                           || debug_spi_bit;
@@ -648,7 +657,9 @@ module shim_ad5676_dac_ctrl #(
   always @(posedge clk) begin
     if (!resetn) data_word <= 32'd0; // Reset data word on reset or error
     else if (try_data_write && !data_buf_full) begin
-      if (debug_miso_data) begin
+      if (write_cal) begin
+        data_word <= {CAL_DATA, 9'd0, cmd_word[18:16], cal_val[cmd_word[18:16]]}; // Write calibration value with channel number and debug code
+      end else if (debug_miso_data) begin
         data_word <= {DBG_MISO_DATA, 12'd0, miso_data_mosi_clk[15:0]}; // Write MISO data with debug code
       end else if (debug_state_transition) begin
         data_word <= {DBG_STATE_TRANSITION, 20'd0, prev_state[3:0], state[3:0]}; // Write state transition with debug code

@@ -29,6 +29,7 @@ module shim_hw_manager #(
   input   wire          debug_oob,            // Debug reg out of bounds
   input   wire          mosi_sck_pol_oob,     // MOSI SCK polarity out of bounds
   input   wire          miso_sck_pol_oob,     // MISO SCK polarity out of bounds
+  input   wire          dac_cal_init_oob,     // DAC calibration initial value out of bounds
   // Shutdown sense (per board)
   input   wire  [ 7:0]  shutdown_sense, // Shutdown sense
   // Integrator (per board)
@@ -113,7 +114,8 @@ module shim_hw_manager #(
               STS_BOOT_TEST_SKIP_OOB      = 25'h0207,
               STS_DEBUG_OOB               = 25'h0208,
               STS_MOSI_SCK_POL_OOB        = 25'h0209,
-              STS_MISO_SCK_POL_OOB        = 25'h020A;
+              STS_MISO_SCK_POL_OOB        = 25'h020A,
+              STS_DAC_CAL_INIT_OOB        = 25'h020B;
   // Shutdown sense
   localparam  STS_SHUTDOWN_SENSE          = 25'h0300,
               STS_EXT_SHUTDOWN            = 25'h0301;
@@ -177,36 +179,53 @@ module shim_hw_manager #(
               state <= S_HALTING;
               status_code <= STS_EXT_SHUTDOWN;
             // Check for out of bounds configuration values
-            end else if (sys_en_oob) begin // System enable out of bounds
-              state <= S_HALTING;
-              status_code <= STS_SYS_EN_OOB;
-            end else if (cmd_buf_reset_oob) begin // Command buffer reset out of bounds
-              state <= S_HALTING;
-              status_code <= STS_CMD_BUF_RESET_OOB;
-            end else if (data_buf_reset_oob) begin // Data buffer reset out of bounds
-              state <= S_HALTING;
-              status_code <= STS_DATA_BUF_RESET_OOB;
-            end else if (integ_thresh_avg_oob) begin // Integrator threshold average out of bounds
-              state <= S_HALTING;
-              status_code <= STS_INTEG_THRESH_AVG_OOB;
-            end else if (integ_window_oob) begin // Integrator window out of bounds
-              state <= S_HALTING;
-              status_code <= STS_INTEG_WINDOW_OOB;
-            end else if (integ_en_oob) begin // Integrator enable out of bounds
-              state <= S_HALTING;
-              status_code <= STS_INTEG_EN_OOB;
-            end else if (boot_test_skip_oob) begin // Boot test skip out of bounds
-              state <= S_HALTING;
-              status_code <= STS_BOOT_TEST_SKIP_OOB;
-            end else if (debug_oob) begin // Debug reg out of bounds
-              state <= S_HALTING;
-              status_code <= STS_DEBUG_OOB;
-            end else if (mosi_sck_pol_oob) begin // MOSI SCK polarity out of bounds
-              state <= S_HALTING;
-              status_code <= STS_MOSI_SCK_POL_OOB;
-            end else if (miso_sck_pol_oob) begin // MISO SCK polarity out of bounds
-              state <= S_HALTING;
-              status_code <= STS_MISO_SCK_POL_OOB;
+            end else if (
+              sys_en_oob
+              || cmd_buf_reset_oob
+              || data_buf_reset_oob
+              || integ_thresh_avg_oob
+              || integ_window_oob
+              || integ_en_oob
+              || boot_test_skip_oob
+              || debug_oob
+              || mosi_sck_pol_oob
+              || miso_sck_pol_oob
+              || dac_cal_init_oob
+            ) begin
+              if (sys_en_oob) begin // System enable out of bounds
+                state <= S_HALTING;
+                status_code <= STS_SYS_EN_OOB;
+              end else if (cmd_buf_reset_oob) begin // Command buffer reset out of bounds
+                state <= S_HALTING;
+                status_code <= STS_CMD_BUF_RESET_OOB;
+              end else if (data_buf_reset_oob) begin // Data buffer reset out of bounds
+                state <= S_HALTING;
+                status_code <= STS_DATA_BUF_RESET_OOB;
+              end else if (integ_thresh_avg_oob) begin // Integrator threshold average out of bounds
+                state <= S_HALTING;
+                status_code <= STS_INTEG_THRESH_AVG_OOB;
+              end else if (integ_window_oob) begin // Integrator window out of bounds
+                state <= S_HALTING;
+                status_code <= STS_INTEG_WINDOW_OOB;
+              end else if (integ_en_oob) begin // Integrator enable out of bounds
+                state <= S_HALTING;
+                status_code <= STS_INTEG_EN_OOB;
+              end else if (boot_test_skip_oob) begin // Boot test skip out of bounds
+                state <= S_HALTING;
+                status_code <= STS_BOOT_TEST_SKIP_OOB;
+              end else if (debug_oob) begin // Debug reg out of bounds
+                state <= S_HALTING;
+                status_code <= STS_DEBUG_OOB;
+              end else if (mosi_sck_pol_oob) begin // MOSI SCK polarity out of bounds
+                state <= S_HALTING;
+                status_code <= STS_MOSI_SCK_POL_OOB;
+              end else if (miso_sck_pol_oob) begin // MISO SCK polarity out of bounds
+                state <= S_HALTING;
+                status_code <= STS_MISO_SCK_POL_OOB;
+              end else if (dac_cal_init_oob) begin // DAC calibration initial value out of bounds
+                state <= S_HALTING;
+                status_code <= STS_DAC_CAL_INIT_OOB;
+              end
             end else begin // Lock the cfg registers and start the SPI clock to confirm the SPI subsystem is initialized
               state <= S_CONFIRM_SPI_RST;
               timer <= 0;

@@ -16,6 +16,7 @@ module shim_spi_cfg_sync (
   input  wire [ 7:0] adc_n_cs_high_time,
   input  wire [15:0] boot_test_skip,
   input  wire [15:0] debug,
+  input  wire signed [15:0] dac_cal_init,
 
   // Synchronized outputs to SPI domain
   output wire        spi_en_sync,
@@ -26,7 +27,8 @@ module shim_spi_cfg_sync (
   output wire [ 4:0] dac_n_cs_high_time_sync,
   output wire [ 7:0] adc_n_cs_high_time_sync,
   output wire [15:0] boot_test_skip_sync,
-  output wire [15:0] debug_sync
+  output wire [15:0] debug_sync,
+  output wire signed [15:0] dac_cal_init_sync
 );
 
   // Default values for registers
@@ -34,6 +36,7 @@ module shim_spi_cfg_sync (
   localparam [31:0] integ_window_default = 32'h00010000;
   localparam [ 4:0] dac_n_cs_high_time_default = 5'd31; // Max value
   localparam [ 7:0] adc_n_cs_high_time_default = 8'd255; // Max value
+  localparam signed [15:0] dac_cal_init_default = 16'sd0; // Zero default
 
   // Synchronize each signal
   // Use sync_coherent for multi-bit data,
@@ -140,6 +143,19 @@ module shim_spi_cfg_sync (
     .resetn(spi_resetn),
     .din(debug),
     .dout(debug_sync)
+  );
+
+  // DAC calibration initial value (coherent)
+  sync_coherent #(
+    .WIDTH(16)
+  ) sync_dac_cal_init (
+    .in_clk(aclk),
+    .in_resetn(aresetn),
+    .out_clk(spi_clk),
+    .out_resetn(spi_resetn),
+    .din(dac_cal_init),
+    .dout(dac_cal_init_sync),
+    .dout_default(dac_cal_init_default)
   );
   
 endmodule

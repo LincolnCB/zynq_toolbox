@@ -1,4 +1,4 @@
-**Updated 2025-09-15**
+**Updated 2025-09-22**
 # AD5676 DAC Control Core
 
 The `shim_ad5676_dac_ctrl` module implements command-driven control for the Analog Devices AD5676 DAC in the Rev D shim firmware. It manages SPI transactions, command sequencing, per-channel calibration, error detection, and synchronization for all 8 DAC channels.
@@ -15,7 +15,8 @@ The `shim_ad5676_dac_ctrl` module implements command-driven control for the Anal
 - `boot_test_skip`: Skips boot-time SPI register test if asserted.
 - `debug`: Enables debug mode (debug outputs to the data buffer).
 - `n_cs_high_time [4:0]`: Chip select high time in clock cycles (max 31), latched when exiting reset.
-- `cmd_word [31:0]`: Command word from buffer.
+- `cal_init_val [15:0]`: Default signed calibration value for all channels on reset (in 2's complement).
+- `cmd_buf_word [31:0]`: Command word from buffer.
 - `cmd_buf_empty`: Indicates command buffer is empty.
 - `trigger`: External trigger signal.
 - `ldac_shared`: Shared LDAC signal (for error detection).
@@ -25,11 +26,11 @@ The `shim_ad5676_dac_ctrl` module implements command-driven control for the Anal
 ### Outputs
 
 - `setup_done`: Indicates successful boot/setup (set immediately if `boot_test_skip` is asserted).
-- `cmd_word_rd_en`: Enables reading the next command word.
+- `cmd_buf_rd_en`: Enables reading the next command word.
 - `waiting_for_trig`: Indicates waiting for trigger.
-- `data_word_wr_en`: Enables writing a data word to the output buffer.
+- `data_buf_wr_en`: Enables writing a data word to the output buffer.
 - `data_word [31:0]`: Packed debug or readback data.
-- Error flags: `boot_fail`, `cmd_buf_underflow`, `data_buf_overflow`, `unexp_trig`, `bad_cmd`, `cal_oob`, `dac_val_oob`.
+- Error flags: `boot_fail`, `cmd_buf_underflow`, `data_buf_overflow`, `unexp_trig`, `ldac_misalign`, `delay_too_short`, `bad_cmd`, `cal_oob`, `dac_val_oob`.
 - `abs_dac_val_concat [119:0]`: Concatenated absolute DAC values (8 × 15 bits).
 - `n_cs`: SPI chip select (active low).
 - `mosi`: SPI MOSI data.
@@ -123,6 +124,7 @@ The core operates based on 32-bit word commands read from the command buffer. Th
 - **SET_CAL (`3'd1`):** Set calibration value for a channel.
 - **DAC_WR (`3'd2`):** Write DAC values (4 words, 2 channels each).
 - **DAC_WR_CH (`3'd3`):** Write single DAC channel.
+- **GET_CAL (`3'd4`):** Read calibration value for a channel.
 - **CANCEL (`3'd7`):** Cancel current wait or delay.
 
 ### Command Word Structure
@@ -178,6 +180,15 @@ Writes a single DAC channel with the specified value. Has no delays or trigger w
 - `S_IDLE -> S_DAC_WR_CH -> S_IDLE/next_cmd_state`
 - Transition to the next command state if one is present. Otherwise return to `S_IDLE`.
 
+#### GET_CAL (`3'd4`)
+- `[18:16]` — **Channel Index** (0–7)
+
+Reads the current calibration value for the specified channel. Outputs the calibration value to the data buffer with the `CAL_DATA` debug code (see Data Buffer Output section).
+
+**State transitions:**
+- `S_IDLE -> S_IDLE/next_cmd_state`
+- Transition to the next command state if one is present. Otherwise return to `S_IDLE`.
+
 #### CANCEL (`3'd7`)
 Cancels current wait or delay if issued while the core is in DELAY or TRIG_WAIT state (or just finishing DAC_WR, about to transition to one of those). This is the only command that can be read without the previous command being finished. After canceling, the core returns to IDLE.
 
@@ -188,24 +199,28 @@ Cancels current wait or delay if issued while the core is in DELAY or TRIG_WAIT 
 
 ### Debug Mode
 
-If `debug` is asserted, the core outputs debug information in addition to DAC readback. On a given clock cycle, the core will choose what to output in the following priority order:
-1. If a MISO data word is read during boot test, output a word using Debug Code 1 (`DBG_MISO_DATA`), including the MISO data.
-2. If a state transition occurs, output a word using Debug Code 2 (`DBG_STATE_TRANSITION`), including the previous and current state.
-3. If the chip select timer starts, output a word using Debug Code 3 (`DBG_N_CS_TIMER`), including the timer value.
-4. If the SPI bit counter changes from 0 to nonzero, output a word using Debug Code 4 (`DBG_SPI_BIT`), including the SPI bit value.
+If `debug` is asserted, the core outputs debug information in addition to calibration readback. On a given clock cycle, the core will choose what to output in the following priority order:
+1. If a calibration data request occurs (GET_CAL or SET_CAL command), output a word using Data Code 8 (`CAL_DATA`), including the channel index and calibration value.
+2. If a MISO data word is read during boot test, output a word using Debug Code 1 (`DBG_MISO_DATA`), including the MISO data.
+3. If a state transition occurs, output a word using Debug Code 2 (`DBG_STATE_TRANSITION`), including the previous and current state.
+4. If the chip select timer starts, output a word using Debug Code 3 (`DBG_N_CS_TIMER`), including the timer value.
+5. If the SPI bit counter changes from 0 to nonzero, output a word using Debug Code 4 (`DBG_SPI_BIT`), including the SPI bit value.
 
 Debug output format:
-- `[31:28]` - Debug Code (see below)
-- Remaining bits: debug data (varies by code, see below)
+- `[31:28]` - Data/Debug Code (see below)
+- Remaining bits: data (varies by code, see below)
 
-| Debug Code | Name                   | Data Format                                 |
-|:----------:|:-----------------------|:--------------------------------------------|
-| 1          | `DBG_MISO_DATA`        | `[15:0]` MISO data                          |
-| 2          | `DBG_STATE_TRANSITION` | `[7:4]` prev_state, `[3:0]` state           |
-| 3          | `DBG_N_CS_TIMER`       | `[7:0]` n_cs_timer value                    |
-| 4          | `DBG_SPI_BIT`          | `[4:0]` spi_bit value                       |
+| Data/Debug Code | Name                   | Data Format                                 |
+|:---------------:|:-----------------------|:--------------------------------------------|
+| 1               | `DBG_MISO_DATA`        | `[15:0]` MISO data                          |
+| 2               | `DBG_STATE_TRANSITION` | `[7:4]` prev_state, `[3:0]` state           |
+| 3               | `DBG_N_CS_TIMER`       | `[7:0]` n_cs_timer value                    |
+| 4               | `DBG_SPI_BIT`          | `[4:0]` spi_bit value                       |
+| 8               | `CAL_DATA`             | `[18:16]` channel, `[15:0]` calibration val |
 
 If none of the above conditions are met, the output word is zero and nothing is written to the data buffer.
+
+**Note:** Calibration data (code 8) is output for both SET_CAL and GET_CAL commands, regardless of debug mode setting.
 
 ## Calibration
 
@@ -221,6 +236,8 @@ If none of the above conditions are met, the output word is zero and nothing is 
 - Invalid commands (`bad_cmd`)
 - Buffer underflow (expect next command with command buffer empty) (`cmd_buf_underflow`)
 - Buffer overflow (try to write to data buffer with data buffer full) (`data_buf_overflow`)
+- LDAC misalignment error (`ldac_misalign`)
+- Delay too short error (`delay_too_short`) - raised when delay timer expires before DAC write sequence completes
 - Out-of-bounds calibration or DAC values (`cal_oob`, `dac_val_oob`)
 
 ## Notes
