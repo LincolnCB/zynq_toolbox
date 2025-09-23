@@ -363,10 +363,15 @@ module shim_ad5676_dac_ctrl #(
   always @(posedge clk) begin
     if (!resetn) dac_val_oob <= 1'b0; // Reset out of bounds flag on reset
     else begin // Set out of bounds flag if either of the following conditions are met:
-      if (dac_load_stage == DAC_LOAD_STAGE_INIT
-          && read_next_dac_val_pair && next_cmd_ready 
-          && (cmd_word[15:0] == 16'hFFFF || cmd_word[31:16] == 16'hFFFF)) dac_val_oob <= 1'b1; // If incoming DAC value is 0xFFFF
-      else if (dac_load_stage == DAC_LOAD_STAGE_CONV && (first_dac_val_cal_signed_oob || second_dac_val_cal_signed_oob)) dac_val_oob <= 1'b1; // If calibrated DAC value is out of bounds
+      // If DAC values are 0 (negative rail) as loaded
+      if (dac_load_stage == DAC_LOAD_STAGE_INIT) begin
+        // Either sample in a pair (in 8ch write)
+        if (read_next_dac_val_pair && next_cmd_ready 
+            && (cmd_word[15:0] == 16'h0000 || cmd_word[31:16] == 16'h0000)) dac_val_oob <= 1'b1;
+        // Single sample in the single-channel write
+        else if (do_next_cmd && command == CMD_DAC_WR_CH && cmd_word[15:0] == 16'h0000) dac_val_oob <= 1'b1;
+      // OR if calibrated DAC value is out of bounds
+      end else if (dac_load_stage == DAC_LOAD_STAGE_CONV && (first_dac_val_cal_signed_oob || second_dac_val_cal_signed_oob)) dac_val_oob <= 1'b1;
     end
   end
 
@@ -473,16 +478,16 @@ module shim_ad5676_dac_ctrl #(
         DAC_LOAD_STAGE_INIT: begin // Initial stage, waiting for the first DAC value to be loaded
           // Load DAC values in pairs when doing a full 8-channel write
           if (read_next_dac_val_pair && next_cmd_ready) begin
-            // Reject DAC value of 0xFFFF
-            if (!(cmd_word[15:0] == 16'hFFFF || cmd_word[31:16] == 16'hFFFF))  begin
+            // Reject DAC value of 0x0000
+            if (!(cmd_word[15:0] == 16'h0000 || cmd_word[31:16] == 16'h0000))  begin
               first_dac_val_signed <= offset_to_signed(cmd_word[15:0]); // Load first DAC value from command word
               second_dac_val_signed <= offset_to_signed(cmd_word[31:16]); // Load second DAC value from command word
               dac_load_stage <= DAC_LOAD_STAGE_CAL; // Move to next stage
             end
           // Load a single value from the command word for single-channel write
           end else if (do_next_cmd && command == CMD_DAC_WR_CH) begin
-            // Reject DAC value of 0xFFFF
-            if (cmd_word[15:0] != 16'hFFFF) begin
+            // Reject DAC value of 0x0000
+            if (cmd_word[15:0] != 16'h0000) begin
               first_dac_val_signed <= offset_to_signed(cmd_word[15:0]); // Load DAC value from command word
               second_dac_val_signed <= 16'd0; // No second DAC value
               dac_load_stage <= DAC_LOAD_STAGE_CAL; // Move to next stage
@@ -673,12 +678,34 @@ module shim_ad5676_dac_ctrl #(
 
   //// ---- Functions for conversions
   // Convert from offset to signed     
-  // Given a 16-bit 0-65535 number, treat 32768 (0x8000) as 0, 0 as -32768, 
-  //   and 65535 as disallowed (return 0, handle the error before calling)
+  // Given a 16-bit 0-65535 number, treat 32768 (0x8000) as 0, 1 as -32767, and 65535 (0xFFFF) as 32767
+  // Note that 0x0000 is considered out of bounds and should be rejected before calling this function
+  // 0x0000 will map to 0 instead of -32768 as a failsafe to prevent going to the rails
   function signed [15:0] offset_to_signed(input [15:0] raw_dac_val);
+    reg signed [16:0] shift;
     begin
-      if (raw_dac_val == 16'hFFFF) offset_to_signed = 16'sd0; // Disallowed value, return 0
-      else offset_to_signed = $signed(raw_dac_val) - 16'sd32768; // Correct conversion for full 16-bit range
+      if (raw_dac_val == 16'h0000) begin
+        offset_to_signed = 16'sd0;
+      end else begin
+        shift = $signed({1'b0, raw_dac_val}) - 17'sd32768;
+        offset_to_signed = shift[15:0];
+      end
+    end
+  endfunction
+  // Convert signed value to offset (0-65535) representation.
+  // Takes a signed 17-bit value (-65536 to 65535) to handle out of bounds (-32767 to 32767)
+  // Inverse of offset_to_signed: offset = signed_val + 32768 (0x8000)
+  //   Should handle out of bounds before calling, but will return DAC_MIDRANGE if out of bounds
+  function [15:0] signed_to_offset(input signed [16:0] signed_val);
+    reg signed [16:0] shift;
+    begin
+      // Clamp to -32767 to 32767
+      if (signed_val > 17'sd32767 || signed_val < -17'sd32767) begin
+        signed_to_offset = DAC_MIDRANGE; // Out of bounds, return midrange
+      end else begin
+        shift = signed_val + 17'sd32768;
+        signed_to_offset = shift[15:0];
+      end
     end
   endfunction
   // Convert the signed value to absolute value
@@ -689,15 +716,6 @@ module shim_ad5676_dac_ctrl #(
       end else begin
         signed_to_abs = signed_val; // If positive, keep the value as is
       end
-    end
-  endfunction
-  // Convert signed value to offset (0-65535) representation
-  // Inverse of offset_to_signed: offset = signed_val + 32768 (0x8000)
-  //   Should handle out of bounds before calling, but will return 32768 if out of bounds
-  function [15:0] signed_to_offset(input signed [16:0] signed_val);
-    begin
-      if (signed_val < -16'sd32768 || signed_val > 16'sd32767) signed_to_offset = 16'd32768; // If out of bounds, return offset representation of 0
-      else signed_to_offset = signed_val + 16'sd32768;
     end
   endfunction
   // SPI command to write to particular DAC channel, waiting for LDAC
