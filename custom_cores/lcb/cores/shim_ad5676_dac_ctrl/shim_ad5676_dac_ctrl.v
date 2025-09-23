@@ -60,7 +60,7 @@ module shim_ad5676_dac_ctrl #(
 
   localparam DAC_TEST_CH   = 3'd5;      // DAC channel for testing
   localparam DAC_TEST_VAL  = 16'h800A;  // Test value for DAC channel
-  localparam DAC_MIDRANGE  = 16'h7FFF;  // Midrange value
+  localparam DAC_MIDRANGE  = 16'h8000;  // Midrange value
 
   localparam SPI_CMD_REG_WRITE = 4'b0001; // Register write command
   localparam SPI_CMD_REG_READ  = 4'b1001; // Register read command
@@ -673,12 +673,12 @@ module shim_ad5676_dac_ctrl #(
 
   //// ---- Functions for conversions
   // Convert from offset to signed     
-  // Given a 16-bit 0-65535 number, treat 32767 as 0, 0 as -32767, 
+  // Given a 16-bit 0-65535 number, treat 32768 (0x8000) as 0, 0 as -32768, 
   //   and 65535 as disallowed (return 0, handle the error before calling)
   function signed [15:0] offset_to_signed(input [15:0] raw_dac_val);
     begin
       if (raw_dac_val == 16'hFFFF) offset_to_signed = 16'sd0; // Disallowed value, return 0
-      else offset_to_signed = $signed(raw_dac_val) - 16'sd32767; // Correct conversion for full 16-bit range
+      else offset_to_signed = $signed(raw_dac_val) - 16'sd32768; // Correct conversion for full 16-bit range
     end
   endfunction
   // Convert the signed value to absolute value
@@ -692,12 +692,12 @@ module shim_ad5676_dac_ctrl #(
     end
   endfunction
   // Convert signed value to offset (0-65535) representation
-  // Inverse of offset_to_signed: offset = signed_val + 32767
-  //   Should handle out of bounds before calling, but will return 32767 if out of bounds
+  // Inverse of offset_to_signed: offset = signed_val + 32768 (0x8000)
+  //   Should handle out of bounds before calling, but will return 32768 if out of bounds
   function [15:0] signed_to_offset(input signed [16:0] signed_val);
     begin
-      if (signed_val < -16'sd32767 || signed_val > 16'sd32767) signed_to_offset = 16'd32767; // If out of bounds, return offset representation of 0
-      else signed_to_offset = signed_val + 16'sd32767;
+      if (signed_val < -16'sd32768 || signed_val > 16'sd32767) signed_to_offset = 16'd32768; // If out of bounds, return offset representation of 0
+      else signed_to_offset = signed_val + 16'sd32768;
     end
   endfunction
   // SPI command to write to particular DAC channel, waiting for LDAC

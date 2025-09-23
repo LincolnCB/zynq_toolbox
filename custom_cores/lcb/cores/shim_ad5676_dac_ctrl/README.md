@@ -95,11 +95,11 @@ The boot test sequence is as follows:
     - `[23:20]` = `0001` (SPI register write command)
     - `[19]`    = `0` (reserved)
     - `[18:16]` = `101` (channel 5)
-    - `[15:0]`  = `DAC_MIDRANGE` (`0111111111111111`, `0x7FFF`)
+    - `[15:0]`  = `DAC_MIDRANGE` (`1000000000000000`, `0x8000`)
   - SPI word written:
     ```
-    0001_0_101_0111111111111111
-    0x14A7FFF
+    0001_0_101_1000000000000000
+    0x158000
     ```
   - SPI response composition:
     - `[23:16]` = Undefined (not used)
@@ -245,6 +245,9 @@ If none of the above conditions are met, the output word is zero and nothing is 
 - SPI timing and chip select are managed to meet AD5676 requirements.
 - The `n_cs_high_time` input is latched when the state machine is in `S_RESET` to ensure stable timing parameters throughout operation.
 - Offset/signed conversions handled internally (see source for conversion functions).
+  - **Offset format**: 0x0000 to 0xFFFF (0 to 65535)
+  - **Signed format**: -32768 to +32767
+  - **Zero point**: 0x8000 in offset format corresponds to 0 in signed format
 - Asynchronous FIFO and synchronizer modules are used for safe cross-domain data transfer.
 - Data buffer output is for debug and boot test readback; normal DAC operation does not output samples.
 
