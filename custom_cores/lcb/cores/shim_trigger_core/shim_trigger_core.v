@@ -47,24 +47,27 @@ module shim_trigger_core #(
   localparam TRIGGER_LOCKOUT_MIN = 4;
 
   // State machine info
-  reg  [2:0] state;
-  wire       cmd_done;
-  wire       next_cmd;
-  wire [2:0] next_cmd_state;
+  reg  [ 2:0] state;
+  wire        cmd_done;
+  wire        next_cmd;
+  wire [ 2:0] next_cmd_state;
 
   // Cancel and sync
   wire cancel;
   wire all_waiting;
 
   // Command decode
-  wire [2:0] cmd_type = cmd_word[31:29];
-  wire [28:0] cmd_val = cmd_word[28:0];
+  wire [ 2:0] cmd_type = cmd_word[31:29];
+  wire        cmd_log_trig = cmd_word[28];
+  wire [27:0] cmd_val = cmd_word[27:0];
 
   // Command execution
-  reg [28:0] delay_counter;
-  reg [28:0] lockout_counter;
-  reg [28:0] trig_counter;
-  reg [28:0] trig_lockout;
+  reg [27:0] delay_counter;
+  reg [27:0] lockout_counter;
+  reg [27:0] trig_counter;
+  reg [27:0] trig_lockout;
+  reg  log_trig;
+  wire do_log;
   wire do_trig;
 
   // Trigger timing tracking
@@ -129,6 +132,15 @@ module shim_trigger_core #(
   always @(posedge clk) begin
     if (!resetn || cancel || state == S_ERROR) trig_out <= 0;
     else trig_out <= do_trig; // Trigger pulse
+  // Trigger logging
+  always @(posedge clk) begin
+    if (!resetn) log_trig <= 0;
+    else if (next_cmd) log_trig <= cmd_log_trig;
+  end
+  assign do_log = (next_cmd && cmd_type == CMD_FORCE_TRIG && cmd_log_trig) // Force trigger with logging
+                  || (next_cmd && cmd_type == CMD_SYNC_CH && all_waiting && cmd_log_trig) // Sync channels edge case with logging
+                  || (state == S_SYNC_CH && all_waiting && log_trig) // Sync channels with logging
+                  || (state == S_EXPECT_TRIG && lockout_counter == 0 && ext_trig && log_trig); // External trigger with logging
   end
 
   //// Error handling
@@ -149,7 +161,7 @@ module shim_trigger_core #(
   //// Trigger timing tracking
   always @(posedge clk) begin
     if (!resetn) trig_timer <= 0;
-    else if (trig_timer == 0 && do_trig) trig_timer <= 1; // Start timer on first trigger
+    else if (trig_timer == 0 && do_log) trig_timer <= 1; // Start timer on first trigger
     else if (trig_timer > 0 && trig_timer < 64'hFFFFFFFFFFFFFFFF) trig_timer <= trig_timer + 1; // Increment timer without overflow
   end
 
@@ -173,7 +185,7 @@ module shim_trigger_core #(
         trig_data_second_word <= 1; // Set flag to write second word next cycle
       end
     // Write first word on trigger if buffer has at least two free entries
-    end else if (do_trig && !data_buf_full && !data_buf_almost_full) begin
+    end else if (do_log && !data_buf_full && !data_buf_almost_full) begin
       data_word_wr_en <= 1;
       data_word <= trig_timer[31:0]; // First word is the lower 32 bits of the timer
       second_word <= trig_timer[63:32]; // Second word is the upper 32 bits of the timer
