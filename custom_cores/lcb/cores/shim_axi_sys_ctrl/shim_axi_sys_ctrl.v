@@ -10,7 +10,7 @@ module shim_axi_sys_ctrl #
   parameter integer DEBUG = 0, // Default to no debug
   parameter integer MOSI_SCK_POL_DEFAULT = 0, // Default to 0 MOSI SCK polarity (don't invert)
   parameter integer MISO_SCK_POL_DEFAULT = 1, // Default to 1 MISO SCK polarity (invert)
-  parameter integer DAC_CAL_INIT_DEFAULT = -32, // Default calibration value for DAC (in 2's complement)
+  parameter integer DAC_CAL_INIT_DEFAULT = 0, // Default calibration value for DAC (in 2's complement)
   parameter ABS_CAL_MAX = 16'd4096 // Maximum absolute calibration value (calibration value is signed)
 )
 (

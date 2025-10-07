@@ -1,7 +1,7 @@
 `timescale 1 ns / 1 ps
 
 module shim_trigger_core #(
-  parameter TRIGGER_LOCKOUT_DEFAULT = 5000
+  parameter TRIGGER_LOCKOUT_DEFAULT = 10000000 // Default lockout period in clock cycles (e.g., 10000000 at 20 MHz SPI clock -> 0.5 seconds)
 ) (
   input  wire        clk,
   input  wire        resetn,
@@ -86,7 +86,7 @@ module shim_trigger_core #(
   // Command done logic
   assign cmd_done = (state == S_IDLE && !cmd_buf_empty)
                   || (state == S_SYNC_CH && all_waiting)
-                  || (state == S_EXPECT_TRIG && trig_counter == 0)
+                  || (state == S_EXPECT_TRIG && ext_trig_counter == 0)
                   || (state == S_DELAY && delay_counter == 0)
                   || (state != S_ERROR && cancel); // Allow cancel at any time
   assign next_cmd = cmd_done && !cmd_buf_empty;
@@ -135,7 +135,7 @@ module shim_trigger_core #(
   assign do_trig = (next_cmd && cmd_type == CMD_FORCE_TRIG) // Force trigger
                     || (next_cmd && cmd_type == CMD_SYNC_CH && all_waiting) // Sync channels edge case where all channels are already waiting
                     || (state == S_SYNC_CH && all_waiting) // Sync channels when all are waiting
-                    || (state == S_EXPECT_TRIG && lockout_counter == 0 && ext_trig); // External trigger when expected and lockout is done
+                    || (state == S_EXPECT_TRIG && ext_trig_counter > 0 && lockout_counter == 0 && ext_trig); // External trigger when expected and lockout is done
   always @(posedge clk) begin
     if (!resetn || cancel || state == S_ERROR) trig_out <= 0;
     else trig_out <= do_trig; // Trigger pulse
