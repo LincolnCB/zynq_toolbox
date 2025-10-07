@@ -24,6 +24,7 @@ module shim_trigger_core #(
 
   // Outputs
   output reg         trig_out,
+  output reg [31:0]  trig_counter,
   output reg         data_buf_overflow,
   output reg         bad_cmd
 );
@@ -33,6 +34,7 @@ module shim_trigger_core #(
   localparam CMD_EXPECT_EXT_TRIG = 3'd3;
   localparam CMD_DELAY           = 3'd4;
   localparam CMD_FORCE_TRIG      = 3'd5;
+  localparam CMD_RESET_COUNT     = 3'd6;
   localparam CMD_CANCEL          = 3'd7;
 
   // State encoding
@@ -52,8 +54,9 @@ module shim_trigger_core #(
   wire        next_cmd;
   wire [ 2:0] next_cmd_state;
 
-  // Cancel and sync
+  // Cancel, count reset, and sync
   wire cancel;
+  wire reset_count;
   wire all_waiting;
 
   // Command decode
@@ -64,7 +67,7 @@ module shim_trigger_core #(
   // Command execution
   reg [27:0] delay_counter;
   reg [27:0] lockout_counter;
-  reg [27:0] trig_counter;
+  reg [27:0] ext_trig_counter;
   reg [27:0] trig_lockout;
   reg  log_trig;
   wire do_log;
@@ -75,9 +78,11 @@ module shim_trigger_core #(
   reg [31:0] second_word; // Second word to write to data buffer
   reg        trig_data_second_word; // Flag to indicate if the second word is being written
 
-  // Checks for cancel command and synchronization conditions
+  // Checks for cancel / reset count command and synchronization conditions
   assign cancel = !cmd_buf_empty && cmd_type == CMD_CANCEL;
+  assign reset_count = !cmd_buf_empty && cmd_type == CMD_RESET_COUNT;
   assign all_waiting = &dac_waiting_for_trig && &adc_waiting_for_trig;
+
   // Command done logic
   assign cmd_done = (state == S_IDLE && !cmd_buf_empty)
                   || (state == S_SYNC_CH && all_waiting)
@@ -87,11 +92,13 @@ module shim_trigger_core #(
   assign next_cmd = cmd_done && !cmd_buf_empty;
   // Next state from upcoming command
   assign next_cmd_state = cmd_buf_empty ? S_IDLE
-                          : (cmd_type == CMD_CANCEL || cmd_type == CMD_FORCE_TRIG) ? S_IDLE
-                          : (cmd_type == CMD_SET_LOCKOUT) ? (cmd_val >= TRIGGER_LOCKOUT_MIN ? S_IDLE : S_ERROR) // Lockout must be non-zero
                           : (cmd_type == CMD_SYNC_CH) ? (all_waiting ? S_IDLE : S_SYNC_CH) // If all channels are already waiting, go right to idle
+                          : (cmd_type == CMD_SET_LOCKOUT) ? (cmd_val >= TRIGGER_LOCKOUT_MIN ? S_IDLE : S_ERROR) // Lockout must be non-zero
                           : (cmd_type == CMD_EXPECT_EXT_TRIG) ? ((cmd_val != 0) ? S_EXPECT_TRIG : S_IDLE) // Zero triggers goes right to idle
                           : (cmd_type == CMD_DELAY) ? ((cmd_val != 0) ? S_DELAY : S_IDLE) // Zero delay goes right to idle
+                          : (cmd_type == CMD_FORCE_TRIG) ? S_IDLE
+                          : (cmd_type == CMD_RESET_COUNT) ? S_IDLE
+                          : (cmd_type == CMD_CANCEL) ? S_IDLE
                           : S_ERROR;
   // State transition logic
   always @(posedge clk) begin
@@ -108,9 +115,9 @@ module shim_trigger_core #(
   end
   // Expected trigger count
   always @(posedge clk) begin
-    if (!resetn || cancel || state == S_ERROR) trig_counter <= 0;
-    else if (next_cmd && cmd_type == CMD_EXPECT_EXT_TRIG) trig_counter <= cmd_val;
-    else if (state == S_EXPECT_TRIG && trig_counter > 0 && do_trig) trig_counter <= trig_counter - 1;
+    if (!resetn || cancel || state == S_ERROR) ext_trig_counter <= 0;
+    else if (next_cmd && cmd_type == CMD_EXPECT_EXT_TRIG) ext_trig_counter <= cmd_val;
+    else if (state == S_EXPECT_TRIG && ext_trig_counter > 0 && do_trig) ext_trig_counter <= ext_trig_counter - 1;
   end
   // Delay counter, used in delay state
   always @(posedge clk) begin
@@ -156,11 +163,20 @@ module shim_trigger_core #(
   end
 
   //// Read enable
-  assign cmd_word_rd_en = next_cmd;
+  assign cmd_word_rd_en = next_cmd || reset_count;
+
+  //// Trigger counting
+  // Increment trigger count on each trigger event
+  always @(posedge clk) begin
+    if (!resetn) trig_counter <= 0;
+    else if (reset_count) trig_counter <= 0; // Reset counter on reset count command
+    else if (do_trig) trig_counter <= trig_counter + 1;
+  end
 
   //// Trigger timing tracking
   always @(posedge clk) begin
     if (!resetn) trig_timer <= 0;
+    else if (reset_count) trig_timer <= 0; // Reset timer on reset count command
     else if (trig_timer == 0 && do_log) trig_timer <= 1; // Start timer on first trigger
     else if (trig_timer > 0 && trig_timer < 64'hFFFFFFFFFFFFFFFF) trig_timer <= trig_timer + 1; // Increment timer without overflow
   end

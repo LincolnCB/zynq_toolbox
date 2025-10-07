@@ -7,7 +7,7 @@ module sync_incoherent #(
   input  wire clk,               // Clock signal
   input  wire resetn,            // Active low reset signal
   input  wire [WIDTH-1:0] din,   // Input signal to be synchronized
-  output wire [WIDTH-1:0] dout  // Synchronized output signal
+  output wire [WIDTH-1:0] dout   // Synchronized output signal
 );
 
   // Ensure DEPTH is within range

@@ -1,4 +1,4 @@
-**Updated 2025-10-01**
+**Updated 2025-10-06**
 # Trigger Core (`shim_trigger_core`)
 
 The `shim_trigger_core` module provides flexible trigger management for the Rev D shim firmware..
@@ -19,6 +19,7 @@ The `shim_trigger_core` module provides flexible trigger management for the Rev 
 
 - `cmd_word_rd_en`: Enables reading the next command word.
 - `trig_out`: Trigger pulse output.
+- `trig_counter [31:0]`: Current trigger count (increments on each trigger).
 - `data_word_wr_en`: Enables writing trigger timing data.
 - `data_word [31:0]`: Trigger timing data (lower/upper 32 bits).
 - `data_buf_overflow`, `bad_cmd`: Error flags.
@@ -32,6 +33,7 @@ The `shim_trigger_core` module provides flexible trigger management for the Rev 
 - **EXPECT_EXT_TRIG (`3'd3`):** Wait for a specified number of external triggers.
 - **DELAY (`3'd4`):** Wait for a specified delay (in clock cycles).
 - **FORCE_TRIG (`3'd5`):** Force a trigger immediately.
+- **RESET_COUNT (`3'd6`):** Reset the trigger counter and timer to zero.
 - **CANCEL (`3'd7`):** Cancel current wait or operation.
 
 ### Command Word Structure
@@ -60,6 +62,10 @@ Wait for a specified delay (in SPI clock cycles) before moving to the next comma
 
 Forces an internal trigger pulse. This command does not wait for the DAC/ADC channels to be ready and can cause an unexpected trigger error. When the trigger logging bit is set, the forced trigger will be logged to the data buffer with timing information.
 
+#### RESET_COUNT Command (`3'd6`)
+
+Resets the internal trigger counter and 64-bit trigger timer to zero. This command will be processed while other commands are running (it must still reach the end of the buffer, though). The 28-bit command value is ignored, and the trigger logging bit has no effect for this command. This is useful for synchronizing timing measurements at the start of an experiment.
+
 #### CANCEL Command (`3'd7`)
 
 Cancels the current wait or operation. If the core is waiting for a trigger or delay, it will immediately exit that state and return to IDLE. It is recommended to clear the command buffer before issuing a CANCEL command to ensure immediate cancellation.
@@ -71,6 +77,14 @@ Cancels the current wait or operation. If the core is waiting for a trigger or d
   - Second word: Upper 32 bits of the trigger timer.
 - The 64-bit trigger timer starts counting from 1 on the first logged trigger and increments each clock cycle.
 - Trigger logging only occurs for commands that have the logging bit set and actually generate triggers.
+
+### Trigger Counter
+
+The core maintains an internal trigger counter (`trig_counter` output) that:
+- Increments by 1 on each trigger event (sync, external, or forced triggers)
+- Can be reset to zero using the `RESET_COUNT` command
+- Provides a count of total triggers generated since the last reset
+- Is independent of the expected trigger count used in `EXPECT_EXT_TRIG` commands
 
 ### State Machine
 

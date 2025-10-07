@@ -3,6 +3,8 @@
 module shim_spi_sts_sync (
   input  wire        aclk,       // AXI domain clock
   input  wire        aresetn,    // Active low reset signal
+  input  wire        spi_clk,    // SPI domain clock
+  input  wire        spi_resetn, // Active low reset signal for SPI domain
   
   //// Inputs from SPI domain
   // SPI system status
@@ -12,6 +14,7 @@ module shim_spi_sts_sync (
   input  wire [7:0]  thresh_underflow,
   input  wire [7:0]  thresh_overflow,
   // Trigger channel status
+  input  wire [31:0] trig_counter,
   input  wire        bad_trig_cmd,
   input  wire        trig_data_buf_overflow,
   // DAC channel status
@@ -40,6 +43,7 @@ module shim_spi_sts_sync (
   output wire [7:0]  thresh_underflow_sync,
   output wire [7:0]  thresh_overflow_sync,
   // Trigger channel status
+  output wire [31:0] trig_counter_sync,
   output wire        bad_trig_cmd_sync,
   output wire        trig_data_buf_overflow_sync,
   // DAC channel status
@@ -99,6 +103,17 @@ module shim_spi_sts_sync (
   );
 
   // Trigger channel status
+  sync_coherent #(
+    .WIDTH(32)
+  ) sync_trig_counter (
+    .in_clk(aclk),
+    .in_resetn(aresetn),
+    .out_clk(spi_clk),
+    .out_resetn(spi_resetn),
+    .din(trig_counter),
+    .dout(trig_counter_sync),
+    .dout_default(32'd0)
+  );
   sync_incoherent #(
     .WIDTH(1)
   ) sync_bad_trig_cmd (
