@@ -51,7 +51,7 @@ module shim_trigger_core #(
   // State machine info
   reg  [ 2:0] state;
   wire        cmd_done;
-  wire        next_cmd;
+  wire        do_next_cmd;
   wire [ 2:0] next_cmd_state;
 
   // Cancel, count reset, and sync
@@ -69,6 +69,7 @@ module shim_trigger_core #(
   reg [27:0] lockout_counter;
   reg [27:0] ext_trig_counter;
   reg [27:0] trig_lockout;
+  reg ext_trig_sync[1:0]; // 2-stage synchronizer for external trigger
   reg  log_trig;
   wire do_log;
   wire do_trig;
@@ -77,6 +78,17 @@ module shim_trigger_core #(
   reg [63:0] trig_timer; // 64-bit timer to track trigger timing
   reg [31:0] second_word; // Second word to write to data buffer
   reg        trig_data_second_word; // Flag to indicate if the second word is being written
+
+  // External trigger synchronization
+  always @(posedge clk) begin
+    if (!resetn) begin
+      ext_trig_sync[0] <= 0;
+      ext_trig_sync[1] <= 0;
+    end else begin
+      ext_trig_sync[0] <= ext_trig;
+      ext_trig_sync[1] <= ext_trig_sync[0];
+    end
+  end
 
   // Checks for cancel / reset count command and synchronization conditions
   assign cancel = !cmd_buf_empty && cmd_type == CMD_CANCEL;
@@ -89,7 +101,7 @@ module shim_trigger_core #(
                   || (state == S_EXPECT_TRIG && ext_trig_counter == 0)
                   || (state == S_DELAY && delay_counter == 0)
                   || (state != S_ERROR && cancel); // Allow cancel at any time
-  assign next_cmd = cmd_done && !cmd_buf_empty;
+  assign do_next_cmd = cmd_done && !cmd_buf_empty;
   // Next state from upcoming command
   assign next_cmd_state = cmd_buf_empty ? S_IDLE
                           : (cmd_type == CMD_SYNC_CH) ? (all_waiting ? S_IDLE : S_SYNC_CH) // If all channels are already waiting, go right to idle
@@ -111,18 +123,18 @@ module shim_trigger_core #(
   // Set lockout
   always @(posedge clk) begin
     if (!resetn) trig_lockout <= TRIGGER_LOCKOUT_DEFAULT;
-    else if (next_cmd && cmd_type == CMD_SET_LOCKOUT && cmd_val >= TRIGGER_LOCKOUT_MIN) trig_lockout <= cmd_val;
+    else if (do_next_cmd && cmd_type == CMD_SET_LOCKOUT && cmd_val >= TRIGGER_LOCKOUT_MIN) trig_lockout <= cmd_val;
   end
   // Expected trigger count
   always @(posedge clk) begin
     if (!resetn || cancel || state == S_ERROR) ext_trig_counter <= 0;
-    else if (next_cmd && cmd_type == CMD_EXPECT_EXT_TRIG) ext_trig_counter <= cmd_val;
-    else if (state == S_EXPECT_TRIG && ext_trig_counter > 0 && do_trig) ext_trig_counter <= ext_trig_counter - 1;
+    else if (do_next_cmd && cmd_type == CMD_EXPECT_EXT_TRIG) ext_trig_counter <= cmd_val;
+    else if (state == S_EXPECT_TRIG && do_trig) ext_trig_counter <= ext_trig_counter - 1;
   end
   // Delay counter, used in delay state
   always @(posedge clk) begin
     if (!resetn || cancel || state == S_ERROR) delay_counter <= 0;
-    else if (next_cmd && cmd_type == CMD_DELAY) delay_counter <= cmd_val;
+    else if (do_next_cmd && cmd_type == CMD_DELAY) delay_counter <= cmd_val;
     else if (delay_counter > 0) delay_counter <= delay_counter - 1;
   end
   // Lockout counter, used to prevent immediate re-triggering
@@ -132,38 +144,38 @@ module shim_trigger_core #(
     else if (lockout_counter > 0) lockout_counter <= lockout_counter - 1; // Decrement lockout counter
   end
   // Trigger pulse generation
-  assign do_trig = (next_cmd && cmd_type == CMD_FORCE_TRIG) // Force trigger
-                    || (next_cmd && cmd_type == CMD_SYNC_CH && all_waiting) // Sync channels edge case where all channels are already waiting
+  assign do_trig = (do_next_cmd && cmd_type == CMD_FORCE_TRIG) // Force trigger
+                    || (do_next_cmd && cmd_type == CMD_SYNC_CH && all_waiting) // Sync channels edge case where all channels are already waiting
                     || (state == S_SYNC_CH && all_waiting) // Sync channels when all are waiting
-                    || (state == S_EXPECT_TRIG && ext_trig_counter > 0 && lockout_counter == 0 && ext_trig); // External trigger when expected and lockout is done
+                    || (state == S_EXPECT_TRIG && ext_trig_counter > 0 && lockout_counter == 0 && ext_trig_sync[1]); // External trigger when expected and lockout is done
   always @(posedge clk) begin
-    if (!resetn || cancel || state == S_ERROR) trig_out <= 0;
+    if (!resetn || state == S_ERROR) trig_out <= 0;
     else trig_out <= do_trig; // Trigger pulse
   end
   // Trigger logging
   always @(posedge clk) begin
     if (!resetn) log_trig <= 0;
-    else if (next_cmd) log_trig <= cmd_log_trig;
+    else if (do_next_cmd) log_trig <= cmd_log_trig;
   end
-  assign do_log = (next_cmd && cmd_type == CMD_FORCE_TRIG && cmd_log_trig) // Force trigger with logging
-                  || (next_cmd && cmd_type == CMD_SYNC_CH && all_waiting && cmd_log_trig) // Sync channels edge case with logging
+  assign do_log = (do_next_cmd && cmd_type == CMD_FORCE_TRIG && cmd_log_trig) // Force trigger with logging
+                  || (do_next_cmd && cmd_type == CMD_SYNC_CH && all_waiting && cmd_log_trig) // Sync channels edge case with logging
                   || (state == S_SYNC_CH && all_waiting && log_trig) // Sync channels with logging
-                  || (state == S_EXPECT_TRIG && lockout_counter == 0 && ext_trig && log_trig); // External trigger with logging
+                  || (state == S_EXPECT_TRIG && ext_trig_counter > 0 && lockout_counter == 0 && ext_trig_sync[1] && log_trig); // External trigger with logging
 
   //// Error handling
   // Bad command
   always @(posedge clk) begin
     if (!resetn) bad_cmd <= 0;
-    else if (next_cmd && next_cmd_state == S_ERROR) bad_cmd <= 1;
+    else if (do_next_cmd && next_cmd_state == S_ERROR) bad_cmd <= 1;
   end
   // Data buffer overflow
   always @(posedge clk) begin
     if (!resetn) data_buf_overflow <= 0;
-    else if (do_trig && (data_buf_full || data_buf_almost_full)) data_buf_overflow <= 1;
+    else if (do_log && (data_buf_full || data_buf_almost_full)) data_buf_overflow <= 1;
   end
 
   //// Read enable
-  assign cmd_word_rd_en = next_cmd || reset_count;
+  assign cmd_word_rd_en = do_next_cmd || reset_count;
 
   //// Trigger counting
   // Increment trigger count on each trigger event

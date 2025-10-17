@@ -2,9 +2,9 @@
 
 module shim_hw_manager #(
   // Delays for the various timeouts, default clock frequency is 100 MHz
-  parameter integer SHUTDOWN_FORCE_DELAY = 10000000, // 100 ms : Delay after releasing "n_shutdown_force" before pulsing "n_shutdown_rst"
-  parameter integer SHUTDOWN_RESET_PULSE = 10000,    // 100 us : Pulse width for "n_shutdown_rst"
-  parameter integer SHUTDOWN_RESET_DELAY = 10000000, // 100 ms : Delay after pulsing "n_shutdown_rst" before starting the system
+  parameter integer SHUTDOWN_FORCE_DELAY = 10000000, // 100 ms : Delay after releasing "n_shutdown_force" before pulsing "shutdown_rst"
+  parameter integer SHUTDOWN_RESET_PULSE = 10000,    // 100 us : Pulse width for "shutdown_rst"
+  parameter integer SHUTDOWN_RESET_DELAY = 10000000, // 100 ms : Delay after pulsing "shutdown_rst" before starting the system
   parameter integer SPI_RESET_WAIT = 100000000,      //   1  s : Delay after starting the SPI clock before checking if the SPI subsystem is initialized to off
   parameter integer SPI_START_WAIT = 100000000       //   1  s : Delay after starting the SPI clock before halting if the SPI subsystem doesn't start
 )
@@ -70,7 +70,7 @@ module shim_hw_manager #(
   output  reg           shutdown_sense_en, // Shutdown sense enable
   output  reg           block_bufs,        // Block PL side of command/data buffers
   output  reg           n_shutdown_force,  // Shutdown force (negated)
-  output  reg           n_shutdown_rst,    // Shutdown reset (negated)
+  output  reg           shutdown_rst,      // Shutdown reset
   output  wire  [31:0]  status_word,       // Status - Status word
   output  reg           ps_interrupt       // Interrupt signal
 );
@@ -156,7 +156,7 @@ module shim_hw_manager #(
       state <= S_IDLE;
       timer <= 0;
       n_shutdown_force <= 0;
-      n_shutdown_rst <= 1;
+      shutdown_rst <= 0;
       shutdown_sense_en <= 0;
       unlock_cfg <= 1;
       spi_clk_gate <= 0;
@@ -280,7 +280,7 @@ module shim_hw_manager #(
           end else if (!spi_off) begin
             state <= S_POWER_ON_AMP_BRD;
             timer <= 0;
-            n_shutdown_rst <= 0;
+            shutdown_rst <= 1;
           end else if (|dac_boot_fail || |adc_boot_fail || timer >= SPI_START_WAIT) begin
             // If the SPI subsystem is still off after the wait, or a channel failed to boot, halt the system
             state <= S_HALTING;
@@ -308,7 +308,7 @@ module shim_hw_manager #(
           end else if (timer >= SHUTDOWN_RESET_PULSE) begin
             state <= S_AMP_POWER_WAIT;
             timer <= 0;
-            n_shutdown_rst <= 1;
+            shutdown_rst <= 0;
           end else begin
             timer <= timer + 1;
           end // if (timer >= SHUTDOWN_RESET_PULSE)
@@ -486,7 +486,7 @@ module shim_hw_manager #(
           state <= S_HALTED; // Proceed to halted state
           timer <= 0;
           n_shutdown_force <= 0;
-          n_shutdown_rst <= 1;
+          shutdown_rst <= 0;
           shutdown_sense_en <= 0;
           unlock_cfg <= 1;
           spi_clk_gate <= 0;
@@ -514,7 +514,7 @@ module shim_hw_manager #(
           state <= S_HALTED; // Default to halted state
           timer <= 0;
           n_shutdown_force <= 0;
-          n_shutdown_rst <= 1;
+          shutdown_rst <= 0;
           shutdown_sense_en <= 0;
           unlock_cfg <= 1;
           spi_clk_gate <= 0;

@@ -83,7 +83,7 @@ set_property PACKAGE_PIN U17 [get_ports {dac_mosi_o_n[3]}]
 set_property IOSTANDARD   LVCMOS25  [get_ports n_Shutdown_Force]
 set_property PACKAGE_PIN  F19       [get_ports n_Shutdown_Force]
 
-# Shutdown Reset (~Shutdown_Reset)
-# Pin: n_Shutdown_Reset JA1.4 G14
-set_property IOSTANDARD   LVCMOS25  [get_ports n_Shutdown_Reset]
-set_property PACKAGE_PIN  G14       [get_ports n_Shutdown_Reset]
+# Shutdown Reset (Shutdown_Reset)
+# Pin: Shutdown_Reset JA1.4 G14
+set_property IOSTANDARD   LVCMOS25  [get_ports Shutdown_Reset]
+set_property PACKAGE_PIN  G14       [get_ports Shutdown_Reset]

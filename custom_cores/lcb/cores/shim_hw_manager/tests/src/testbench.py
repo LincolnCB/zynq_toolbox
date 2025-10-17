@@ -144,7 +144,7 @@ async def test_normal_startup(dut):
 
     # Check that system is properly enabled
     assert dut.n_shutdown_force.value == 1, "Shutdown force should be released"
-    assert dut.n_shutdown_rst.value == 1, "Shutdown reset should be released"
+    assert dut.shutdown_rst.value == 0, "Shutdown reset should be released"
     assert dut.shutdown_sense_en.value == 1, "Shutdown sense should be enabled"
     assert dut.spi_en.value == 1, "SPI should be enabled"
     assert dut.block_bufs.value == 0, "Buffers should be unblocked"

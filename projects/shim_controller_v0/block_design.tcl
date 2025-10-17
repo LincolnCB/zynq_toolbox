@@ -18,8 +18,8 @@ create_bd_port -dir O -from 3 -to 0 dac_mosi_o_n
 
 # (~Shutdown_Force)
 create_bd_port -dir O n_Shutdown_Force
-# (~Shutdown_Reset)
-create_bd_port -dir O n_Shutdown_Reset
+# (Shutdown_Reset)
+create_bd_port -dir O Shutdown_Reset
 
 
 # Create processing system
@@ -122,7 +122,7 @@ cell xilinx.com:ip:util_vector_logic shutdown_reset_inv {
   C_OPERATION not
 } {
   Op1 shutdown_reset_slice/dout
-  Res n_Shutdown_Reset
+  Res Shutdown_Reset
 }
 
 

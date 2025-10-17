@@ -199,7 +199,7 @@ class shim_hw_manager_base:
         self.dut._log.info(f"  shutdown_sense_en: {self.dut.shutdown_sense_en.value}")
         self.dut._log.info(f"  block_bufs: {self.dut.block_bufs.value}")
         self.dut._log.info(f"  n_shutdown_force: {self.dut.n_shutdown_force.value}")
-        self.dut._log.info(f"  n_shutdown_rst: {self.dut.n_shutdown_rst.value}")
+        self.dut._log.info(f"  shutdown_rst: {self.dut.shutdown_rst.value}")
         self.dut._log.info(f"  ps_interrupt: {self.dut.ps_interrupt.value}")
         self.dut._log.info("---------------------------------------------")
 

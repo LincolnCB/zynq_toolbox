@@ -77,7 +77,7 @@ The `shim_hw_manager` module manages the hardware system's startup, operation, a
   - `shutdown_sense_en`: Shutdown sense enable.
   - `block_bufs`: Block command/data buffers (active high).
   - `n_shutdown_force`: Shutdown force (negated).
-  - `n_shutdown_rst`: Shutdown reset (negated).
+  - `shutdown_rst`: Shutdown reset.
 
 - **Status and Interrupts**
   - `status_word [31:0]`: Status word containing board number, status code, and state.
@@ -92,7 +92,7 @@ The state machine states are encoded as follows:
 - `4'd2`: `S_CONFIRM_SPI_RST` - Makes sure the SPI system is powered off (`spi_off`). If not powered off within `SPI_RESET_WAIT`, transitions to `S_HALTING` with a timeout status.
 - `4'd3`: `S_POWER_ON_CRTL_BRD` - Releases shutdown force (`n_shutdown_force` high) and waits for `SHUTDOWN_FORCE_DELAY`.
 - `4'd4`: `S_CONFIRM_SPI_START` - Enables shutdown sense, SPI clock, and SPI subsystem, then waits for the SPI subsystem to start (`spi_off` deasserted). If not started within `SPI_START_WAIT` or if any DAC/ADC boot failure occurs, transitions to `S_HALTING` with the appropriate status code.
-- `4'd5`: `S_POWER_ON_AMP_BRD` - Pulses `n_shutdown_rst` low for `SHUTDOWN_RESET_PULSE`, then sets it high again.
+- `4'd5`: `S_POWER_ON_AMP_BRD` - Pulses `shutdown_rst` high for `SHUTDOWN_RESET_PULSE`, then sets it high again.
 - `4'd6`: `S_AMP_POWER_WAIT` - Waits for `SHUTDOWN_RESET_DELAY` after pulsing shutdown reset, then unblocks command/data buffers and asserts `ps_interrupt`.
 - `4'd7`: `S_RUNNING` - Normal operation. Continuously monitors for halt conditions. If any error or shutdown condition occurs, transitions to `S_HALTING`, disables outputs, and asserts `ps_interrupt`.
 - `4'd8`: `S_HALTING` - Prepares to halt the system. Takes one cycle to set all signals to the initial state and assert `ps_interrupt`.

@@ -114,8 +114,8 @@ def sample_state_and_status_coverage(dut):
             bins = [True, False],
             rel = lambda x, y: x == y,
             at_least = 1)
-@CoverPoint("shim_hw_manager.n_shutdown_rst",
-            xf = lambda dut: int(dut.n_shutdown_rst.value),
+@CoverPoint("shim_hw_manager.shutdown_rst",
+            xf = lambda dut: int(dut.shutdown_rst.value),
             bins = [True, False],
             rel = lambda x, y: x == y,
             at_least = 1)
