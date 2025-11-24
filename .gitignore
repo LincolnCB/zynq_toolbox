@@ -10,6 +10,10 @@ make_defaults.mk
 # Ignore CSV files -- manually add any needed CSV files
 *.csv
 
+# Ignore .mat and .npy files -- manually add any needed files
+*.mat
+*.npy
+
 # Ignore Vivado generated files
 tmp
 tmp_reports
