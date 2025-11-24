@@ -2,6 +2,14 @@
 environment.sh
 make_defaults.mk
 
+# Ignore waveform, readout, and log files
+*.wfm
+*.rdout
+*.log
+
+# Ignore CSV files -- manually add any needed CSV files
+*.csv
+
 # Ignore Vivado generated files
 tmp
 tmp_reports

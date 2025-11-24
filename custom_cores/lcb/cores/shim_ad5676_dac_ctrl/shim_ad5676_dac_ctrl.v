@@ -509,20 +509,23 @@ module shim_ad5676_dac_ctrl #(
             end
           end
         end
-        DAC_LOAD_STAGE_CAL: begin // Second stage, adding calibration and getting absolute values
+        DAC_LOAD_STAGE_CAL: begin // Second stage, adding calibration
           // For single-channel write, only handle the one channel
           first_dac_val_cal_signed <= first_dac_val_signed + cal_val[dac_channel]; // Add calibration to first DAC value
-          abs_dac_val[dac_channel] <= signed_to_abs(first_dac_val_cal_signed); // Convert first DAC value to absolute
           // For full 8-channel write, handle both channels of the pair
           if (state == S_DAC_WR) begin
             second_dac_val_cal_signed <= second_dac_val_signed + cal_val[dac_channel+1]; // Add calibration to second DAC value
-            abs_dac_val[dac_channel + 1] <= signed_to_abs(second_dac_val_cal_signed); // Convert second DAC value to absolute
           end
           dac_load_stage <= DAC_LOAD_STAGE_CONV; // Move to final stage
         end
         DAC_LOAD_STAGE_CONV: begin // Final conversion stage, converting to offset representation
+          // Absolute value storage
           // Logic is handled in the SPI MOSI control shift register
           // OOB is checked in the DAC val out of bounds section
+          abs_dac_val[dac_channel] <= signed_to_abs(first_dac_val_cal_signed); // Convert first DAC value to absolute
+          if (state == S_DAC_WR) begin
+            abs_dac_val[dac_channel + 1] <= signed_to_abs(second_dac_val_cal_signed); // Convert second DAC value to absolute
+          end
           dac_load_stage <= DAC_LOAD_STAGE_INIT; // Conversion is done
         end
       endcase
