@@ -169,6 +169,7 @@ module shim_ads816x_adc_timing_calc #(
               mult_count <= mult_count + 1;
             end else begin
               // Multiplication complete, add 2^30 - 1 for rounding, then shift right by 30 bits (equivalent to divide by 2^30)
+              // Set the min cycles for t_cycle to be the result minus OTF command bits (16), min of 0
               min_cycles_for_t_cycle <= (mult_result_rounded_up[61:30]) > OTF_CMD_BITS ? ((mult_result_rounded_up[61:30]) - OTF_CMD_BITS) : 0;
               state <= S_CALC_RESULT;
             end

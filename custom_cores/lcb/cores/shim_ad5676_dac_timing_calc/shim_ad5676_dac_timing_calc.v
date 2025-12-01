@@ -115,7 +115,8 @@ module shim_ad5676_dac_timing_calc (
               mult_count <= mult_count + 1;
             end else begin
               // Multiplication complete, add 2^30 - 1 for rounding, then shift right by 30 bits (equivalent to divide by 2^30)
-              min_cycles_for_t_update <= (mult_result_rounded_up[61:30]) > SPI_CMD_BITS ? (mult_result_rounded_up[61:30]) : 0;
+              // Set the min cycles for t_update to be the result minus SPI command bits (24), min of 0
+              min_cycles_for_t_update <= (mult_result_rounded_up[61:30]) > SPI_CMD_BITS ? (mult_result_rounded_up[61:30] - SPI_CMD_BITS) : 0;
               
               // Setup multiplication for T_MIN_N_CS_HIGH_NiS * spi_clk_freq_hz_latched
               multiplicand <= T_MIN_N_CS_HIGH_NiS;
