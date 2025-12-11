@@ -52,6 +52,8 @@ module shim_ad5676_dac_ctrl #(
 
   // SPI command bit width
   localparam integer SPI_CMD_BITS = 24;
+  // SPI bit position for MISO read start
+  localparam integer SPI_BIT_MISO_START = 5'd18;
 
 
   ///////////////////////////////////////////////////////////////////////////////
@@ -608,7 +610,7 @@ module shim_ad5676_dac_ctrl #(
   // (should show up 1 cycle later on readback MISO clock than equivalent MOSI clock cycle, plus 2 for the synchronizer)
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) start_miso_mosi_clk <= 1'b0; // Reset start MISO read signal on reset or error
-    else if (state == S_TEST_RD && spi_bit == 5'd18) start_miso_mosi_clk <= 1'b1;
+    else if (state == S_TEST_RD && spi_bit == SPI_BIT_MISO_START) start_miso_mosi_clk <= 1'b1;
     else start_miso_mosi_clk <= 1'b0;
   end
 

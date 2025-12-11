@@ -41,6 +41,8 @@ module shim_ads816x_adc_ctrl (
 
   // SPI command bit width
   localparam integer OTF_CMD_BITS = 16;
+  // N_CS timer value to start MISO read
+  localparam integer N_CS_MISO_START_TIME = 2;
 
 
   ///////////////////////////////////////////////////////////////////////////////
@@ -484,7 +486,7 @@ module shim_ads816x_adc_ctrl (
     if (!resetn || state == S_ERROR) start_miso_mosi_clk <= 1'b0; // Reset start MISO read signal on reset or error
     else if ((state == S_TEST_RD 
               || ((state == S_ADC_RD || state == S_ADC_RD_CH) && adc_word_idx > 0))
-             && n_cs_timer == 2) start_miso_mosi_clk <= 1'b1;
+             && n_cs_timer == N_CS_MISO_START_TIME) start_miso_mosi_clk <= 1'b1;
     else start_miso_mosi_clk <= 1'b0;
   end
 

@@ -9,10 +9,11 @@ module shim_ads816x_adc_timing_calc #(
   input  wire [31:0] spi_clk_freq_hz, // SPI clock frequency in Hz
   input  wire        calc,            // Start calculation signal
   
-  output reg  [7:0]  n_cs_high_time,  // Calculated n_cs high time in cycles (minus 1)
-                                      //   Range: 2 to 255 (corresponds to 3 to 256 cycles, 60ns to 5120ns at 50MHz SPI clock)
-  output reg         done,            // Calculation complete
-  output reg         lock_viol        // Error if frequency changes during calc
+  output reg  [7:0]  n_cs_high_time,     // Calculated n_cs high time in cycles (minus 1)
+                                         //   Range: 2 to 255 (corresponds to 3 to 256 cycles, 60ns to 5120ns at 50MHz SPI clock)
+  output reg  [2:0]  miso_halfclk_delay, // Calculated MISO half-clock delay (floor((spi_clk_freq * 4 + 1476395008) >> 30)), capped at 7
+  output reg         done,               // Calculation complete
+  output reg         lock_viol           // Error if frequency changes during calc
 );
 
   ///////////////////////////////////////////////////////////////////////////////
@@ -54,6 +55,11 @@ module shim_ads816x_adc_timing_calc #(
     (ADS_MODEL_ID == 6) ? 13 :
     13;
 
+  // MISO half-clock delay calculation constants
+  localparam integer MISO_DELAY_NiS = 5; // 4.5ns -> 5NiS
+  localparam integer MISO_DELAY_NiS_BITS = 5;
+  localparam integer MISO_DELAY_OFFSET = 32'h40000000; // 1.0 * 2^30
+
   // SPI command bit width
   localparam integer OTF_CMD_BITS = 16;
 
@@ -78,10 +84,14 @@ module shim_ads816x_adc_timing_calc #(
   
   // Multiplication state machine (shift-add algorithm)
   reg [ 3:0] mult_count;      // 4 bits sufficient for max 16 bits
-  reg [31:0] multiplicand;    // The constant (T_CONV_NiS or T_CYCLE_NiS)
+  reg [15:0] mult_shift;      // Shift a bit through this to control multiplication
+  reg [31:0] multiplicand;    // The constant (T_CONV_NiS or T_CYCLE_NiS or MISO_DELAY_NiS)
   reg [31:0] multiplier;      // The frequency value
   reg [63:0] mult_accumulator;
   wire [63:0] mult_result_rounded_up;
+
+  // MISO half-clock delay calculation intermediate
+  reg [35:0] miso_delay_calc;
 
   ///////////////////////////////////////////////////////////////////////////////
   // Logic
@@ -95,11 +105,14 @@ module shim_ads816x_adc_timing_calc #(
       done <= 1'b0;
       lock_viol <= 1'b0;
       n_cs_high_time <= 8'd0;
+      miso_delay_calc <= 36'd0;
+      miso_halfclk_delay <= 3'd1;
       spi_clk_freq_hz_latched <= 32'd0;
       min_cycles_for_t_conv <= 32'd0;
       min_cycles_for_t_cycle <= 32'd0;
       final_result <= 32'd0;
       mult_count <= 4'd0;
+      mult_shift <= 16'd0;
       multiplicand <= 32'd0;
       multiplier <= 32'd0;
       mult_accumulator <= 64'd0;
@@ -116,6 +129,7 @@ module shim_ads816x_adc_timing_calc #(
             multiplicand <= T_CONV_NiS;
             multiplier <= spi_clk_freq_hz;
             mult_count <= 4'd0;
+            mult_shift <= 16'd0;
             mult_accumulator <= 64'd0;
           end
         end
@@ -130,11 +144,12 @@ module shim_ads816x_adc_timing_calc #(
             // calc went low, reset
             state <= S_IDLE;
           end else begin
-            if (mult_count < T_CONV_NiS_BITS) begin
+            if (mult_shift < T_CONV_NiS) begin
               // Shift-add multiplication: if current bit of multiplicand is 1, add shifted multiplier
               if (multiplicand[mult_count]) begin
                 mult_accumulator <= mult_accumulator + ({32'd0, multiplier} << mult_count);
               end
+              mult_shift <= 16'd1 << mult_count;
               mult_count <= mult_count + 1;
             end else begin
               // Multiplication complete, add 2^30 - 1 for rounding, then shift right by 30 bits (equivalent to divide by 2^30)
@@ -161,11 +176,12 @@ module shim_ads816x_adc_timing_calc #(
             // calc went low, reset
             state <= S_IDLE;
           end else begin
-            if (mult_count < T_CYCLE_NiS_BITS) begin
+            if (mult_shift < T_CYCLE_NiS) begin
               // Shift-add multiplication: if current bit of multiplicand is 1, add shifted multiplier
               if (multiplicand[mult_count]) begin
                 mult_accumulator <= mult_accumulator + ({32'd0, multiplier} << mult_count);
               end
+              mult_shift <= 16'd1 << mult_count;
               mult_count <= mult_count + 1;
             end else begin
               // Multiplication complete, add 2^30 - 1 for rounding, then shift right by 30 bits (equivalent to divide by 2^30)
@@ -193,7 +209,33 @@ module shim_ads816x_adc_timing_calc #(
             end else begin
               final_result <= min_cycles_for_t_conv;
             end
-            state <= S_DONE;
+            // Setup multiplication for MISO_DELAY_NiS * spi_clk_freq_hz_latched
+            multiplicand <= MISO_DELAY_NiS;
+            multiplier <= spi_clk_freq_hz_latched;
+            mult_count <= 4'd0;
+            mult_accumulator <= 64'd0;
+            state <= 3'd5; // S_CALC_MISO_DELAY
+          end
+        end
+
+        // S_CALC_MISO_DELAY: calculate MISO half-clock delay
+        3'd5: begin
+          if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
+            lock_viol <= 1'b1;
+            state <= S_IDLE;
+          end else if (!calc) begin
+            state <= S_IDLE;
+          end else begin
+            if (mult_shift < MISO_DELAY_NiS) begin
+              if (multiplicand[mult_count]) begin
+                mult_accumulator <= mult_accumulator + ({32'd0, multiplier} << mult_count);
+              end
+              mult_shift <= 16'd1 << mult_count;
+              mult_count <= mult_count + 1;
+            end else begin
+              miso_delay_calc <= (mult_accumulator + MISO_DELAY_OFFSET);
+              state <= S_DONE;
+            end
           end
         end
 
@@ -209,9 +251,15 @@ module shim_ads816x_adc_timing_calc #(
           end else begin
             // Cap n_cs_high_time at 255 (at the maximum 50MHz SPI clock, 256 + 16 bits is 5440ns, which is over the maximum 4000ns required)
             if (final_result > 255) begin
-            n_cs_high_time <= 8'd255;
+              n_cs_high_time <= 8'd255;
             end else begin
-            n_cs_high_time <= final_result[7:0] - 1; // Truncate to 8 bits
+              n_cs_high_time <= final_result[7:0] - 1; // Truncate to 8 bits
+            end
+            // Calculate miso_halfclk_delay, capped at 7
+            if (miso_delay_calc[35:30] > 7) begin
+              miso_halfclk_delay <= 3'd7;
+            end else begin
+              miso_halfclk_delay <= miso_delay_calc[32:30];
             end
             done <= 1'b1;
             // Stay in this state until calc goes low
