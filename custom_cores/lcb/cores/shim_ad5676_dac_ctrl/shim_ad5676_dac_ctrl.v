@@ -101,11 +101,6 @@ module shim_ad5676_dac_ctrl #(
   localparam CONT_BIT = 27;
   localparam LDAC_BIT = 26;
 
-  // DAC loading stages
-  localparam DAC_LOAD_STAGE_INIT = 2'b00;
-  localparam DAC_LOAD_STAGE_CAL  = 2'b01;
-  localparam DAC_LOAD_STAGE_CONV = 2'b10;
-
   // Debug codes
   localparam DBG_MISO_DATA        = 4'd1;
   localparam DBG_STATE_TRANSITION = 4'd2;
@@ -144,8 +139,7 @@ module shim_ad5676_dac_ctrl #(
   wire [15:0] cal_midrange [0:7];
 
   //// ---- Calibrated DAC value calculation
-  reg         load_pair;
-  reg  [1:0]  dac_load_stage;
+  reg         dac_vals_ready;
   reg  signed [15:0] first_dac_val_signed;
   reg  signed [16:0] first_dac_val_cal_signed;
   reg  signed [15:0] second_dac_val_signed;
@@ -371,14 +365,14 @@ module shim_ad5676_dac_ctrl #(
     if (!resetn) dac_val_oob <= 1'b0; // Reset out of bounds flag on reset
     else begin // Set out of bounds flag if either of the following conditions are met:
       // If DAC values are 0 (negative rail) as loaded
-      if (dac_load_stage == DAC_LOAD_STAGE_INIT) begin
+      if (!dac_vals_ready) begin
         // Either sample in a pair (in 8ch write)
         if (read_next_dac_val_pair && next_cmd_ready 
-            && (cmd_word[15:0] == 16'h0000 || cmd_word[31:16] == 16'h0000)) dac_val_oob <= 1'b1;
+            && (cmd_word[15:0] == 16'hFFFF || cmd_word[31:16] == 16'hFFFF)) dac_val_oob <= 1'b1;
         // Single sample in the single-channel write
-        else if (do_next_cmd && command == CMD_DAC_WR_CH && cmd_word[15:0] == 16'h0000) dac_val_oob <= 1'b1;
+        else if (do_next_cmd && command == CMD_DAC_WR_CH && cmd_word[15:0] == 16'hFFFF) dac_val_oob <= 1'b1;
       // OR if calibrated DAC value is out of bounds
-      end else if (dac_load_stage == DAC_LOAD_STAGE_CONV && (first_dac_val_cal_signed_oob || second_dac_val_cal_signed_oob)) dac_val_oob <= 1'b1;
+      end else if (dac_vals_ready && (first_dac_val_cal_signed_oob || second_dac_val_cal_signed_oob)) dac_val_oob <= 1'b1;
     end
   end
 
@@ -489,48 +483,36 @@ module shim_ad5676_dac_ctrl #(
       abs_dac_val[5] <= 15'd0;
       abs_dac_val[6] <= 15'd0;
       abs_dac_val[7] <= 15'd0;
-      dac_load_stage <= DAC_LOAD_STAGE_INIT; // Reset DAC load stage
+      dac_vals_ready <= 1'b0;
     end else 
-      case (dac_load_stage)
-        DAC_LOAD_STAGE_INIT: begin // Initial stage, waiting for the first DAC value to be loaded
-          // Load DAC values in pairs when doing a full 8-channel write
-          if (read_next_dac_val_pair && next_cmd_ready) begin
-            // Reject DAC value of 0x0000
-            if (!(cmd_word[15:0] == 16'h0000 || cmd_word[31:16] == 16'h0000))  begin
-              first_dac_val_signed <= offset_to_signed(cmd_word[15:0]); // Load first DAC value from command word
-              second_dac_val_signed <= offset_to_signed(cmd_word[31:16]); // Load second DAC value from command word
-              dac_load_stage <= DAC_LOAD_STAGE_CAL; // Move to next stage
-            end
-          // Load a single value from the command word for single-channel write
-          end else if (do_next_cmd && command == CMD_DAC_WR_CH) begin
-            // Reject DAC value of 0x0000
-            if (cmd_word[15:0] != 16'h0000) begin
-              first_dac_val_signed <= offset_to_signed(cmd_word[15:0]); // Load DAC value from command word
-              second_dac_val_signed <= 16'd0; // No second DAC value
-              dac_load_stage <= DAC_LOAD_STAGE_CAL; // Move to next stage
-            end
+      if (!dac_vals_ready) begin
+        // Load DAC values in pairs when doing a full 8-channel write
+        if (read_next_dac_val_pair && next_cmd_ready) begin
+          // Reject DAC value of 0x0000
+          if (!(cmd_word[15:0] == 16'h0000 || cmd_word[31:16] == 16'h0000))  begin
+            first_dac_val_cal_signed <= $signed(cmd_word[15:0]) + cal_val[dac_channel]; // Add calibration to first DAC value
+            second_dac_val_cal_signed <= $signed(cmd_word[31:16]) + cal_val[dac_channel+1]; // Add calibration to second DAC value
+            dac_vals_ready <= 1'b1; // Indicate that DAC values have been loaded
+          end
+        // Load a single value from the command word for single-channel write
+        end else if (do_next_cmd && command == CMD_DAC_WR_CH) begin
+          // Reject DAC value of 0x0000
+          if (cmd_word[15:0] != 16'h0000) begin
+            first_dac_val_cal_signed <= $signed(cmd_word[15:0]) + cal_val[dac_channel]; // Add calibration to first DAC value
+            second_dac_val_signed <= 16'd0; // No second DAC value
+            dac_vals_ready <= 1'b1; // Indicate that DAC value has been loaded
           end
         end
-        DAC_LOAD_STAGE_CAL: begin // Second stage, adding calibration
-          // For single-channel write, only handle the one channel
-          first_dac_val_cal_signed <= first_dac_val_signed + cal_val[dac_channel]; // Add calibration to first DAC value
-          // For full 8-channel write, handle both channels of the pair
-          if (state == S_DAC_WR) begin
-            second_dac_val_cal_signed <= second_dac_val_signed + cal_val[dac_channel+1]; // Add calibration to second DAC value
-          end
-          dac_load_stage <= DAC_LOAD_STAGE_CONV; // Move to final stage
+      end else begin
+        // Absolute value storage
+        // Logic is handled in the SPI MOSI control shift register
+        // OOB is checked in the DAC val out of bounds section
+        abs_dac_val[dac_channel] <= signed_to_abs(first_dac_val_cal_signed); // Convert first DAC value to absolute
+        if (state == S_DAC_WR) begin
+          abs_dac_val[dac_channel + 1] <= signed_to_abs(second_dac_val_cal_signed); // Convert second DAC value to absolute
         end
-        DAC_LOAD_STAGE_CONV: begin // Final conversion stage, converting to offset representation
-          // Absolute value storage
-          // Logic is handled in the SPI MOSI control shift register
-          // OOB is checked in the DAC val out of bounds section
-          abs_dac_val[dac_channel] <= signed_to_abs(first_dac_val_cal_signed); // Convert first DAC value to absolute
-          if (state == S_DAC_WR) begin
-            abs_dac_val[dac_channel + 1] <= signed_to_abs(second_dac_val_cal_signed); // Convert second DAC value to absolute
-          end
-          dac_load_stage <= DAC_LOAD_STAGE_INIT; // Conversion is done
-        end
-      endcase
+        dac_vals_ready <= 1'b0; // Clear loaded flag after storing values
+      end
   end
 
 
@@ -596,10 +578,11 @@ module shim_ad5676_dac_ctrl #(
     end else if (state == S_SET_MID && dac_spi_cmd_done && !last_dac_channel) begin
       mosi_shift_reg <= {spi_write_cmd(0, dac_channel + 1, cal_midrange[dac_channel + 1]), spi_write_cmd(0, dac_channel + 2, cal_midrange[dac_channel + 2])};
     // For full 8-channel DAC commands, load the shift register with the first DAC value and the second DAC value
-    end else if (state == S_DAC_WR && dac_load_stage == DAC_LOAD_STAGE_CONV) begin
+    end else if (state == S_DAC_WR && dac_vals_ready) begin
       mosi_shift_reg <= {spi_write_cmd(1, dac_channel, signed_to_offset(first_dac_val_cal_signed)), 
                         spi_write_cmd(1, dac_channel + 1, signed_to_offset(second_dac_val_cal_signed))};
-    end else if (state == S_DAC_WR_CH && dac_load_stage == DAC_LOAD_STAGE_CONV) begin
+    // For single-channel DAC commands, load the shift register with just the one DAC value
+    end else if (state == S_DAC_WR_CH && dac_vals_ready) begin
       mosi_shift_reg <= {spi_write_cmd(0, dac_channel, signed_to_offset(first_dac_val_cal_signed)), 24'h000000};
     // Shift once more when transitioning between words (when shift register is loaded with two 24-bit words)
     end else if (running_spi_bit) begin 
@@ -710,21 +693,6 @@ module shim_ad5676_dac_ctrl #(
   end
 
   //// ---- Functions for conversions
-  // Convert from offset to signed     
-  // Given a 16-bit 0-65535 number, treat 32768 (0x8000) as 0, 1 as -32767, and 65535 (0xFFFF) as 32767
-  // Note that 0x0000 is considered out of bounds and should be rejected before calling this function
-  // 0x0000 will map to 0 instead of -32768 as a failsafe to prevent going to the rails
-  function signed [15:0] offset_to_signed(input [15:0] raw_dac_val);
-    reg signed [16:0] shift;
-    begin
-      if (raw_dac_val == 16'h0000) begin
-        offset_to_signed = 16'sd0;
-      end else begin
-        shift = $signed({1'b0, raw_dac_val}) - 17'sd32768;
-        offset_to_signed = shift[15:0];
-      end
-    end
-  endfunction
   // Convert signed value to offset (0-65535) representation.
   // Takes a signed 17-bit value (-65536 to 65535) to handle out of bounds (-32767 to 32767)
   // Inverse of offset_to_signed: offset = signed_val + 32768 (0x8000)

@@ -163,7 +163,7 @@ Sets per-channel signed calibration value. Calibration is applied to DAC updates
 - `[26]` — **LDAC**
 - `[24:0]` — **Value**: If TRIGGER WAIT is set, this is the trigger counter (number of triggers to wait for) after DAC update; otherwise, it is the delay timer (number of clock cycles to wait after DAC update, zero is allowed).
 
-Initiates a DAC update sequence. The core expects 4 subsequent words, each containing two 16-bit DAC values: `[31:16]` for channel N+1, `[15:0]` for channel N. Channels are updated in pairs: (0,1), (2,3), (4,5), (6,7). LDAC is pulsed after all channels are updated if the LDAC flag is set.
+Initiates a DAC update sequence. The core expects 4 subsequent words, each containing two 16-bit DAC values (SIGNED 16 bit integers): `[31:16]` for channel N+1, `[15:0]` for channel N. Channels are updated in pairs: (0,1), (2,3), (4,5), (6,7). LDAC is pulsed after all channels are updated if the LDAC flag is set.
 
 After the DAC update, the core either waits for the specified number of triggers or delay cycles, depending on the TRIGGER WAIT flag. The trigger counter represents the exact number of triggers to wait for, so a value of 0 means finish immediately (no triggers), and a value of 1 means wait for one trigger.
 
@@ -175,7 +175,7 @@ After the DAC update, the core either waits for the specified number of triggers
 - `[18:16]` — **Channel Index** (0–7)
 - `[15:0]` — **DAC Value**
 
-Writes a single DAC channel with the specified value. Has no delays or trigger waits after completion, and immediately pulses LDAC.
+Writes a single DAC channel with the specified value (SIGNED 16-bit integer). Has no delays or trigger waits after completion, and immediately pulses LDAC.
 
 **State transitions:**
 - `S_IDLE -> S_DAC_WR_CH -> S_IDLE/next_cmd_state`

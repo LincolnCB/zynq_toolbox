@@ -160,7 +160,7 @@ module shim_ads816x_adc_ctrl (
   // Boot test readback match
   wire        boot_readback_match;
   // MISO data storage
-  reg  [15:0] miso_data_storage;
+  reg  signed [15:0] miso_data_storage;
   reg         miso_stored;
 
 
@@ -597,19 +597,19 @@ module shim_ads816x_adc_ctrl (
   // MISO data storage
   // Store the last MISO data word when it is ready
   always @(posedge clk) begin
-    if (!resetn || state == S_ERROR) miso_data_storage <= 16'd0; // Reset MISO data storage on reset or error
+    if (!resetn || state == S_ERROR) miso_data_storage <= 16'sd0; // Reset MISO data storage on reset or error
     else if (!n_miso_data_ready_mosi_clk && single_reads == 0) begin
-      miso_data_storage <= miso_data_mosi_clk; // Store the last MISO data word
+      miso_data_storage <= offset_to_signed(miso_data_mosi_clk); // Store the last MISO data word
     end
   end
-  // MISO data word
+  // FIFO data word to write
   // [15:0] is the first word, [31:16] is the second word
   always @(posedge clk) begin
     if (!resetn) data_word <= 32'd0; // Reset data word on reset
     else if (try_data_write && !data_buf_full) begin
       // If ADC data pair is ready, write the two MISO data words to the data buffer
       if (adc_pair_data_ready) begin 
-        data_word <= {miso_data_mosi_clk[15:0], miso_data_storage};
+        data_word <= {offset_to_signed(miso_data_mosi_clk[15:0]), miso_data_storage};
       // If single ADC sample is ready, write single MISO data word with upper 16 bits zeroed
       end else if (adc_ch_data_ready) begin
         data_word <= {16'd0, miso_data_mosi_clk[15:0]}; 
@@ -637,6 +637,15 @@ module shim_ads816x_adc_ctrl (
 
 
   //// ---- Functions for command clarity
+  // Convert from offset to signed     
+  // Given a 16-bit 0-65535 number, treat 32768 (0x8000) as 0, 1 as -32767, and 65535 (0xFFFF) as 32767
+  function signed [15:0] offset_to_signed(input [15:0] raw_dac_val);
+    reg signed [16:0] shift;
+    begin
+      shift = $signed({1'b0, raw_dac_val}) - 17'sd32768;
+      offset_to_signed = shift[15:0];
+    end
+  endfunction
   // SPI command to write to an ADC register
   function [23:0] spi_reg_write_cmd(input [10:0] reg_addr, input [7:0] reg_data);
     spi_reg_write_cmd = {SPI_CMD_REG_WRITE, reg_addr, reg_data};
