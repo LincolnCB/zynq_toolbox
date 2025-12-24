@@ -488,18 +488,18 @@ module shim_ad5676_dac_ctrl #(
       if (!dac_vals_ready) begin
         // Load DAC values in pairs when doing a full 8-channel write
         if (read_next_dac_val_pair && next_cmd_ready) begin
-          // Reject DAC value of 0x0000
-          if (!(cmd_word[15:0] == 16'h0000 || cmd_word[31:16] == 16'h0000))  begin
-            first_dac_val_cal_signed <= $signed(cmd_word[15:0]) + cal_val[dac_channel]; // Add calibration to first DAC value
-            second_dac_val_cal_signed <= $signed(cmd_word[31:16]) + cal_val[dac_channel+1]; // Add calibration to second DAC value
+          // Reject DAC value of 0xFFFF
+          if (!(cmd_word[15:0] == 16'hFFFF || cmd_word[31:16] == 16'hFFFF))  begin
+            first_dac_val_cal_signed <= $signed({cmd_word[15], cmd_word[15:0]}) + $signed({cal_val[dac_channel][15], cal_val[dac_channel]}); // Add calibration to first DAC value
+            second_dac_val_cal_signed <= $signed({cmd_word[31], cmd_word[31:16]}) + $signed({cal_val[dac_channel + 1][15], cal_val[dac_channel + 1]}); // Add calibration to second DAC value
             dac_vals_ready <= 1'b1; // Indicate that DAC values have been loaded
           end
         // Load a single value from the command word for single-channel write
         end else if (do_next_cmd && command == CMD_DAC_WR_CH) begin
-          // Reject DAC value of 0x0000
-          if (cmd_word[15:0] != 16'h0000) begin
-            first_dac_val_cal_signed <= $signed(cmd_word[15:0]) + cal_val[dac_channel]; // Add calibration to first DAC value
-            second_dac_val_signed <= 16'd0; // No second DAC value
+          // Reject DAC value of 0xFFFF
+          if (cmd_word[15:0] != 16'hFFFF) begin
+            first_dac_val_cal_signed <= $signed({cmd_word[15], cmd_word[15:0]}) + $signed({cal_val[dac_channel][15], cal_val[dac_channel]}); // Add calibration to first DAC value
+            second_dac_val_cal_signed <= 17'd0; // No second DAC value
             dac_vals_ready <= 1'b1; // Indicate that DAC value has been loaded
           end
         end

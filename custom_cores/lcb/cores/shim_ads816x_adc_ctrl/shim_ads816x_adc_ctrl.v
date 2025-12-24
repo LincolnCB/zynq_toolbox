@@ -612,7 +612,7 @@ module shim_ads816x_adc_ctrl (
         data_word <= {offset_to_signed(miso_data_mosi_clk[15:0]), miso_data_storage};
       // If single ADC sample is ready, write single MISO data word with upper 16 bits zeroed
       end else if (adc_ch_data_ready) begin
-        data_word <= {16'd0, miso_data_mosi_clk[15:0]}; 
+        data_word <= {16'd0, offset_to_signed(miso_data_mosi_clk[15:0])}; 
       // Write MISO data with debug code
       end else if (debug_miso_data) begin
         data_word <= {DBG_MISO_DATA, 12'd0, miso_data_mosi_clk[15:0]};
