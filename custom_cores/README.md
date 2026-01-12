@@ -13,7 +13,7 @@ Each vendor directory contains a [`cores`](#cores) directory that contains the a
 
 ## Cores
 
-Within a vendor directory (e.g. `lcb`), cores are stored under the `cores` directory. Each core has its own top Verilog file. The core directory, top verilog `.v` file, and module name should all match. Cores can also include any additional Verilog files in the `cores/[core_name]/submodules` directory, which will be packaged with the top module. 
+Within a vendor directory (e.g. `base`), cores are stored under the `cores` directory. Each core has its own top Verilog file. The core directory, top verilog `.v` file, and module name should all match. Cores can also include any additional Verilog files in the `cores/[core_name]/submodules` directory, which will be packaged with the top module. 
 
 ### Interface ports
 

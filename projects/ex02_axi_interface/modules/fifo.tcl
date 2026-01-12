@@ -35,13 +35,13 @@ cell xilinx.com:ip:proc_sys_reset:5.0 fifo_rst {
 
 ## Custom FIFO to allow for extra status signals
 # AXI Stream interface
-cell lcb:user:axi_fifo_bridge axi_fifo_bridge {} {
+cell base:user:axi_fifo_bridge axi_fifo_bridge {} {
   aclk aclk
   aresetn fifo_rst/peripheral_aresetn
   s_axi S_AXI
 }
 # FIFO
-cell lcb:user:fifo_sync fifo {
+cell base:user:fifo_sync fifo {
   DATA_WIDTH 32
   ADDR_WIDTH 4
 } {

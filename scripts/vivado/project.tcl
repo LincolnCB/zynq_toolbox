@@ -116,7 +116,7 @@ proc auto_connect_axi {offset range intf_pin master} {
 #  cell_vlnv: VLNV of the cell (vendor:library:name:version)
 #    Version is optional, usually omitted for custom cores and included for Xilinx cores.
 #    For repository IP defined in custom_cores, the format is:
-#      [directory (e.g. lcb)]:user:[filename (e.g. fifo_async)]
+#      [directory (e.g. base)]:user:[filename (e.g. fifo_async)]
 #  cell_name: name of the cell
 #  cell_props: dictionary of properties to set
 #  cell_conn: dictionary of pins to wire (local_name / remote_name)

@@ -32,7 +32,7 @@ This repo is structured to allow for easy building of projects. It's primarily a
 
 The top-level directory contains the following folders (which each contain their own more in-depth README files):
 - `boards`: Contains board files for boards that use the Zynq 7000 series SoCs. These files contain information about the board's hardware, like which Zynq variant is used or the I/O pinout. If you want to add support for a new board, you can take their board files (found online) and add a new folder here with the board's name containing the `board_files` folder.
-- `custom_cores`: Contains custom cores used in the scripted build of the FPGA system. These cores are separated by "vendor", basically meaning the original author. For instance, the `pavel_demin` folder contains cores that were originally written by Pavel Demin, while the `open_mri` folder contains cores that were originally written by people in the Open-MRI OCRA project (likely Thomas Witzel). Cores in `lcb` were primarily written by me, Lincoln Craven-Brightman, with contributions from folks like Kutay Bulun, H. Fatih Uǧurdag, and Thomas Witzel. You can add your own custom cores here in your own folder, following the same structure as the others.
+- `custom_cores`: Contains custom cores used in the scripted build of the FPGA system. These cores are separated by "vendor", basically meaning the original author. For instance, the `pavel_demin` folder contains cores that were originally written by Pavel Demin, while the `open_mri` folder contains cores that were originally written by people in the Open-MRI OCRA project (likely Thomas Witzel). Cores in `base` were primarily written by me, Lincoln Craven-Brightman, with contributions from folks like Kutay Bulun, H. Fatih Uǧurdag, and Thomas Witzel. You can add your own custom cores here in your own folder, following the same structure as the others.
 - `kernel_modules`: Contains kernel modules that can be included in the Linux kernel build for projects.
 - `projects`: Contains the projects that can be built with this repo. Each project has its own folder, and is mainly defined by its `block_design.tcl` file, which defines the FPGA system's block design. Each project will also need folders under `cfg` that define the compatibility with different boards, and can have a few other special folders that augment the build process.
 - `scripts`: Contains scripts that are used to build projects, separated by category (`check`, `make`, `petalinux`, and `vivado`).
@@ -466,11 +466,11 @@ This example project covers the Direct Memory Access (DMA) interface, which allo
 
 Testing is done using [cocotb](https://www.cocotb.org/), a Python-based testbench framework for digital design verification. It allows you to write tests in Python and run them in a simulator, such as Verilator. To install the tools needed for testing, please refer to the [Optional: Running tests](#optional-running-tests) section above.
 
-To run tests for a specific core, you can use the `test_core.sh` script in the `scripts/make/` directory with the `vendor` and `core` arguments. For example, to test the `fifo_sync` core from `lcb`, you can run:
+To run tests for a specific core, you can use the `test_core.sh` script in the `scripts/make/` directory with the `vendor` and `core` arguments. For example, to test the `fifo_sync` core from `base`, you can run:
 ```bash
-./scripts/make/test_core.sh lcb fifo_sync
+./scripts/make/test_core.sh base fifo_sync
 ```
-This will run the tests for the `fifo_sync` core under `custom_cores/lcb/cores/fifo_sync/tests/src` and output a test status report at `custom_cores/lcb/cores/fifo_sync/tests/test_status`.
+This will run the tests for the `fifo_sync` core under `custom_cores/base/cores/fifo_sync/tests/src` and output a test status report at `custom_cores/base/cores/fifo_sync/tests/test_status`.
 
 To run tests for all cores in a project, you can use the make target `tests`. For example, to run tests for the `rev_d_shim` project, you can run:
 ```bash

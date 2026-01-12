@@ -33,7 +33,7 @@ Successfully split the `rev_d_shim` repository into `zynq_toolbox` (main) with 9
 ### Kept in Main Repository
 - Example projects: `ex01_basics` through `ex05_dma`
 - Build scripts and tooling
-- `custom_cores/lcb` (for later manual splitting)
+- `custom_cores/base` (for later manual splitting)
 - `kernel_modules/dummy-kmod` (for later manual splitting)
 
 ---
@@ -107,7 +107,7 @@ git submodule update --init --recursive
 1. **Add README.md** to each submodule repository for documentation
 2. **Set up branch protection** on GitHub for important repos
 3. **Configure CI/CD** if needed for individual submodules
-4. **Later:** Split `custom_cores/lcb` and `kernel_modules/dummy-kmod` when ready
+4. **Later:** Split `custom_cores/base` and `kernel_modules/dummy-kmod` when ready
 
 ---
 

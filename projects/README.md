@@ -72,7 +72,7 @@ Arguments:
 - `cell_props`: List of key-value pairs of properties to set on the cell (can be empty).
 - `cell_conn`: List of key-value pairs of pin connections, mapping local pin names to remote pin names (can be empty).
 
-Creates a new cell in the block design, sets its properties, and wires its pins to other design elements as specified. This simplifies instantiating and connecting IP blocks or modules. The `cell_vlnv` should be a string in the format `vendor:library:name:version`, where `vendor:library` is the IP vendor and library type (e.g., `xilinx.com:ip` or `lcb:user`), `name` is the name of the core, and `version` is the version of the core (optional in some cases). The `cell_props` argument is list of key-value pairs that set properties on the cell as defined by the Xilinx IP core or the `parameters` of the Verilog core (for custom cores). The `cell_conn` argument is a list of key-value pairs that define the connections for the cell's pins -- this uses the `wire` procedure to connect the pins, but the key names in the dictionary are the local pin names, and do not need to be prefixed with the cell name or path.
+Creates a new cell in the block design, sets its properties, and wires its pins to other design elements as specified. This simplifies instantiating and connecting IP blocks or modules. The `cell_vlnv` should be a string in the format `vendor:library:name:version`, where `vendor:library` is the IP vendor and library type (e.g., `xilinx.com:ip` or `base:user`), `name` is the name of the core, and `version` is the version of the core (optional in some cases). The `cell_props` argument is list of key-value pairs that set properties on the cell as defined by the Xilinx IP core or the `parameters` of the Verilog core (for custom cores). The `cell_conn` argument is a list of key-value pairs that define the connections for the cell's pins -- this uses the `wire` procedure to connect the pins, but the key names in the dictionary are the local pin names, and do not need to be prefixed with the cell name or path.
 
 Please note that while the `cell_props` and `cell_conn` lists can be empty or span multiple lines between the braces, the command itself should not have line breaks in it (outside of the braces). Read up on [Tcl quote syntax](https://wiki.tcl-lang.org/page/Practical_Advice_on_Quotes_and_Brackets_in_TCL) if you start having issues with this or want to understand it better.
 
@@ -89,7 +89,7 @@ cell xilinx.com:ip:xlconcat:2.1 sts_concat {
 ```
 or
 ```tcl
-cell lcb:user:shim_axi_sys_ctrl axi_sys_ctrl {
+cell rev_d_shim:user:axi_sys_ctrl axi_sys_ctrl {
   INTEG_THRESHOLD_AVERAGE_DEFAULT 16384
   INTEG_WINDOW_DEFAULT 5000000
   INTEG_EN_DEFAULT 1

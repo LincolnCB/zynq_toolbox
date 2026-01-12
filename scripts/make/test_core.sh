@@ -3,7 +3,7 @@
 # Arguments: <vendor> <core>
 # Usage: test_core.sh <vendor> <core>
 # Example:
-#   ./scripts/make/test_core.sh lcb shim_hw_manager
+#   ./scripts/make/test_core.sh base axi_fifo_bridge
 
 if [ $# -ne 2 ]; then
   echo "[CORE TESTS] ERROR:"
