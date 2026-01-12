@@ -35,5 +35,5 @@ cd tmp/${BRD}/${VER}/${PRJ}/petalinux
 
 # Copy the device tree file to the PetaLinux project
 echo "[PTLNX DEVICE TREE] Copying device tree file to PetaLinux project"
-cp -f "${REV_D_DIR}/${REL_DEVICE_TREE_PATH}" "project-spec/meta-user/recipes-bsp/device-tree/files/system-user.dtsi"
+cp -f "${ZYNQ_TOOLBOX}/${REL_DEVICE_TREE_PATH}" "project-spec/meta-user/recipes-bsp/device-tree/files/system-user.dtsi"
   

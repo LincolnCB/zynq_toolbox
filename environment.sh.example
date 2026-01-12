@@ -16,8 +16,8 @@
 
 # Path to the git directory
 # Example:
-# export REV_D_DIR="$HOME/rev_d_shim"
-export REV_D_DIR="$HOME/rev_d_shim"
+# export ZYNQ_TOOLBOX="$HOME/zynq_toolbox"
+export ZYNQ_TOOLBOX="$HOME/zynq_toolbox"
 
 # Path to PetaLinux installation
 # Example:

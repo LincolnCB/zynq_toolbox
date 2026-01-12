@@ -74,7 +74,7 @@ cd petalinux
 
 # Initialize the project with the hardware description
 echo "[PTLNX KERNEL CFG] Initializing default PetaLinux system configuration"
-petalinux-config --get-hw-description ${REV_D_DIR}/tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa --silentconfig
+petalinux-config --get-hw-description ${ZYNQ_TOOLBOX}/tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa --silentconfig
 
 # Check that the PetaLinux version matches the environment variable
 PETALINUX_CONF_PATH="components/yocto/layers/meta-petalinux/conf/distro/include/petalinux-version.conf"
@@ -91,29 +91,29 @@ fi
 
 # Patch the project configuration
 echo "[PTLNX KERNEL CFG] Patching and configuring PetaLinux project"
-patch project-spec/configs/config ${REV_D_DIR}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch
+patch project-spec/configs/config ${ZYNQ_TOOLBOX}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch
 petalinux-config --silentconfig
 
 # Patch the root filesystem configuration
 echo "[PTLNX KERNEL CFG] Initializing default PetaLinux root filesystem configuration"
 petalinux-config -c rootfs --silentconfig
 echo "[PTLNX KERNEL CFG] Patching and configuring PetaLinux root filesystem"
-patch project-spec/configs/rootfs_config ${REV_D_DIR}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/rootfs_config.patch
+patch project-spec/configs/rootfs_config ${ZYNQ_TOOLBOX}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/rootfs_config.patch
 petalinux-config -c rootfs --silentconfig
 
 # If OFFLINE, set the project to offline
 if [ "$OFFLINE" = "true" ]; then
   echo "[PTLNX KERNEL CFG] Setting PetaLinux project to offline mode"
-  cd ${REV_D_DIR}
+  cd ${ZYNQ_TOOLBOX}
   ./scripts/petalinux/make_offline.sh petalinux_template
   cd tmp/petalinux_template/petalinux
 fi
 
 # If the kernel config file already exists, append all of its lines to the bsp.cfg file
 BSP_CFG="project-spec/meta-user/recipes-kernel/linux/linux-xlnx/bsp.cfg"
-if [ -f "${REV_D_DIR}/${KERNEL_CONFIG}" ]; then
+if [ -f "${ZYNQ_TOOLBOX}/${KERNEL_CONFIG}" ]; then
     echo "[PTLNX KERNEL CFG] Appending existing kernel configuration from ${KERNEL_CONFIG} to bsp.cfg"
-    grep '^CONFIG_' "${REV_D_DIR}/${KERNEL_CONFIG}" | while read -r line; do
+    grep '^CONFIG_' "${ZYNQ_TOOLBOX}/${KERNEL_CONFIG}" | while read -r line; do
         if ! grep -Fxq "$line" "${BSP_CFG}"; then
             echo "$line" >> "${BSP_CFG}"
         fi
@@ -133,17 +133,17 @@ NEW_CFG=$(comm -13 <(echo "$PRE_FILE_LIST" | sort) <(ls project-spec/meta-user/r
 # If there's a new user config file, append its contents to the kernel_config.cfg (or copy it if kernel_config.cfg doesn't exist)
 if [ -n "$NEW_CFG" ] && [ -f "project-spec/meta-user/recipes-kernel/linux/linux-xlnx/${NEW_CFG}" ]; then
   # Update kernel_config.cfg
-  if [ -f "${REV_D_DIR}/${KERNEL_CONFIG}" ]; then
+  if [ -f "${ZYNQ_TOOLBOX}/${KERNEL_CONFIG}" ]; then
     echo "[PTLNX KERNEL CFG] Appending new kernel config lines to ${KERNEL_CONFIG}"
-    grep '^CONFIG_' "project-spec/meta-user/recipes-kernel/linux/linux-xlnx/${NEW_CFG}" >> "${REV_D_DIR}/${KERNEL_CONFIG}"
+    grep '^CONFIG_' "project-spec/meta-user/recipes-kernel/linux/linux-xlnx/${NEW_CFG}" >> "${ZYNQ_TOOLBOX}/${KERNEL_CONFIG}"
   else
     echo "[PTLNX KERNEL CFG] Copying new kernel config to ${KERNEL_CONFIG}"
-    cp "project-spec/meta-user/recipes-kernel/linux/linux-xlnx/${NEW_CFG}" "${REV_D_DIR}/${KERNEL_CONFIG}"
+    cp "project-spec/meta-user/recipes-kernel/linux/linux-xlnx/${NEW_CFG}" "${ZYNQ_TOOLBOX}/${KERNEL_CONFIG}"
   fi
 fi
 
 # Deduplicate CONFIG_ lines in kernel_config.cfg (keep last occurrence)
-if [ -f "${REV_D_DIR}/${KERNEL_CONFIG}" ]; then
+if [ -f "${ZYNQ_TOOLBOX}/${KERNEL_CONFIG}" ]; then
   awk '
     {
       # Find CONFIG_ parameter anywhere in the line
@@ -159,8 +159,8 @@ if [ -f "${REV_D_DIR}/${KERNEL_CONFIG}" ]; then
           print lines[i]
       }
     }
-  ' "${REV_D_DIR}/${KERNEL_CONFIG}" > "tmp_kernel_config.dedup"
-  mv "tmp_kernel_config.dedup" "${REV_D_DIR}/${KERNEL_CONFIG}"
+  ' "${ZYNQ_TOOLBOX}/${KERNEL_CONFIG}" > "tmp_kernel_config.dedup"
+  mv "tmp_kernel_config.dedup" "${ZYNQ_TOOLBOX}/${KERNEL_CONFIG}"
 
   echo "[PTLNX KERNEL CFG] Kernel configuration updated and deduplicated in ${KERNEL_CONFIG}"
 else

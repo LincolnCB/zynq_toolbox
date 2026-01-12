@@ -120,7 +120,7 @@ lrwxrwxrwx 1 root root 9 Apr 29 01:13 /bin/sh -> /bin/bash
 
 ## Profile setup
 
-With this repository cloned into your VM (e.g. `/home/username/rev_d_shim` or something similar), you will need to set up some environment variables and modify the Vivado init script to use this repo's scripts. At the top level of this repository, you will find a file named
+With this repository cloned into your VM (e.g. `/home/username/zynq_toolbox or something similar), you will need to set up some environment variables and modify the Vivado init script to use this repo's scripts. At the top level of this repository, you will find a file named
 ```
 environment.sh.example
 ```
@@ -131,7 +131,7 @@ environment.sh
 This file will be used by the repo, but is not tracked by git, so you can modify it without worrying about it being overwritten by a `git pull` or similar command.
 
 You will need to edit the following variables in this file to match your setup:
-- `REV_D_DIR`: The path to the repository root directory (e.g. `/home/username/rev_d_shim`, as above)
+- `ZYNQ_TOOLBOX`: The path to the repository root directory (e.g. `/home/username/zynq_toolbox`, as above)
 - `PETALINUX_PATH`: The path to the PetaLinux installation directory (by default, this will be `/tools/Xilinx/PetaLinux/2024.2/tool`)
 - `PETALINUX_VERSION`: The version of PetaLinux you are using (e.g. `2024.2`)
 - `VIVADO_PATH`: The path to the Vivado installation directory (by default, this will be `/tools/Xilinx/Vivado/2024.2`)
@@ -140,9 +140,9 @@ The remaining lines are optional or do not need to be changed:
 - `source $VIVADO_PATH/settings64.sh`: This line sources a Vivado script that sets up the terminal environment for Vivado. This should be left as is.
 - `PETALINUX_DOWNLOADS_PATH`/`PETALINUX_SSTATE_PATH`: These are optional variables only needed if you want to do offline builds with PetaLinux. See the [Optional: PetaLinux offline build setup](#optional-building-petalinux-offline) section below for more information.
 
-With `environment.sh` set up, you will need to source it in your shell. Add the following line to one of the files that is sourced in new bash terminals, where \[path_to_rev_d_shim\] is the path to the root of this repository (e.g. `/home/username/rev_d_shim`):
+With `environment.sh` set up, you will need to source it in your shell. Add the following line to one of the files that is sourced in new bash terminals, where \[path_to_zynq_toolbox\] is the path to the root of this repository (e.g. `/home/username/zynq_toolbox`):
 ```bash
-source [path_to_rev_d_shim]/environment.sh
+source [path_to_zynq_toolbox]/environment.sh
 ```
 
 ### Which bash file to add the source line to?
@@ -199,7 +199,7 @@ if [ -d "$HOME/.local/bin" ] ; then
 fi
 
 # Source the Rev D environment script
-source $HOME/rev_d_shim/environment.sh
+source $HOME/zynq_toolbox/environment.sh
 ```
 
 However, `~/.profile` is only sourced if `~/.bash_profile` and `~/.bash_login` don't exist. If `~/.bash_profile` already exists, you can delete it. If it needs to exist, just source `~/.profile` in it.
@@ -223,8 +223,8 @@ For personal use, I'd set it in the last location to override everything else. Y
 ```tcl
 # Example ~/.Xilinx/Vivado/Vivado_init.tcl:
 # Set up Rev D configuration
-set rev_d_dir $::env(REV_D_DIR)
-source $rev_d_dir/scripts/vivado/repo_paths.tcl
+set zynq_toolbox $::env(ZYNQ_TOOLBOX)
+source $zynq_toolbox/scripts/vivado/repo_paths.tcl
 ```
 
 ## Optional: Makefile variable defaults
@@ -345,7 +345,7 @@ The entire build process is scripted by the `Makefile` and various shell and Tcl
 make
 ```
 
-This will output two compressed files in the `out/snickerdoodle_black/1.0/rev_d_shim/` directory:
+This will output two compressed files in the `out/snickerdoodle_black/1.0/zynq_toolbox/` directory:
 - `BOOT.tar.gz`: The compressed boot partition, which contains the Linux kernel, device tree, and boot scripts.
 - `rootfs.tar.gz`: The compressed root filesystem, which contains all of the Linux files.
 
@@ -359,7 +359,7 @@ Use GParted to partition the SD card as follows:
 - One partition of type `fat32` with a size of 1 GiB, labeled `BOOT`. Make sure this has 4MiB of unallocated free space before it.
 - One partition of type `ext4` with a size of whatever is left on the SD card, labeled `RootFS`.
 
-Once the SD card is partitioned, you can uncompress the `BOOT.tar.gz` and `rootfs.tar.gz` files into the respective partitions. If you're using the same Ubuntu system on a VM that I was, and are using the default `BOARD`, `BOARD_VER`, and `PROJECT` (`snickerdoodle_black`, `1.0`, `rev_d_shim`) you can do this with the following [target](#script-targets) (may need to eject and re-insert the SD card after partitioning):
+Once the SD card is partitioned, you can uncompress the `BOOT.tar.gz` and `rootfs.tar.gz` files into the respective partitions. If you're using the same Ubuntu system on a VM that I was, and are using the default `BOARD`, `BOARD_VER`, and `PROJECT` (`snickerdoodle_black`, `1.0`, `zynq_toolbox`) you can do this with the following [target](#script-targets) (may need to eject and re-insert the SD card after partitioning):
 ```bash
 make write_sd 
 ```

@@ -31,7 +31,7 @@ echo "[PTLNX PROJECT] Checking PetaLinux configuration files for ${PBV}"
 ./scripts/check/petalinux_rootfs_cfg_file.sh ${BRD} ${VER} ${PRJ} || exit 1
 
 # Set the project's config patch directory
-PRJ_CFG_DIR=${REV_D_DIR}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}
+PRJ_CFG_DIR=${ZYNQ_TOOLBOX}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}
 
 # Delete any existing project directory
 echo "[PTLNX PROJECT] Deleting any existing PetaLinux project directory"
@@ -61,7 +61,7 @@ cd petalinux
 
 # Initialize the project with the hardware description
 echo "[PTLNX PROJECT] Initializing default PetaLinux system configuration"
-petalinux-config --get-hw-description ${REV_D_DIR}/tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa --silentconfig
+petalinux-config --get-hw-description ${ZYNQ_TOOLBOX}/tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa --silentconfig
 
 # Check that the PetaLinux version matches the environment variable
 PETALINUX_CONF_PATH="components/yocto/layers/meta-petalinux/conf/distro/include/petalinux-version.conf"
@@ -91,7 +91,7 @@ petalinux-config -c rootfs --silentconfig
 # If OFFLINE, set the project to offline
 if [ "$OFFLINE" = "true" ]; then
   echo "[PTLNX PROJECT] Setting PetaLinux project to offline mode"
-  cd ${REV_D_DIR}
+  cd ${ZYNQ_TOOLBOX}
   ./scripts/petalinux/make_offline.sh ${BRD}/${VER}/${PRJ}
   cd tmp/${BRD}/${VER}/${PRJ}/petalinux
 else

@@ -72,7 +72,7 @@ cd petalinux
 
 # Initialize the project with the hardware description
 echo "[PTLNX ROOTFS CFG] Initializing default PetaLinux system configuration"
-petalinux-config --get-hw-description ${REV_D_DIR}/tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa --silentconfig
+petalinux-config --get-hw-description ${ZYNQ_TOOLBOX}/tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa --silentconfig
 
 # Check that the PetaLinux version matches the environment variable
 PETALINUX_CONF_PATH="components/yocto/layers/meta-petalinux/conf/distro/include/petalinux-version.conf"
@@ -89,7 +89,7 @@ fi
 
 # Patch the project configuration
 echo "[PTLNX ROOTFS CFG] Patching and configuring PetaLinux project"
-patch project-spec/configs/config ${REV_D_DIR}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch
+patch project-spec/configs/config ${ZYNQ_TOOLBOX}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch
 petalinux-config --silentconfig
 
 # Initialize the default root filesystem configuration
@@ -101,9 +101,9 @@ echo "[PTLNX ROOTFS CFG] Saving default PetaLinux root filesystem configuration"
 cp project-spec/configs/rootfs_config project-spec/configs/rootfs_config.default
 
 # If updating, apply the existing patch
-if [ -f "${REV_D_DIR}/${ROOTFS_CONFIG_PATH}" ]; then
+if [ -f "${ZYNQ_TOOLBOX}/${ROOTFS_CONFIG_PATH}" ]; then
     echo "[PTLNX ROOTFS CFG] Applying existing PetaLinux root filesystem configuration patch"
-    patch project-spec/configs/rootfs_config ${REV_D_DIR}/${ROOTFS_CONFIG_PATH}
+    patch project-spec/configs/rootfs_config ${ZYNQ_TOOLBOX}/${ROOTFS_CONFIG_PATH}
 fi
 
 # Manually configure the root filesystem
@@ -114,7 +114,7 @@ petalinux-config -c rootfs
 echo "[PTLNX ROOTFS CFG] Creating PetaLinux root filesystem configuration patch"
 diff -u project-spec/configs/rootfs_config.default project-spec/configs/rootfs_config | \
     tail -n +3 > \
-    ${REV_D_DIR}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/rootfs_config.patch
+    ${ZYNQ_TOOLBOX}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/rootfs_config.patch
 
 # Replace the root filesystem configuration with the default for the template project
 echo "[PTLNX ROOTFS CFG] Restoring default PetaLinux root filesystem configuration for template project"

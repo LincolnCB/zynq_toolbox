@@ -41,7 +41,7 @@ while IFS= read -r MOD; do
   petalinux-create modules --name ${MOD} --enable --force
 
   # Copy the source files into the kernel module directory
-  SRC_DIR="${REV_D_DIR}/kernel_modules/${MOD}/petalinux"
+  SRC_DIR="${ZYNQ_TOOLBOX}/kernel_modules/${MOD}/petalinux"
   KMOD_DIR="project-spec/meta-user/recipes-modules/${MOD}/files"
 
   # Copy the makefile and top source file, overwriting the default ones
@@ -51,6 +51,6 @@ while IFS= read -r MOD; do
   # Copy any additional source files, excluding those two
   find "${SRC_DIR}" -type f ! -name "Makefile" ! -name "${MOD}.c" -exec cp -f {} "${KMOD_DIR}/" \;
 
-done < ${REV_D_DIR}/${REL_KERNEL_MODULES_PATH}
+done < ${ZYNQ_TOOLBOX}/${REL_KERNEL_MODULES_PATH}
 
 

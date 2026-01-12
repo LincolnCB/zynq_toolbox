@@ -48,7 +48,7 @@ This script is the bulk of the Vivado project setup and scripting. It creates an
 
 ### `repo_paths.tcl`
 
-This script sets up the Vivado board repository paths for the Snickerdoodle Rev D project. It is sourced by Vivado's init script (see the **Vivado init script** section of the top-level README). It expects the `REV_D_DIR` environment variable to be set to the root of the repository (through `environment.sh` -- see the **Getting started** section of the top-level README) and loads the board files into Vivado's board repository.
+This script sets up the Vivado board repository paths for the Snickerdoodle Rev D project. It is sourced by Vivado's init script (see the **Vivado init script** section of the top-level README). It expects the `ZYNQ_TOOLBOX` environment variable to be set to the root of the repository (through `environment.sh` -- see the **Getting started** section of the top-level README) and loads the board files into Vivado's board repository.
 
 ---
 

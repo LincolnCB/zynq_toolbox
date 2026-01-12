@@ -36,10 +36,10 @@ MOUNT_DIR ?= # empty by default, set to the mount point of the SD card if needed
 #############################################
 
 # Check for the REV D environment variable
-ifneq ($(shell pwd),$(REV_D_DIR))
-$(warning Environment variable REV_D_DIR does not match the current directory)
+ifneq ($(shell pwd),$(ZYNQ_TOOLBOX))
+$(warning Environment variable ZYNQ_TOOLBOX does not match the current directory)
 $(warning - Current directory: $(shell pwd))
-$(error - REV_D_DIR: $(REV_D_DIR))
+$(error - ZYNQ_TOOLBOX: $(ZYNQ_TOOLBOX))
 endif
 
 # Check if the Vivado settings64.sh file exists

@@ -35,7 +35,7 @@ source ${PETALINUX_PATH}/settings.sh
 cd tmp/${BRD}/${VER}/${PRJ}/petalinux
 
 # Set the software path
-SW_PATH="${REV_D_DIR}/projects/${PRJ}/software"
+SW_PATH="${ZYNQ_TOOLBOX}/projects/${PRJ}/software"
 
 # For each software folder, build the software
 echo "[PTLNX SOFTWARE] Building software for ${PBV}"

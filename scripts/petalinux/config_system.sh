@@ -72,7 +72,7 @@ cd petalinux
 
 # Initialize the default project configuration
 echo "[PTLNX SYS CFG] Initializing default PetaLinux system configuration"
-petalinux-config --get-hw-description ${REV_D_DIR}/tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa --silentconfig
+petalinux-config --get-hw-description ${ZYNQ_TOOLBOX}/tmp/${BRD}/${VER}/${PRJ}/hw_def.xsa --silentconfig
 
 # Check that the PetaLinux version matches the environment variable
 PETALINUX_CONF_PATH="components/yocto/layers/meta-petalinux/conf/distro/include/petalinux-version.conf"
@@ -92,9 +92,9 @@ echo "[PTLNX SYS CFG] Saving default PetaLinux system configuration"
 cp project-spec/configs/config project-spec/configs/config.default
 
 # If updating, apply the existing patch
-if [ -f "${REV_D_DIR}/${CONFIG_PATCH_PATH}" ]; then
+if [ -f "${ZYNQ_TOOLBOX}/${CONFIG_PATCH_PATH}" ]; then
   echo "[PTLNX SYS CFG] Applying existing PetaLinux system configuration patch"
-  patch project-spec/configs/config ${REV_D_DIR}/${CONFIG_PATCH_PATH}
+  patch project-spec/configs/config ${ZYNQ_TOOLBOX}/${CONFIG_PATCH_PATH}
 fi
 
 # Manually configure the project
@@ -105,7 +105,7 @@ petalinux-config
 echo "[PTLNX SYS CFG] Creating PetaLinux system configuration patch"
 diff -u project-spec/configs/config.default project-spec/configs/config | \
   tail -n +3 > \
-  ${REV_D_DIR}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch
+  ${ZYNQ_TOOLBOX}/projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/config.patch
 
 # Replace the patched project configuration with the default
 echo "[PTLNX SYS CFG] Restoring default PetaLinux system configuration for template project"
