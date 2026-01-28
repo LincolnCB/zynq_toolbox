@@ -1,30 +1,30 @@
 [submodule "boards/snickerdoodle_black"]
 	path = boards/snickerdoodle_black
-	url = git://github.com/LincolnCB/snickerdoodle_black.git
+	url = https://github.com/LincolnCB/snickerdoodle_black.git
 [submodule "projects/rev_d_shim"]
 	path = projects/rev_d_shim
-	url = git://github.com/LincolnCB/rev_d_shim.git
+	url = https://github.com/LincolnCB/rev_d_shim.git
 [submodule "projects/shim_controller_v0"]
 	path = projects/shim_controller_v0
-	url = git://github.com/LincolnCB/shim_controller_v0.git
+	url = https://github.com/LincolnCB/shim_controller_v0.git
 [submodule "boards/sdrlab_122_16"]
 	path = boards/sdrlab_122_16
-	url = git://github.com/LincolnCB/sdrlab_122_16.git
+	url = https://github.com/LincolnCB/sdrlab_122_16.git
 [submodule "boards/stemlab_125_14"]
 	path = boards/stemlab_125_14
-	url = git://github.com/LincolnCB/stemlab_125_14.git
+	url = https://github.com/LincolnCB/stemlab_125_14.git
 [submodule "boards/zybo_z7_10"]
 	path = boards/zybo_z7_10
-	url = git://github.com/LincolnCB/zybo_z7_10.git
+	url = https://github.com/LincolnCB/zybo_z7_10.git
 [submodule "custom_cores/open-mri"]
 	path = custom_cores/open-mri
-	url = git://github.com/LincolnCB/open-mri-cores.git
+	url = https://github.com/LincolnCB/open-mri-cores.git
 [submodule "custom_cores/pavel-demin"]
 	path = custom_cores/pavel-demin
-	url = git://github.com/LincolnCB/pavel-demin-cores.git
+	url = https://github.com/LincolnCB/pavel-demin-cores.git
 [submodule "kernel_modules/u-dma-buf"]
 	path = kernel_modules/u-dma-buf
-	url = git://github.com/LincolnCB/u-dma-buf.git
+	url = https://github.com/LincolnCB/u-dma-buf.git
 [submodule "custom_cores/rev_d_shim"]
 	path = custom_cores/rev_d_shim
-	url = git://github.com/LincolnCB/rev_d_shim_cores.git
+	url = https://github.com/LincolnCB/rev_d_shim_cores.git
