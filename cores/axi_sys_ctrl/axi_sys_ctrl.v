@@ -21,7 +21,8 @@ module axi_sys_ctrl #
   input  wire                       unlock,
 
   // Configuration outputs
-  output wire                sys_en,
+  output wire                ctrl_en,
+  output wire                pow_en,
   output reg  [16:0]         cmd_buf_reset,
   output reg  [16:0]         data_buf_reset,
   output reg  [14:0]         integ_thresh_avg,
@@ -34,7 +35,8 @@ module axi_sys_ctrl #
   output reg  signed [15:0]  dac_cal_init,
 
   // Configuration bounds
-  output wire  sys_en_oob,
+  output wire  ctrl_en_oob,
+  output wire  pow_en_oob,
   output wire  cmd_buf_reset_oob,
   output wire  data_buf_reset_oob,
   output wire  integ_thresh_avg_oob,
@@ -72,20 +74,22 @@ module axi_sys_ctrl #
   endfunction
 
   // Localparams for bit offsets
-  localparam integer SYS_EN_32_OFFSET                  = 0;
-  localparam integer CMD_BUF_RESET_32_OFFSET           = 1;
-  localparam integer DATA_BUF_RESET_32_OFFSET          = 2;
-  localparam integer INTEG_THRESHOLD_AVERAGE_32_OFFSET = 3;
-  localparam integer INTEG_WINDOW_32_OFFSET            = 4;
-  localparam integer INTEG_EN_32_OFFSET                = 5;
-  localparam integer BOOT_TEST_SKIP_32_OFFSET          = 6;
-  localparam integer DEBUG_32_OFFSET                   = 7;
-  localparam integer MOSI_SCK_POL_32_OFFSET            = 8;
-  localparam integer MISO_SCK_POL_32_OFFSET            = 9;
-  localparam integer DAC_CAL_INIT_32_OFFSET            = 10;
+  localparam integer CTRL_EN_32_OFFSET                 = 0;
+  localparam integer POW_EN_32_OFFSET                  = 1;
+  localparam integer CMD_BUF_RESET_32_OFFSET           = 2;
+  localparam integer DATA_BUF_RESET_32_OFFSET          = 3;
+  localparam integer INTEG_THRESHOLD_AVERAGE_32_OFFSET = 4;
+  localparam integer INTEG_WINDOW_32_OFFSET            = 5;
+  localparam integer INTEG_EN_32_OFFSET                = 6;
+  localparam integer BOOT_TEST_SKIP_32_OFFSET          = 7;
+  localparam integer DEBUG_32_OFFSET                   = 8;
+  localparam integer MOSI_SCK_POL_32_OFFSET            = 9;
+  localparam integer MISO_SCK_POL_32_OFFSET            = 10;
+  localparam integer DAC_CAL_INIT_32_OFFSET            = 11;
 
   // Localparams for widths
-  localparam integer SYS_EN_WIDTH = 1;
+  localparam integer CTRL_EN_WIDTH = 1;
+  localparam integer POW_EN_WIDTH = 1;
   localparam integer CMD_BUF_RESET_WIDTH = 17;
   localparam integer DATA_BUF_RESET_WIDTH = 17;
   localparam integer INTEG_THRESHOLD_AVERAGE_WIDTH = 15;
@@ -98,7 +102,8 @@ module axi_sys_ctrl #
   localparam integer DAC_CAL_INIT_WIDTH = 16;
 
   // Localparams for MIN/MAX values
-  localparam integer SYS_EN_MAX                  = {{SYS_EN_WIDTH{1'b1}}};
+  localparam integer CTRL_EN_MAX                 = {{CTRL_EN_WIDTH{1'b1}}};
+  localparam integer POW_EN_MAX                  = {{POW_EN_WIDTH{1'b1}}};
   localparam integer CMD_BUF_RESET_MAX           = {{CMD_BUF_RESET_WIDTH{1'b1}}};
   localparam integer DATA_BUF_RESET_MAX          = {{DATA_BUF_RESET_WIDTH{1'b1}}};
   localparam integer INTEG_THRESHOLD_AVERAGE_MIN = {{(INTEG_THRESHOLD_AVERAGE_WIDTH-1){1'b0}}, 1'b1}; // Minimum is 1
@@ -204,7 +209,8 @@ module axi_sys_ctrl #
 
   // Initial values (shifted)
   assign int_data_wire = int_axi_data_wire | (~int_data_modified_wire & int_initial_data_wire);
-  assign int_initial_data_wire[SYS_EN_32_OFFSET*32+SYS_EN_WIDTH-1:SYS_EN_32_OFFSET*32] = {SYS_EN_WIDTH{1'b0}}; // System enable defaults to 0
+  assign int_initial_data_wire[CTRL_EN_32_OFFSET*32+CTRL_EN_WIDTH-1:CTRL_EN_32_OFFSET*32] = {CTRL_EN_WIDTH{1'b0}}; // System enable defaults to 0
+  assign int_initial_data_wire[POW_EN_32_OFFSET*32+POW_EN_WIDTH-1:POW_EN_32_OFFSET*32] = {POW_EN_WIDTH{1'b0}}; // Power enable defaults to 0
   assign int_initial_data_wire[CMD_BUF_RESET_32_OFFSET*32+CMD_BUF_RESET_WIDTH-1-:CMD_BUF_RESET_WIDTH] = {CMD_BUF_RESET_WIDTH{1'b0}}; // Command buffer reset defaults to 0
   assign int_initial_data_wire[DATA_BUF_RESET_32_OFFSET*32+DATA_BUF_RESET_WIDTH-1-:DATA_BUF_RESET_WIDTH] = {DATA_BUF_RESET_WIDTH{1'b0}}; // Data buffer reset defaults to 0
   assign int_initial_data_wire[INTEG_THRESHOLD_AVERAGE_32_OFFSET*32+INTEG_THRESHOLD_AVERAGE_WIDTH-1-:INTEG_THRESHOLD_AVERAGE_WIDTH] = INTEG_THRESHOLD_AVERAGE_DEFAULT_CAPPED[INTEG_THRESHOLD_AVERAGE_WIDTH-1:0];
@@ -217,7 +223,8 @@ module axi_sys_ctrl #
   assign int_initial_data_wire[DAC_CAL_INIT_32_OFFSET*32+DAC_CAL_INIT_WIDTH-1-:DAC_CAL_INIT_WIDTH] = DAC_CAL_INIT_DEFAULT_CAPPED[DAC_CAL_INIT_WIDTH-1:0];
 
   // Out of bounds checks. Use the whole word for the check to error on truncation
-  assign sys_en_oob = $unsigned(int_data_wire[SYS_EN_32_OFFSET*32+SYS_EN_WIDTH-1:SYS_EN_32_OFFSET*32]) > SYS_EN_MAX;
+  assign ctrl_en_oob = $unsigned(int_data_wire[CTRL_EN_32_OFFSET*32+CTRL_EN_WIDTH-1:CTRL_EN_32_OFFSET*32]) > CTRL_EN_MAX;
+  assign pow_en_oob = $unsigned(int_data_wire[POW_EN_32_OFFSET*32+POW_EN_WIDTH-1:POW_EN_32_OFFSET*32]) > POW_EN_MAX;
   assign cmd_buf_reset_oob = $unsigned(int_data_wire[CMD_BUF_RESET_32_OFFSET*32+CMD_BUF_RESET_WIDTH-1:CMD_BUF_RESET_32_OFFSET*32]) > CMD_BUF_RESET_MAX;
   assign data_buf_reset_oob = $unsigned(int_data_wire[DATA_BUF_RESET_32_OFFSET*32+DATA_BUF_RESET_WIDTH-1:DATA_BUF_RESET_32_OFFSET*32]) > DATA_BUF_RESET_MAX;
   assign integ_thresh_avg_oob = $unsigned(int_data_wire[INTEG_THRESHOLD_AVERAGE_32_OFFSET*32+INTEG_THRESHOLD_AVERAGE_WIDTH-1-:INTEG_THRESHOLD_AVERAGE_WIDTH]) < $unsigned(INTEG_THRESHOLD_AVERAGE_MIN) 
@@ -236,7 +243,8 @@ module axi_sys_ctrl #
   // Address and value bound compliance sent to write response
   // Send SLVERR if there are any violations
   assign int_bresp_wire = 
-    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == SYS_EN_32_OFFSET) ? (sys_en_oob ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == CTRL_EN_32_OFFSET) ? (ctrl_en_oob ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == POW_EN_32_OFFSET) ? (pow_en_oob ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == CMD_BUF_RESET_32_OFFSET) ? (cmd_buf_reset_oob ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == DATA_BUF_RESET_32_OFFSET) ? (data_buf_reset_oob ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == INTEG_THRESHOLD_AVERAGE_32_OFFSET) ? ((locked || integ_thresh_avg_oob) ? 2'b10 : 2'b00) :
@@ -249,10 +257,11 @@ module axi_sys_ctrl #
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == DAC_CAL_INIT_32_OFFSET) ? ((locked || dac_cal_init_oob) ? 2'b10 : 2'b00) :
     2'b10;
   
-  assign sys_en = int_data_wire[SYS_EN_32_OFFSET*32];
+  assign ctrl_en = int_data_wire[CTRL_EN_32_OFFSET*32];
+  assign pow_en = int_data_wire[POW_EN_32_OFFSET*32];
 
   // Lock violation wire
-  // sys_en, cmd_buf_reset, and data_buf_reset are not locked, so they are not checked
+  // ctrl_en, pow_en, cmd_buf_reset, and data_buf_reset are not locked, so they are not checked
   assign int_lock_viol_wire = 
             integ_thresh_avg != int_data_wire[INTEG_THRESHOLD_AVERAGE_32_OFFSET*32+INTEG_THRESHOLD_AVERAGE_WIDTH-1:INTEG_THRESHOLD_AVERAGE_32_OFFSET*32]
             || integ_window != int_data_wire[INTEG_WINDOW_32_OFFSET*32+INTEG_WINDOW_WIDTH-1:INTEG_WINDOW_32_OFFSET*32]
@@ -296,8 +305,8 @@ module axi_sys_ctrl #
       cmd_buf_reset <= int_data_wire[CMD_BUF_RESET_32_OFFSET*32+CMD_BUF_RESET_WIDTH-1:CMD_BUF_RESET_32_OFFSET*32];
       data_buf_reset <= int_data_wire[DATA_BUF_RESET_32_OFFSET*32+DATA_BUF_RESET_WIDTH-1:DATA_BUF_RESET_32_OFFSET*32];
 
-      // Lock other registers if sys_en is set
-      if(sys_en) begin
+      // Lock necessary control registers if ctrl_en is set
+      if(ctrl_en) begin
         locked <= 1'b1;
         integ_thresh_avg <= int_data_wire[INTEG_THRESHOLD_AVERAGE_32_OFFSET*32+INTEG_THRESHOLD_AVERAGE_WIDTH-1:INTEG_THRESHOLD_AVERAGE_32_OFFSET*32];
         integ_window <= int_data_wire[INTEG_WINDOW_32_OFFSET*32+INTEG_WINDOW_WIDTH-1:INTEG_WINDOW_32_OFFSET*32];

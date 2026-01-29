@@ -13,13 +13,15 @@ module hw_manager #(
   input   wire          aresetn, // Active low reset
 
   // Inputs
-  input   wire          sys_en,         // System enable (turn the system on)
+  input   wire          ctrl_en,        // Control board enable (turn the system on)
+  input   wire          pow_en,         // Power stage enable (turn on power stage)
   input   wire          spi_off,        // SPI system powered off
   input   wire          calc_n_cs_done, // DAC/ADC n_cs timing calculation done
   input   wire          ext_en,         // External enable (deadman shutdown)
   // Pre-start configuration values
   input   wire          lock_viol,            // Configuration lock violation
-  input   wire          sys_en_oob,           // System enable register out of bounds
+  input   wire          ctrl_en_oob,          // Control board enable register out of bounds
+  input   wire          pow_en_oob,           // Power stage enable register out of bounds
   input   wire          cmd_buf_reset_oob,    // Command buffer reset out of bounds
   input   wire          data_buf_reset_oob,   // Data buffer reset out of bounds
   input   wire          integ_thresh_avg_oob, // Integrator threshold average out of bounds
@@ -89,11 +91,12 @@ module hw_manager #(
               S_CONFIRM_SPI_RST   = 4'd2,
               S_POWER_ON_CRTL_BRD = 4'd3,
               S_CONFIRM_SPI_START = 4'd4,
-              S_POWER_ON_AMP_BRD  = 4'd5,
-              S_AMP_POWER_WAIT    = 4'd6,
-              S_RUNNING           = 4'd7,
-              S_HALTING           = 4'd8,
-              S_HALTED            = 4'd9;
+              S_WAIT_FOR_POW_EN   = 4'd5,
+              S_POWER_ON_AMP_BRD  = 4'd6,
+              S_AMP_POWER_WAIT    = 4'd7,
+              S_RUNNING           = 4'd8,
+              S_HALTING           = 4'd9,
+              S_HALTED            = 4'd10;
 
   //// Status codes
   // Basic system
@@ -105,17 +108,18 @@ module hw_manager #(
               STS_SPI_START_TIMEOUT       = 25'h0101;
   // Pre-start configuration values
   localparam  STS_LOCK_VIOL               = 25'h0200,
-              STS_SYS_EN_OOB              = 25'h0201,
-              STS_CMD_BUF_RESET_OOB       = 25'h0202,
-              STS_DATA_BUF_RESET_OOB      = 25'h0203,
-              STS_INTEG_THRESH_AVG_OOB    = 25'h0204,
-              STS_INTEG_WINDOW_OOB        = 25'h0205,
-              STS_INTEG_EN_OOB            = 25'h0206,
-              STS_BOOT_TEST_SKIP_OOB      = 25'h0207,
-              STS_DEBUG_OOB               = 25'h0208,
-              STS_MOSI_SCK_POL_OOB        = 25'h0209,
-              STS_MISO_SCK_POL_OOB        = 25'h020A,
-              STS_DAC_CAL_INIT_OOB        = 25'h020B;
+              STS_CTRL_EN_OOB             = 25'h0201,
+              STS_POW_EN_OOB              = 25'h0202,
+              STS_CMD_BUF_RESET_OOB       = 25'h0203,
+              STS_DATA_BUF_RESET_OOB      = 25'h0204,
+              STS_INTEG_THRESH_AVG_OOB    = 25'h0205,
+              STS_INTEG_WINDOW_OOB        = 25'h0206,
+              STS_INTEG_EN_OOB            = 25'h0207,
+              STS_BOOT_TEST_SKIP_OOB      = 25'h0208,
+              STS_DEBUG_OOB               = 25'h0209,
+              STS_MOSI_SCK_POL_OOB        = 25'h020A,
+              STS_MISO_SCK_POL_OOB        = 25'h020B,
+              STS_DAC_CAL_INIT_OOB        = 25'h020C;
   // Shutdown sense
   localparam  STS_SHUTDOWN_SENSE          = 25'h0300,
               STS_EXT_SHUTDOWN            = 25'h0301;
@@ -173,14 +177,15 @@ module hw_manager #(
         // Idle state, hardware shut down, waiting for system enable to go high
         // When enabled, lock the config registers and confirm the SPI subsystem is initialized
         S_IDLE: begin : idle_state
-          if (sys_en) begin
+          if (ctrl_en) begin
             // Check for the external enable before proceeding
             if (!ext_en) begin
               state <= S_HALTING;
               status_code <= STS_EXT_SHUTDOWN;
             // Check for out of bounds configuration values
             end else if (
-              sys_en_oob
+              ctrl_en_oob
+              || pow_en_oob
               || cmd_buf_reset_oob
               || data_buf_reset_oob
               || integ_thresh_avg_oob
@@ -192,9 +197,12 @@ module hw_manager #(
               || miso_sck_pol_oob
               || dac_cal_init_oob
             ) begin
-              if (sys_en_oob) begin // System enable out of bounds
+              if (ctrl_en_oob) begin // Control board enable out of bounds
                 state <= S_HALTING;
-                status_code <= STS_SYS_EN_OOB;
+                status_code <= STS_CTRL_EN_OOB;
+              end else if (pow_en_oob) begin // Power stage enable out of bounds
+                state <= S_HALTING;
+                status_code <= STS_POW_EN_OOB;
               end else if (cmd_buf_reset_oob) begin // Command buffer reset out of bounds
                 state <= S_HALTING;
                 status_code <= STS_CMD_BUF_RESET_OOB;
@@ -231,7 +239,7 @@ module hw_manager #(
               timer <= 0;
               unlock_cfg <= 0;
             end
-          end // if (sys_en)
+          end // if (ctrl_en)
         end // S_IDLE
 
         // Confirm the SPI subsystem is reset to its initial state, off
@@ -240,6 +248,9 @@ module hw_manager #(
           if (!ext_en) begin
             state <= S_HALTING;
             status_code <= STS_EXT_SHUTDOWN;
+          end else if (!ctrl_en) begin
+            state <= S_HALTING;
+            status_code <= STS_PS_SHUTDOWN;
           end else if (timer >= 10 && spi_off && calc_n_cs_done) begin
             state <= S_POWER_ON_CRTL_BRD;
             timer <= 0;
@@ -261,6 +272,9 @@ module hw_manager #(
           if (!ext_en) begin
             state <= S_HALTING;
             status_code <= STS_EXT_SHUTDOWN;
+          end else if (!ctrl_en) begin
+            state <= S_HALTING;
+            status_code <= STS_PS_SHUTDOWN;
           end else if (timer >= SHUTDOWN_FORCE_DELAY) begin
             state <= S_CONFIRM_SPI_START;
             timer <= 0;
@@ -277,8 +291,11 @@ module hw_manager #(
           if (!ext_en) begin
             state <= S_HALTING;
             status_code <= STS_EXT_SHUTDOWN;
+          end else if (!ctrl_en) begin
+            state <= S_HALTING;
+            status_code <= STS_PS_SHUTDOWN;
           end else if (!spi_off) begin
-            state <= S_POWER_ON_AMP_BRD;
+            state <= S_WAIT_FOR_POW_EN;
             timer <= 0;
             shutdown_rst <= 1;
           end else if (|dac_boot_fail || |adc_boot_fail || timer >= SPI_START_WAIT) begin
@@ -300,11 +317,28 @@ module hw_manager #(
           end // if (!spi_off)
         end // S_CONFIRM_SPI_START
 
+        // Wait for the power stage enable to go high before powering on the amplifier boards
+        S_WAIT_FOR_POW_EN: begin
+          if (!ext_en) begin
+            state <= S_HALTING;
+            status_code <= STS_EXT_SHUTDOWN;
+          end else if (!ctrl_en) begin
+            state <= S_HALTING;
+            status_code <= STS_PS_SHUTDOWN;
+          end else if (pow_en) begin
+            state <= S_POWER_ON_AMP_BRD;
+            timer <= 0;
+          end // if (pow_en)
+        end // S_WAIT_FOR_POW_EN
+
         // Pulse the shutdown reset for a short time to power on the power stage
         S_POWER_ON_AMP_BRD: begin
           if (!ext_en) begin
             state <= S_HALTING;
             status_code <= STS_EXT_SHUTDOWN;
+          end else if (!ctrl_en || !pow_en) begin
+            state <= S_HALTING;
+            status_code <= STS_PS_SHUTDOWN;
           end else if (timer >= SHUTDOWN_RESET_PULSE) begin
             state <= S_AMP_POWER_WAIT;
             timer <= 0;
@@ -320,6 +354,9 @@ module hw_manager #(
           if (!ext_en) begin
             state <= S_HALTING;
             status_code <= STS_EXT_SHUTDOWN;
+          end else if (!ctrl_en || !pow_en) begin
+            state <= S_HALTING;
+            status_code <= STS_PS_SHUTDOWN;
           end else if (timer >= SHUTDOWN_RESET_DELAY) begin
             state <= S_RUNNING;
             timer <= 0;
@@ -337,8 +374,8 @@ module hw_manager #(
           if (ps_interrupt) begin
             ps_interrupt <= 0;
           end else if ( // Check for various error conditions or shutdowns
-              // Basic system
-              !sys_en
+              // Manual enables
+              !ctrl_en || !pow_en
               // Pre-start configuration values
               || lock_viol
               || mosi_sck_pol_oob
@@ -377,7 +414,7 @@ module hw_manager #(
           ) begin
             //// Set the status code based on the error condition
             // Basic system
-            if (!sys_en) status_code <= STS_PS_SHUTDOWN;
+            if (!ctrl_en || !pow_en) status_code <= STS_PS_SHUTDOWN;
             // Pre-start configuration values
             else if (lock_viol) status_code <= STS_LOCK_VIOL;
             else if (mosi_sck_pol_oob) status_code <= STS_MOSI_SCK_POL_OOB;
@@ -495,14 +532,14 @@ module hw_manager #(
           ps_interrupt <= 1;
         end // S_HALTING
 
-        // Wait in the halted state until the system enable goes low
+        // Wait in the halted state until the BOTH system enables go low
         S_HALTED: begin
           // Reset the interrupt if needed
           if (ps_interrupt) begin
             ps_interrupt <= 0;
           end // if (ps_interrupt)
-          // If the system enable goes low, go to S_IDLE and clear the status code
-          if (!sys_en) begin 
+          // If the BOTH system enables go low, go to S_IDLE and clear the status code
+          if (!ctrl_en && !pow_en) begin 
             state <= S_IDLE;
             status_code <= STS_OK;
             board_num <= 0;

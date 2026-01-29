@@ -81,17 +81,17 @@ module ads816x_adc_ctrl (
   localparam CMD_CANCEL    = 3'd7;
 
   // Command bit positions
-  localparam TRIG_BIT = 28;
-  localparam CONT_BIT = 27;
+  localparam TRIG_BIT   = 28;
+  localparam CONT_BIT   = 27;
   localparam REPEAT_BIT = 26;
 
   // Debug codes
-  localparam DBG_MISO_DATA       = 4'd1;
-  localparam DBG_STATE_TRANSITION= 4'd2;
-  localparam DBG_REPEAT_BIT      = 4'd3;
-  localparam DBG_N_CS_TIMER      = 4'd4;
-  localparam DBG_SPI_BIT         = 4'd5;
-  localparam DBG_CMD_DONE        = 4'd6;
+  localparam DBG_MISO_DATA        = 4'd1;
+  localparam DBG_STATE_TRANSITION = 4'd2;
+  localparam DBG_REPEAT_BIT       = 4'd3;
+  localparam DBG_N_CS_TIMER       = 4'd4;
+  localparam DBG_SPI_BIT          = 4'd5;
+  localparam DBG_CMD_DONE         = 4'd6;
 
 
   ///////////////////////////////////////////////////////////////////////////////
