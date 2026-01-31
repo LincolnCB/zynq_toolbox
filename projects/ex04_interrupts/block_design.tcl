@@ -6,7 +6,7 @@
 # Config:
 # - Unused AXI ACP port disabled (or it will complain that the port's clock is not connected)
 # Connections:
-# - GP AXI 0 (Master) clock is connected to the processing system's first clock, FCLK_CLK0
+# - GP AXI 0 (Manager) clock is connected to the processing system's first clock, FCLK_CLK0
 init_ps ps {
   PCW_USE_S_AXI_ACP 0
 } {

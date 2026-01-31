@@ -102,13 +102,13 @@ proc addr {offset range target_intf_pin addr_space_intf_pin} {
 #  offset: offset of the address
 #  range: range of the address
 #  intf_pin: name of the interface pin to connect to the AXI interconnect
-#  master: name of the master to connect to the AXI interconnect
-#   Note: "master" needs to be an absolute path with a "/" prefix, "intf_pin" does not
-proc auto_connect_axi {offset range intf_pin master} {
+#  manager: name of the manager to connect to the AXI interconnect
+#   Note: "manager" needs to be an absolute path with a "/" prefix, "intf_pin" does not
+proc auto_connect_axi {offset range intf_pin manager} {
   set object [get_bd_intf_pins $intf_pin]
-  set config [list Master $master Clk Auto]
+  set config [list Master $manager Clk Auto]
   apply_bd_automation -rule xilinx.com:bd_rule:axi4 -config $config $object
-  addr $offset $range $intf_pin $master
+  addr $offset $range $intf_pin $manager
 }
 
 
@@ -150,7 +150,7 @@ proc init_ps {ps_name {ps_props {}} {ps_conn {}}} {
   # Apply the automation configuration
   # - apply_board_preset applies the preset configuration in boards/[board]/board_files/1.0/preset.xml
   # - make_external externalizes the pins
-  # - Master/Slave control the cross-triggering feature (In/Out, not needed for any projects right now)
+  # - Manager/Subordinate control the cross-triggering feature (In/Out, not needed for any projects right now)
   set cfg_list [list apply_board_preset 1 make_external {FIXED_IO, DDR} Master Disable Slave Disable]
   apply_bd_automation -rule xilinx.com:bd_rule:processing_system7 -config $cfg_list [get_bd_cells $ps_name]
 

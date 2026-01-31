@@ -54,15 +54,15 @@ Arguments:
 - `offset`: Offset of the address to assign to the connected AXI interface.
 - `range`: Address range for the interface.
 - `intf_pin`: Name of the interface pin to connect to the AXI interconnect.
-- `master`: Name of the master interface to connect (should be an absolute path, e.g., `/ps/M_AXI_GP0`).
+- `manager`: Name of the manager interface to connect (should be an absolute path, e.g., `/ps/M_AXI_GP0`).
 
-This procedure automates the creation and connection of an AXI interconnect between a master and a slave interface. It applies Vivado's AXI automation to connect the specified interface pin to the master, then assigns the address space using the provided offset and range.Projects in this repo preffer to manually connect AXI interfaces with interconnects and use the `addr` procedure to assign addresses for clarity and certainty, but this procedure is included as an alternative.
+This procedure automates the creation and connection of an AXI interconnect between a manager and a subordinate interface. It applies Vivado's AXI automation to connect the specified interface pin to the manager, then assigns the address space using the provided offset and range.Projects in this repo preffer to manually connect AXI interfaces with interconnects and use the `addr` procedure to assign addresses for clarity and certainty, but this procedure is included as an alternative.
 
 Example usage:
 ```tcl
 auto_connect_axi 0x40000000 128 my_module/s_axi /ps/M_AXI_GP0
 ```
-This will connect `my_module/s_axi` to the master interface `/ps/M_AXI_GP0` and assign it the address range `128` at offset `0x40000000`.
+This will connect `my_module/s_axi` to the manager interface `/ps/M_AXI_GP0` and assign it the address range `128` at offset `0x40000000`.
 
 #### `cell`
 
