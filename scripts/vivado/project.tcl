@@ -150,7 +150,7 @@ proc init_ps {ps_name {ps_props {}} {ps_conn {}}} {
   # Apply the automation configuration
   # - apply_board_preset applies the preset configuration in boards/[board]/board_files/1.0/preset.xml
   # - make_external externalizes the pins
-  # - Manager/Subordinate control the cross-triggering feature (In/Out, not needed for any projects right now)
+  # - Manager/Subordinate (Master/Slave) control the cross-triggering feature (In/Out, not needed for any projects right now)
   set cfg_list [list apply_board_preset 1 make_external {FIXED_IO, DDR} Master Disable Slave Disable]
   apply_bd_automation -rule xilinx.com:bd_rule:processing_system7 -config $cfg_list [get_bd_cells $ps_name]
 

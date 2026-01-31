@@ -18,7 +18,7 @@
 # Include the defaults file
 include make_defaults.mk
 
-# Master default values for variables:
+# Default values for variables:
 PROJECT ?= rev_d_shim
 BOARD ?= snickerdoodle_black
 BOARD_VER ?= 1.0
