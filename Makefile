@@ -15,15 +15,8 @@
 #   ------>                                                      <------
 #   --------------------------------------------------------------------
 
-# Include the defaults file
+# Include the default variables file
 include make_defaults.mk
-
-# Default values for variables:
-PROJECT ?= rev_d_shim
-BOARD ?= snickerdoodle_black
-BOARD_VER ?= 1.0
-OFFLINE ?= false
-MOUNT_DIR ?= # empty by default, set to the mount point of the SD card if needed
 
 #############################################
 
