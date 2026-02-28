@@ -13,7 +13,9 @@ module spi_cfg_sync (
   input  wire [31:0] integ_window,
   input  wire        integ_en,
   input  wire [ 4:0] dac_n_cs_high_time,
+  input  wire [24:0] dac_delay_too_short_time,
   input  wire [ 7:0] adc_n_cs_high_time,
+  input  wire [24:0] adc_delay_too_short_time,
   input  wire [15:0] boot_test_skip,
   input  wire [15:0] debug,
   input  wire signed [15:0] dac_cal_init,
@@ -25,7 +27,9 @@ module spi_cfg_sync (
   output wire [31:0] integ_window_sync,
   output wire        integ_en_sync,
   output wire [ 4:0] dac_n_cs_high_time_sync,
+  output wire [24:0] dac_delay_too_short_time_sync,
   output wire [ 7:0] adc_n_cs_high_time_sync,
+  output wire [24:0] adc_delay_too_short_time_sync,
   output wire [15:0] boot_test_skip_sync,
   output wire [15:0] debug_sync,
   output wire signed [15:0] dac_cal_init_sync
@@ -35,7 +39,9 @@ module spi_cfg_sync (
   localparam [14:0] integ_thresh_avg_default = 15'h1000;
   localparam [31:0] integ_window_default = 32'h00010000;
   localparam [ 4:0] dac_n_cs_high_time_default = 5'd31; // Max value
+  localparam [24:0] dac_delay_too_short_time_default = 25'd224; // Absolute minimum for full DAC operation
   localparam [ 7:0] adc_n_cs_high_time_default = 8'd255; // Max value
+  localparam [24:0] adc_delay_too_short_time_default = 25'd171; // Absolute minimum for full ADC operation
   localparam signed [15:0] dac_cal_init_default = 16'sd0; // Zero default
 
   // Synchronize each signal
@@ -112,6 +118,19 @@ module spi_cfg_sync (
     .dout_default(dac_n_cs_high_time_default)
   );
 
+  // DAC delay too short time (coherent)
+  sync_coherent #(
+    .WIDTH(25)
+  ) sync_dac_delay_too_short_time (
+    .in_clk(aclk),
+    .in_resetn(aresetn),
+    .out_clk(spi_clk),
+    .out_resetn(spi_resetn),
+    .din(dac_delay_too_short_time),
+    .dout(dac_delay_too_short_time_sync),
+    .dout_default(dac_delay_too_short_time_default)
+  );
+
   // ADC n_cs_high_time (coherent)
   sync_coherent #(
     .WIDTH(8)
@@ -123,6 +142,19 @@ module spi_cfg_sync (
     .din(adc_n_cs_high_time),
     .dout(adc_n_cs_high_time_sync),
     .dout_default(adc_n_cs_high_time_default)
+  );
+
+  // ADC delay too short time (coherent)
+  sync_coherent #(
+    .WIDTH(25)
+  ) sync_adc_delay_too_short_time (
+    .in_clk(aclk),
+    .in_resetn(aresetn),
+    .out_clk(spi_clk),
+    .out_resetn(spi_resetn),
+    .din(adc_delay_too_short_time),
+    .dout(adc_delay_too_short_time_sync),
+    .dout_default(adc_delay_too_short_time_default)
   );
 
   // Boot test skip (incoherent)

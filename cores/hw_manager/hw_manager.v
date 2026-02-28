@@ -6,7 +6,7 @@ module hw_manager #(
   parameter integer SHUTDOWN_RESET_PULSE = 10000,    // 100 us : Pulse width for "shutdown_rst"
   parameter integer SHUTDOWN_RESET_DELAY = 10000000, // 100 ms : Delay after pulsing "shutdown_rst" before starting the system
   parameter integer SPI_RESET_WAIT = 100000000,      //   1  s : Delay after starting the SPI clock before checking if the SPI subsystem is initialized to off
-  parameter integer SPI_START_WAIT = 100000000       //   1  s : Delay after starting the SPI clock before halting if the SPI subsystem doesn't start
+  parameter integer SPI_START_WAIT = 300000000       //   3  s : Delay after starting the SPI clock before halting if the SPI subsystem doesn't start
 )
 (
   input   wire          clk,     // System clock

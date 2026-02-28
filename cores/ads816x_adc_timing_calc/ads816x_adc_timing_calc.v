@@ -11,6 +11,7 @@ module ads816x_adc_timing_calc #(
   
   output reg  [7:0]  n_cs_high_time,     // Calculated n_cs high time in cycles (minus 1)
                                          //   Range: 2 to 255 (corresponds to 3 to 256 cycles, 60ns to 5120ns at 50MHz SPI clock)
+  output reg  [24:0] delay_too_short_time, // Minimum delay time for ADC read commands in cycles (minus 1)
   output reg  [2:0]  miso_halfclk_delay, // Calculated MISO half-clock delay (floor((spi_clk_freq * 4 + 1476395008) >> 30)), capped at 7
   output reg         done,               // Calculation complete
   output reg         lock_viol           // Error if frequency changes during calc
@@ -43,38 +44,33 @@ module ads816x_adc_timing_calc #(
     (ADS_MODEL_ID == 7) ? 2148 :
     (ADS_MODEL_ID == 6) ? 4295 :
     4295;
-  // Indicate the bitwidth of the conversion and cycle times to optimize multiplication
-  localparam integer T_CONV_NiS_BITS =
-    (ADS_MODEL_ID == 8) ? 10 :
-    (ADS_MODEL_ID == 7) ? 11 :
-    (ADS_MODEL_ID == 6) ? 12 :
-    12;
-  localparam integer T_CYCLE_NiS_BITS =
-    (ADS_MODEL_ID == 8) ? 11 :
-    (ADS_MODEL_ID == 7) ? 12 :
-    (ADS_MODEL_ID == 6) ? 13 :
-    13;
 
   // MISO half-clock delay calculation constants
   localparam integer MISO_DELAY_NiS = 5; // 4.5ns -> 5NiS
-  localparam integer MISO_DELAY_NiS_BITS = 5;
   localparam integer MISO_DELAY_OFFSET = 32'h40000000; // 1.0 * 2^30
 
   // SPI command bit width
-  localparam integer OTF_CMD_BITS = 16;
+  localparam [24:0] OTF_CMD_BITS = 25'd16;
+
+  // The minimum delay time for an ADC read command is equal to 9 * (n_cs_high_time + 1 + OTF_CMD_BITS)
+  //   We need 9 instead of 8 here because the OTF data comes back during the next SPI transaction,
+  //   so we have one dummy word at the end while reading the final channel
+
 
   ///////////////////////////////////////////////////////////////////////////////
   // Internal Signals
   ///////////////////////////////////////////////////////////////////////////////
 
   // State machine
-  localparam S_IDLE         = 3'd0;
-  localparam S_CALC_CONV    = 3'd1;
-  localparam S_CALC_CYCLE   = 3'd2;
-  localparam S_CALC_RESULT  = 3'd3;
-  localparam S_DONE         = 3'd4;
+  localparam S_IDLE            = 4'd0;
+  localparam S_CALC_CONV       = 4'd1;
+  localparam S_CALC_CYCLE      = 4'd2;
+  localparam S_CALC_RESULT     = 4'd3;
+  localparam S_CALC_MISO_DELAY = 4'd5;
+  localparam S_FIND_MIN_DELAY  = 4'd6;
+  localparam S_DONE            = 4'd7;
 
-  reg [ 2:0] state;
+  reg [ 3:0] state;
   reg [31:0] spi_clk_freq_hz_latched;
   
   // Intermediate calculation results
@@ -105,6 +101,7 @@ module ads816x_adc_timing_calc #(
       done <= 1'b0;
       lock_viol <= 1'b0;
       n_cs_high_time <= 8'd0;
+      delay_too_short_time <= 25'd0;
       miso_delay_calc <= 36'd0;
       miso_halfclk_delay <= 3'd1;
       spi_clk_freq_hz_latched <= 32'd0;
@@ -159,6 +156,7 @@ module ads816x_adc_timing_calc #(
               multiplicand <= T_CYCLE_NiS;
               multiplier <= spi_clk_freq_hz_latched;
               mult_count <= 4'd0;
+              mult_shift <= 16'd0;
               mult_accumulator <= 64'd0;
               
               state <= S_CALC_CYCLE;
@@ -186,13 +184,19 @@ module ads816x_adc_timing_calc #(
             end else begin
               // Multiplication complete, add 2^30 - 1 for rounding, then shift right by 30 bits (equivalent to divide by 2^30)
               // Set the min cycles for t_cycle to be the result minus OTF command bits (16), min of 0
-              min_cycles_for_t_cycle <= (mult_result_rounded_up[61:30]) > OTF_CMD_BITS ? ((mult_result_rounded_up[61:30]) - OTF_CMD_BITS) : 0;
+              min_cycles_for_t_cycle <= (mult_result_rounded_up[61:30]) > {7'd0, OTF_CMD_BITS} ? ((mult_result_rounded_up[61:30]) - {7'd0, OTF_CMD_BITS}) : 0;
+              // Setup multiplication for MISO_DELAY_NiS * spi_clk_freq_hz_latched
+              multiplicand <= MISO_DELAY_NiS;
+              multiplier <= spi_clk_freq_hz_latched;
+              mult_count <= 4'd0;
+              mult_shift <= 16'd0;
+              mult_accumulator <= 64'd0;
               state <= S_CALC_RESULT;
             end
           end
         end
 
-        //// ---- Calculate the final n_cs_high_time based on the two previous results
+        //// ---- Calculate the final result based on the two previous results
         S_CALC_RESULT: begin
           // Check for frequency change during calculation
           if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
@@ -209,23 +213,19 @@ module ads816x_adc_timing_calc #(
             end else begin
               final_result <= min_cycles_for_t_conv;
             end
-            // Setup multiplication for MISO_DELAY_NiS * spi_clk_freq_hz_latched
-            multiplicand <= MISO_DELAY_NiS;
-            multiplier <= spi_clk_freq_hz_latched;
-            mult_count <= 4'd0;
-            mult_accumulator <= 64'd0;
-            state <= 3'd5; // S_CALC_MISO_DELAY
+            state <= S_CALC_MISO_DELAY;
           end
         end
 
-        // S_CALC_MISO_DELAY: calculate MISO half-clock delay
-        3'd5: begin
+        //// ---- Multiply MISO_DELAY_NiS * spi_clk_freq_hz using shift-add to calculate miso_halfclk_delay
+        S_CALC_MISO_DELAY: begin
           if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
             lock_viol <= 1'b1;
             state <= S_IDLE;
           end else if (!calc) begin
             state <= S_IDLE;
           end else begin
+            // Calculate MISO delay: multiply spi_clk_freq_hz by MISO_DELAY_NiS, then add MISO_DELAY_OFFSET for rounding, then shift right by 30 bits
             if (mult_shift < MISO_DELAY_NiS) begin
               if (multiplicand[mult_count]) begin
                 mult_accumulator <= mult_accumulator + ({32'd0, multiplier} << mult_count);
@@ -233,14 +233,21 @@ module ads816x_adc_timing_calc #(
               mult_shift <= 16'd1 << mult_count;
               mult_count <= mult_count + 1;
             end else begin
+              // Cap n_cs_high_time at 255 (at the maximum 50MHz SPI clock, 256 + 16 bits is 5440ns, which is over the maximum 4000ns required)
+              if (final_result > 255) begin
+                n_cs_high_time <= 8'd255;
+              end else begin
+                n_cs_high_time <= final_result[7:0] - 1; // Truncate to 8 bits
+              end
+              // Store MISO delay calculation result
               miso_delay_calc <= (mult_accumulator + MISO_DELAY_OFFSET);
-              state <= S_DONE;
+              state <= S_FIND_MIN_DELAY;
             end
           end
         end
 
-        //// ---- Stay in this state to check if calc goes low or frequency changes
-        S_DONE: begin
+        //// ---- Calculate the minimum delay threshold and then setup MISO delay calculation
+        S_FIND_MIN_DELAY: begin
           // Check for frequency change during calculation
           if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
             lock_viol <= 1'b1;
@@ -249,12 +256,11 @@ module ads816x_adc_timing_calc #(
             // calc went low, reset
             state <= S_IDLE;
           end else begin
-            // Cap n_cs_high_time at 255 (at the maximum 50MHz SPI clock, 256 + 16 bits is 5440ns, which is over the maximum 4000ns required)
-            if (final_result > 255) begin
-              n_cs_high_time <= 8'd255;
-            end else begin
-              n_cs_high_time <= final_result[7:0] - 1; // Truncate to 8 bits
-            end
+            // Delay too short time is [9 * (n_cs_high_time + 1 + OTF_CMD_BITS) - 1]
+            //   (subtract 1 to convert to "time too short" threshold)
+            delay_too_short_time <= (( {17'd0, n_cs_high_time} + 25'd1 + OTF_CMD_BITS) << 3)
+                                    + ( {17'd0, n_cs_high_time} + 25'd1 + OTF_CMD_BITS)
+                                    - 25'd1;
             // Calculate miso_halfclk_delay, capped at 7
             if (miso_delay_calc[35:30] > 7) begin
               miso_halfclk_delay <= 3'd7;
@@ -262,7 +268,18 @@ module ads816x_adc_timing_calc #(
               miso_halfclk_delay <= miso_delay_calc[32:30];
             end
             done <= 1'b1;
-            // Stay in this state until calc goes low
+            state <= S_DONE;
+          end
+        end
+
+        //// ---- Stay in this state to check if calc goes low or frequency changes
+        S_DONE: begin
+          if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
+            lock_viol <= 1'b1;
+            state <= S_IDLE;
+          end else if (!calc) begin
+            // calc went low, reset
+            state <= S_IDLE;
           end
         end
 

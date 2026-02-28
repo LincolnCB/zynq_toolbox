@@ -7,6 +7,7 @@ module ads816x_adc_ctrl (
   input  wire        boot_test_skip, // Skip the boot test sequence
   input  wire        debug, // Debug mode flag
   input  wire [7:0]  n_cs_high_time, // n_cs high time in clock cycles (max 255)
+  input  wire [24:0] delay_too_short_time, // Minimum delay time for ADC read commands in clock cycles
 
   output reg         setup_done,
 
@@ -130,7 +131,7 @@ module ads816x_adc_ctrl (
 
   //// ---- ADC MOSI SPI control
   wire        start_spi_cmd;
-  reg         adc_rd_done;
+  wire        adc_rd_done;
   wire        last_adc_word;
   wire        adc_spi_cmd_done;
   // Chip select control
@@ -296,7 +297,11 @@ module ads816x_adc_ctrl (
     else if (do_next_cmd
              && ((command == CMD_ADC_RD) || (command == CMD_NO_OP))
              && !cmd_word[TRIG_BIT]) begin
-      delay_timer <= cmd_word[24:0];
+      if (cmd_word[24:0] <= delay_too_short_time) begin
+        delay_timer <= 25'h1FFFFFF; // Error will be flagged. Max the delay in the meantime.
+      end else begin
+        delay_timer <= cmd_word[24:0] - 1; // Load the delay time from the command word (minus 1 since we check for zero in the wait condition)
+      end
     // Otherwise decrement delay timer to zero if nonzero
     end else if (delay_timer > 0) delay_timer <= delay_timer - 1;
   end
@@ -340,6 +345,10 @@ module ads816x_adc_ctrl (
   // Delay too short
   always @(posedge clk) begin
     if (!resetn) delay_too_short <= 1'b0;
+    else if (do_next_cmd
+             && ((command == CMD_ADC_RD) || (command == CMD_NO_OP))
+             && !cmd_word[TRIG_BIT]
+             && (cmd_word[24:0] <= delay_too_short_time)) delay_too_short <= 1'b1; // Delay too short if loading delay timer with a value below the minimum
     else if (state == S_ADC_RD && !adc_rd_done && !wait_for_trig && delay_wait_done) delay_too_short <= 1'b1; // Delay too short if delay timer is zero before ADC read is done
   end
   // Bad command
@@ -390,11 +399,7 @@ module ads816x_adc_ctrl (
                              || (state == S_TEST_RD))
                             && !n_cs && !running_n_cs_timer && spi_bit == 0;
   // ADC done signal
-  always @(posedge clk) begin
-    if (!resetn || state == S_ERROR) adc_rd_done <= 1'b0;
-    else if (last_adc_word && adc_spi_cmd_done) adc_rd_done <= 1'b1;
-    else adc_rd_done <= 1'b0;
-  end
+  assign adc_rd_done = (last_adc_word && adc_spi_cmd_done);
   // ADC SPI word index
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) adc_word_idx <= 4'd0;

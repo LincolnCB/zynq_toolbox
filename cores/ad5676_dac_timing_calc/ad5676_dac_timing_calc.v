@@ -9,6 +9,7 @@ module ad5676_dac_timing_calc (
   
   output reg  [4:0]  n_cs_high_time,  // Calculated n_cs high time in cycles (minus 1)
                                       //   Range: 3 to 31 (corresponds to 4 to 32 cycles, 80ns to 640ns at 50MHz SPI clock)
+  output reg  [24:0] delay_too_short_time, // Minimum delay time for DAC update commands in cycles (minus 1)
   output reg         done,            // Calculation complete
   output reg         lock_viol        // Error if frequency changes during calc
 );
@@ -27,12 +28,11 @@ module ad5676_dac_timing_calc (
   //      -> 892 nis update, 33 nis min n_cs high
   localparam integer T_UPDATE_NiS = 892;
   localparam integer T_MIN_N_CS_HIGH_NiS = 33;
-  // Indicate the bitwidth of the constants to optimize multiplication
-  localparam integer T_UPDATE_NiS_BITS = 10;
-  localparam integer T_MIN_N_CS_HIGH_NiS_BITS = 6;
 
   // SPI command bit width
-  localparam integer SPI_CMD_BITS = 24;
+  localparam [24:0] SPI_CMD_BITS = 25'd24;
+
+  // The minimum delay time for a DAC update command is equal to 8 * (n_cs_high_time + 1 + SPI_CMD_BITS)
 
   ///////////////////////////////////////////////////////////////////////////////
   // Internal Signals
@@ -43,7 +43,10 @@ module ad5676_dac_timing_calc (
   localparam S_CALC_UPDATE    = 3'd1;
   localparam S_CALC_MIN_HIGH  = 3'd2;
   localparam S_CALC_RESULT    = 3'd3;
-  localparam S_DONE           = 3'd4;
+  localparam S_FIND_NCS       = 3'd4;
+  localparam S_FIND_DELAY     = 3'd5;
+  localparam S_DONE           = 3'd6;
+  localparam S_HALTED         = 3'd7; // Used when lock violation occurs to prevent further calculations until reset
 
   reg [ 2:0] state;
   reg [31:0] spi_clk_freq_hz_latched;
@@ -55,6 +58,7 @@ module ad5676_dac_timing_calc (
   
   // Multiplication state machine (shift-add algorithm)
   reg [ 3:0] mult_count;
+  reg [15:0] mult_shift;    // Shift a bit through this to control multiplication
   reg [31:0] multiplicand;  // The constant (T_UPDATE_NiS or T_MIN_N_CS_HIGH_NiS)
   reg [31:0] multiplier;    // The frequency value
   reg [63:0] mult_accumulator;
@@ -72,11 +76,13 @@ module ad5676_dac_timing_calc (
       done <= 1'b0;
       lock_viol <= 1'b0;
       n_cs_high_time <= 5'd0;
+      delay_too_short_time <= 25'd0;
       spi_clk_freq_hz_latched <= 32'd0;
       min_cycles_for_t_update <= 32'd0;
       min_cycles_for_t_min_n_cs_high <= 32'd0;
       final_result <= 32'd0;
       mult_count <= 4'd0;
+      mult_shift <= 16'd0;
       multiplicand <= 32'd0;
       multiplier <= 32'd0;
       mult_accumulator <= 64'd0;
@@ -93,6 +99,7 @@ module ad5676_dac_timing_calc (
             multiplicand <= T_UPDATE_NiS;
             multiplier <= spi_clk_freq_hz;
             mult_count <= 4'd0;
+            mult_shift <= 16'd0;
             mult_accumulator <= 64'd0;
           end
         end
@@ -102,26 +109,28 @@ module ad5676_dac_timing_calc (
           // Check for frequency change during calculation
           if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
             lock_viol <= 1'b1;
-            state <= S_IDLE;
+            state <= S_HALTED;
           end else if (!calc) begin
             // calc went low, reset
             state <= S_IDLE;
           end else begin
-            if (mult_count < T_UPDATE_NiS_BITS) begin
+            if (mult_shift < T_UPDATE_NiS) begin
               // Shift-add multiplication: if current bit of multiplicand is 1, add shifted multiplier
               if (multiplicand[mult_count]) begin
                 mult_accumulator <= mult_accumulator + ({32'd0, multiplier} << mult_count);
               end
+              mult_shift <= 16'd1 << mult_count;
               mult_count <= mult_count + 1;
             end else begin
               // Multiplication complete, add 2^30 - 1 for rounding, then shift right by 30 bits (equivalent to divide by 2^30)
               // Set the min cycles for t_update to be the result minus SPI command bits (24), min of 0
-              min_cycles_for_t_update <= (mult_result_rounded_up[61:30]) > SPI_CMD_BITS ? (mult_result_rounded_up[61:30] - SPI_CMD_BITS) : 0;
+              min_cycles_for_t_update <= (mult_result_rounded_up[61:30]) > {7'd0, SPI_CMD_BITS} ? (mult_result_rounded_up[61:30] - {7'd0, SPI_CMD_BITS}) : 0;
               
               // Setup multiplication for T_MIN_N_CS_HIGH_NiS * spi_clk_freq_hz_latched
               multiplicand <= T_MIN_N_CS_HIGH_NiS;
               multiplier <= spi_clk_freq_hz_latched;
               mult_count <= 4'd0;
+              mult_shift <= 16'd0;
               mult_accumulator <= 64'd0;
               
               state <= S_CALC_MIN_HIGH;
@@ -134,16 +143,17 @@ module ad5676_dac_timing_calc (
           // Check for frequency change during calculation
           if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
             lock_viol <= 1'b1;
-            state <= S_IDLE;
+            state <= S_HALTED;
           end else if (!calc) begin
             // calc went low, reset
             state <= S_IDLE;
           end else begin
-            if (mult_count < T_MIN_N_CS_HIGH_NiS_BITS) begin
+            if (mult_shift < T_MIN_N_CS_HIGH_NiS) begin
               // Shift-add multiplication: if current bit of multiplicand is 1, add shifted multiplier
               if (multiplicand[mult_count]) begin
                 mult_accumulator <= mult_accumulator + ({32'd0, multiplier} << mult_count);
               end
+              mult_shift <= 16'd1 << mult_count;
               mult_count <= mult_count + 1;
             end else begin
               // Multiplication complete, add 2^30 - 1 for rounding, then shift right by 30 bits (equivalent to divide by 2^30)
@@ -159,7 +169,7 @@ module ad5676_dac_timing_calc (
           // Check for frequency change during calculation
           if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
             lock_viol <= 1'b1;
-            state <= S_IDLE;
+            state <= S_HALTED;
           end else if (!calc) begin
             // calc went low, reset
             state <= S_IDLE;
@@ -171,16 +181,16 @@ module ad5676_dac_timing_calc (
             end else begin
               final_result <= min_cycles_for_t_update;
             end
-            state <= S_DONE;
+            state <= S_FIND_NCS;
           end
         end
 
-        //// ---- Stay in this state to check if calc goes low or frequency changes
-        S_DONE: begin
+        //// ---- Finalize the n_cs_high_time output
+        S_FIND_NCS: begin
           // Check for frequency change during calculation
           if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
             lock_viol <= 1'b1;
-            state <= S_IDLE;
+            state <= S_HALTED;
           end else if (!calc) begin
             // calc went low, reset
             state <= S_IDLE;
@@ -191,8 +201,44 @@ module ad5676_dac_timing_calc (
             end else begin
               n_cs_high_time <= final_result[4:0] - 1; // Subtract 1 to get n_cs_high_time (3 = 4 cycles, 31 = 32 cycles)
             end
+            state <= S_FIND_DELAY;
+          end
+        end
+
+        //// ---- Calculate the min_delay_time output
+        S_FIND_DELAY: begin
+          // Check for frequency change during calculation
+          if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
+            lock_viol <= 1'b1;
+            state <= S_HALTED;
+          end else if (!calc) begin
+            // calc went low, reset
+            state <= S_IDLE;
+          end else begin
+            // Delay too short time is [8 * (n_cs_high_time + 1 + SPI_CMD_BITS) - 1]
+            //   (subtract 1 to convert to "time too short" threshold)
+            delay_too_short_time <= (({20'd0, n_cs_high_time} + 25'd1 + SPI_CMD_BITS) << 3) - 25'd1;
             done <= 1'b1;
-            // Stay in this state until calc goes low
+            state <= S_DONE;
+          end
+        end
+
+        //// ---- Stay in this state to check if calc goes low or frequency changes
+        S_DONE: begin
+          // Check for frequency change during calculation
+          if (spi_clk_freq_hz != spi_clk_freq_hz_latched) begin
+            lock_viol <= 1'b1;
+            state <= S_HALTED;
+          end else if (!calc) begin
+            // calc went low, reset
+            state <= S_IDLE;
+          end
+        end
+
+        //// ---- If lock violation occurs, stay in this state until calc goes low
+        S_HALTED: begin
+          if (!calc) begin
+            state <= S_IDLE;
           end
         end
 

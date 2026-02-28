@@ -8,7 +8,8 @@ module ad5676_dac_ctrl #(
 
   input  wire        boot_test_skip, // Skip the boot test sequence
   input  wire        debug, // Debug mode flag
-  input  wire [4:0]  n_cs_high_time, // n_cs high time in clock cycles (max 31)
+  input  wire [ 4:0] n_cs_high_time, // n_cs high time in clock cycles (max 31)
+  input  wire [24:0] delay_too_short_time, // Minimum delay time for DAC update commands in clock cycles
 
   input  wire signed [15:0] cal_init_val, // Default calibration value for all channels on reset (in 2's complement)
 
@@ -151,7 +152,7 @@ module ad5676_dac_ctrl #(
   //// ---- DAC MOSI SPI control
   reg         read_next_dac_val_pair;
   wire        start_spi_cmd;
-  reg         dac_wr_done;
+  wire        dac_wr_done;
   wire        last_dac_channel;
   wire        second_dac_channel_of_pair;
   wire        dac_spi_cmd_done;
@@ -289,7 +290,11 @@ module ad5676_dac_ctrl #(
     else if (do_next_cmd 
              && ((command == CMD_DAC_WR) || (command == CMD_NO_OP)) 
              && !cmd_word[TRIG_BIT]) begin
-      delay_timer <= cmd_word[24:0];
+      if (cmd_word[24:0] <= delay_too_short_time) begin
+        delay_timer <= 25'h1FFFFFF; // Error will be flagged. Max the delay in the meantuime.
+      end else begin
+        delay_timer <= cmd_word[24:0] - 1; // Load the delay time from the command word (minus 1 since we check for zero in the wait condition)
+      end
     // Otherwise decrement delay timer to zero if nonzero
     end else if (delay_timer > 0) delay_timer <= delay_timer - 1;
   end
@@ -336,6 +341,10 @@ module ad5676_dac_ctrl #(
   // Delay too short
   always @(posedge clk) begin
     if (!resetn) delay_too_short <= 1'b0;
+    else if (do_next_cmd 
+             && ((command == CMD_DAC_WR) || (command == CMD_NO_OP)) 
+             && !cmd_word[TRIG_BIT]
+             && (cmd_word[24:0] <= delay_too_short_time)) delay_too_short <= 1'b1; // Delay too short if loading delay timer with a value below the minimum
     else if (state == S_DAC_WR && !dac_wr_done && !wait_for_trig && delay_wait_done) delay_too_short <= 1'b1; // Delay too short if delay timer is zero before DAC write is done
   end
   // LDAC misalignment
@@ -359,20 +368,12 @@ module ad5676_dac_ctrl #(
     else if (try_data_write && data_buf_full) data_buf_overflow <= 1'b1;
   end
   // DAC val out of bounds
-  assign first_dac_val_cal_signed_oob = (first_dac_val_cal_signed < -16'sd32767 || first_dac_val_cal_signed > 16'sd32767);
-  assign second_dac_val_cal_signed_oob = (second_dac_val_cal_signed < -16'sd32767 || second_dac_val_cal_signed > 16'sd32767);
+  assign first_dac_val_cal_signed_oob = (first_dac_val_cal_signed < -17'sd32767 || first_dac_val_cal_signed > 17'sd32767);
+  assign second_dac_val_cal_signed_oob = (second_dac_val_cal_signed < -17'sd32767 || second_dac_val_cal_signed > 17'sd32767);
   always @(posedge clk) begin
     if (!resetn) dac_val_oob <= 1'b0; // Reset out of bounds flag on reset
-    else begin // Set out of bounds flag if either of the following conditions are met:
-      // If DAC values are 0 (negative rail) as loaded
-      if (!dac_vals_ready) begin
-        // Either sample in a pair (in 8ch write)
-        if (read_next_dac_val_pair && next_cmd_ready 
-            && (cmd_word[15:0] == 16'hFFFF || cmd_word[31:16] == 16'hFFFF)) dac_val_oob <= 1'b1;
-        // Single sample in the single-channel write
-        else if (do_next_cmd && command == CMD_DAC_WR_CH && cmd_word[15:0] == 16'hFFFF) dac_val_oob <= 1'b1;
-      // OR if calibrated DAC value is out of bounds
-      end else if (dac_vals_ready && (first_dac_val_cal_signed_oob || second_dac_val_cal_signed_oob)) dac_val_oob <= 1'b1;
+    else begin // Set out of bounds flag if either calibrated values are out of bounds when DAC values are ready:
+      if (dac_vals_ready && (first_dac_val_cal_signed_oob || second_dac_val_cal_signed_oob)) dac_val_oob <= 1'b1;
     end
   end
 
@@ -431,7 +432,7 @@ module ad5676_dac_ctrl #(
 
   //// ---- DAC word sequencing
   // DAC channel count status
-  assign last_dac_channel = (dac_channel == 3'd7); // Last channel is when all bits are set
+  assign last_dac_channel = ((state == S_DAC_WR || state == S_SET_MID) && dac_channel == 3'd7) || (state == S_DAC_WR_CH); // Last channel is when in DAC_WR state and channel is 7, or if doing a single-channel write
   assign second_dac_channel_of_pair = (dac_channel[0] == 1'b1); // Even channel is when the least significant bit is set (off by 1)
   assign dac_spi_cmd_done = ((state == S_DAC_WR)
                              || (state == S_DAC_WR_CH)
@@ -454,12 +455,7 @@ module ad5676_dac_ctrl #(
     else read_next_dac_val_pair <= 1'b0;
   end
   // DAC write done
-  always @(posedge clk) begin
-    if (!resetn || state == S_ERROR) dac_wr_done <= 1'b0;
-    else if ((state == S_DAC_WR || state == S_SET_MID) && dac_spi_cmd_done && last_dac_channel) dac_wr_done <= 1'b1; // Ready when all channels are written
-    else if (state == S_DAC_WR_CH && dac_spi_cmd_done) dac_wr_done <= 1'b1; // Ready when single channel is written
-    else dac_wr_done <= 1'b0; // Not ready otherwise
-  end
+  assign dac_wr_done = last_dac_channel && dac_spi_cmd_done;
   // DAC channel index
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) dac_channel <= 3'd0;
@@ -472,7 +468,7 @@ module ad5676_dac_ctrl #(
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) begin
       first_dac_val_signed <= 16'd0;
-      first_dac_val_cal_signed <= 17'd0;
+      first_dac_val_cal_signed <= 17'sd0;
       second_dac_val_signed <= 16'd0;
       second_dac_val_cal_signed <= 17'd0;
       abs_dac_val[0] <= 15'd0;
@@ -488,20 +484,14 @@ module ad5676_dac_ctrl #(
       if (!dac_vals_ready) begin
         // Load DAC values in pairs when doing a full 8-channel write
         if (read_next_dac_val_pair && next_cmd_ready) begin
-          // Reject DAC value of 0xFFFF
-          if (!(cmd_word[15:0] == 16'hFFFF || cmd_word[31:16] == 16'hFFFF))  begin
-            first_dac_val_cal_signed <= $signed({cmd_word[15], cmd_word[15:0]}) + $signed({cal_val[dac_channel][15], cal_val[dac_channel]}); // Add calibration to first DAC value
-            second_dac_val_cal_signed <= $signed({cmd_word[31], cmd_word[31:16]}) + $signed({cal_val[dac_channel + 1][15], cal_val[dac_channel + 1]}); // Add calibration to second DAC value
-            dac_vals_ready <= 1'b1; // Indicate that DAC values have been loaded
-          end
+          first_dac_val_cal_signed <= $signed({cmd_word[15], cmd_word[15:0]}) + $signed({cal_val[dac_channel][15], cal_val[dac_channel]}); // Add calibration to first DAC value
+          second_dac_val_cal_signed <= $signed({cmd_word[31], cmd_word[31:16]}) + $signed({cal_val[dac_channel + 1][15], cal_val[dac_channel + 1]}); // Add calibration to second DAC value
+          dac_vals_ready <= 1'b1; // Indicate that DAC values have been loaded
         // Load a single value from the command word for single-channel write
         end else if (do_next_cmd && command == CMD_DAC_WR_CH) begin
-          // Reject DAC value of 0xFFFF
-          if (cmd_word[15:0] != 16'hFFFF) begin
-            first_dac_val_cal_signed <= $signed({cmd_word[15], cmd_word[15:0]}) + $signed({cal_val[dac_channel][15], cal_val[dac_channel]}); // Add calibration to first DAC value
-            second_dac_val_cal_signed <= 17'd0; // No second DAC value
-            dac_vals_ready <= 1'b1; // Indicate that DAC value has been loaded
-          end
+          first_dac_val_cal_signed <= $signed({cmd_word[15], cmd_word[15:0]}) + $signed({cal_val[dac_channel][15], cal_val[dac_channel]}); // Add calibration to first DAC value
+          second_dac_val_cal_signed <= 17'd0; // No second DAC value
+          dac_vals_ready <= 1'b1; // Indicate that DAC value has been loaded
         end
       end else begin
         // Absolute value storage
