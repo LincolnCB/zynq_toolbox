@@ -17,6 +17,12 @@ module ads816x_adc_timing_calc #(
   output reg         lock_viol           // Error if frequency changes during calc
 );
 
+  // Validate parameters
+  initial begin
+    if (ADS_MODEL_ID != 8 && ADS_MODEL_ID != 7 && ADS_MODEL_ID != 6)
+      $error("Invalid value for ADS_MODEL_ID parameter: %d. Must be 8 for ADS8168, 7 for ADS8167, or 6 for ADS8166.", ADS_MODEL_ID);
+  end
+
   ///////////////////////////////////////////////////////////////////////////////
   // Constants
   ///////////////////////////////////////////////////////////////////////////////

@@ -1,7 +1,8 @@
 `timescale 1 ns / 1 ps
 
 module ad5676_dac_ctrl #(
-  parameter ABS_CAL_MAX = 16'd4096 // Maximum absolute calibration value
+  parameter ABS_CAL_MAX = 4096,
+  parameter ABS_DAC_MAX = 32767
 )(
   input  wire        clk,
   input  wire        resetn,
@@ -46,6 +47,17 @@ module ad5676_dac_ctrl #(
   input  wire        miso,
   output reg         ldac
 );
+
+  // Validate parameters
+  initial begin
+    if (ABS_CAL_MAX < 0 || ABS_CAL_MAX > 32767)
+      $error("Invalid value for ABS_CAL_MAX parameter: %d. Must be between 0 and 32767.", ABS_CAL_MAX);
+    if (ABS_DAC_MAX < 0 || ABS_DAC_MAX > 32767)
+      $error("Invalid value for ABS_DAC_MAX parameter: %d. Must be between 0 and 32767.", ABS_DAC_MAX);
+  end
+
+  localparam signed [15:0] ABS_CAL_MAX_SIGNED = ABS_CAL_MAX;
+  localparam signed [16:0] ABS_DAC_MAX_SIGNED = ABS_DAC_MAX;
 
   ///////////////////////////////////////////////////////////////////////////////
   // SPI Timing Parameters
@@ -129,6 +141,7 @@ module ad5676_dac_ctrl #(
   wire        error;
   // Command word toggled bits
   reg         do_ldac;
+  reg         ldac_unsafe;
   reg         wait_for_trig;
   wire        trig_wait_done;
   wire        delay_wait_done;
@@ -204,7 +217,7 @@ module ad5676_dac_ctrl #(
   assign cmd_buf_rd_en = (state != S_ERROR) && next_cmd_ready && (read_next_dac_val_pair || cmd_done || cancel_wait);
   // Command bits processing
   always @(posedge clk) begin
-    if (!resetn || state == S_ERROR) begin
+    if (!resetn || state == S_ERROR || cancel_wait) begin
       do_ldac <= 1'b0;
       wait_for_trig <= 1'b0;
       expect_next <= 1'b0;
@@ -216,6 +229,7 @@ module ad5676_dac_ctrl #(
         expect_next <= cmd_word[CONT_BIT];
       // For immediate write commands, always set do_ldac to 1, wait_for_trig to 1, and expect_next to 0
       end else if (command == CMD_DAC_WR_CH || command == CMD_ZERO) begin
+        do_ldac <= 1'b1;
         wait_for_trig <= 1'b1;
         expect_next <= 1'b0;
       // Otherwise set flags to 0
@@ -229,7 +243,8 @@ module ad5676_dac_ctrl #(
 
 
   //// ---- State machine transitions
-  // Allow a cancel command to cancel a delay or trigger wait
+  // Allow a cancel command to cancel a delay or trigger wait:
+  //   Skips the trigger counter or delay timer to 0 next cycle, ending the wait immediately
   assign cancel_wait =  (state == S_DELAY || state == S_TRIG_WAIT || (state == S_DAC_WR && dac_wr_done))
                         && next_cmd_ready 
                         && command == CMD_CANCEL;
@@ -267,7 +282,6 @@ module ad5676_dac_ctrl #(
     else if (state == S_TEST_WR && dac_spi_cmd_done)            state <= S_REQ_RD; // Transition to REQ_RD after writing test value
     else if (state == S_REQ_RD && dac_spi_cmd_done)             state <= S_TEST_RD; // Transition to TEST_RD after requesting read
     else if (state == S_TEST_RD && ~n_miso_data_ready_mosi_clk) state <= boot_readback_match ? S_SET_MID : S_ERROR; // Transition to SET_MID if readback matches, otherwise error
-    else if (cancel_wait)                                       state <= S_IDLE; // Cancel the current wait state if cancel command is received
     else if (cmd_done)                                          state <= next_cmd_state; // Transition to state of next command if command is finished (allows skipping wait state if no wait is needed)
     else if (state == S_DAC_WR && dac_wr_done)                  state <= wait_for_trig ? S_TRIG_WAIT : S_DELAY; // If the DAC write is done, go to the proper wait state
   end
@@ -284,7 +298,9 @@ module ad5676_dac_ctrl #(
 
 
   //// ---- Delay timer
+  // CANCEL command can skip to the end of the wait
   always @(posedge clk) begin
+    // Reset delay timer on reset, error, or canceling a wait
     if (!resetn || state == S_ERROR || cancel_wait) delay_timer <= 25'd0;
     // If the next command is a DAC write or no-op with a delay wait, load the delay timer from command word
     else if (do_next_cmd 
@@ -301,6 +317,7 @@ module ad5676_dac_ctrl #(
 
 
   //// ---- Trigger counter
+  // CANCEL command can skip to the end of the wait
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR || cancel_wait) trigger_counter <= 25'd0;
     // If the next command is a DAC write or no-op with a trigger wait, load the trigger counter from command word
@@ -321,7 +338,7 @@ module ad5676_dac_ctrl #(
   assign error = (state == S_TEST_RD && ~n_miso_data_ready_mosi_clk && ~boot_readback_match) // Readback mismatch (boot fail)
                  || (state != S_TRIG_WAIT && trigger && trigger_counter <= 1) // Unexpected final trigger
                  || (state == S_DAC_WR && !dac_wr_done && !wait_for_trig && delay_wait_done) // Delay too short
-                 || ((state == S_DAC_WR || state == S_DAC_WR_CH) && ldac_shared && !ldac) // LDAC misalignment
+                 || (ldac_unsafe && ldac_shared) // LDAC misalignment
                  || (do_next_cmd && next_cmd_state == S_ERROR) // Bad command
                  || (((cmd_done && expect_next) || read_next_dac_val_pair) && !next_cmd_ready) // Command buffer underflow
                  || (try_data_write && data_buf_full) // Data buffer overflow
@@ -350,7 +367,7 @@ module ad5676_dac_ctrl #(
   // LDAC misalignment
   always @(posedge clk) begin
     if (!resetn) ldac_misalign <= 1'b0;
-    else if ((state == S_DAC_WR || state == S_DAC_WR_CH) && ldac_shared && !ldac) ldac_misalign <= 1'b1; // LDAC misalignment if LDAC is shared and another controller is writing to DAC
+    else if (ldac_unsafe && ldac_shared) ldac_misalign <= 1'b1; // LDAC misalignment if LDAC is shared and another controller is writing to DAC
   end
   // Bad command
   always @(posedge clk) begin
@@ -368,8 +385,8 @@ module ad5676_dac_ctrl #(
     else if (try_data_write && data_buf_full) data_buf_overflow <= 1'b1;
   end
   // DAC val out of bounds
-  assign first_dac_val_cal_signed_oob = (first_dac_val_cal_signed < -17'sd32767 || first_dac_val_cal_signed > 17'sd32767);
-  assign second_dac_val_cal_signed_oob = (second_dac_val_cal_signed < -17'sd32767 || second_dac_val_cal_signed > 17'sd32767);
+  assign first_dac_val_cal_signed_oob = (first_dac_val_cal_signed < -$signed(ABS_DAC_MAX_SIGNED) || first_dac_val_cal_signed > $signed(ABS_DAC_MAX_SIGNED));
+  assign second_dac_val_cal_signed_oob = (second_dac_val_cal_signed < -$signed(ABS_DAC_MAX_SIGNED) || second_dac_val_cal_signed > $signed(ABS_DAC_MAX_SIGNED));
   always @(posedge clk) begin
     if (!resetn) dac_val_oob <= 1'b0; // Reset out of bounds flag on reset
     else begin // Set out of bounds flag if either calibrated values are out of bounds when DAC values are ready:
@@ -382,10 +399,19 @@ module ad5676_dac_ctrl #(
   // LDAC activation
   always @(posedge clk) begin
     if (!resetn || state == S_ERROR) ldac <= 1'b0;
-    else if (do_ldac && cmd_done && !cancel_wait) begin
+    else if (do_ldac && cmd_done) begin
       ldac <= 1'b1; // If do_ldac is set, activate LDAC at the end of the command (except for IDLE)
     end
     else ldac <= 1'b0; // Otherwise, deactivate LDAC
+  end
+  // LDAC unsafe flag (indicates when an external LDAC pulse could cause misalignment)
+  always @(posedge clk) begin
+    if (!resetn || state == S_ERROR) ldac_unsafe <= 1'b0;
+    if ((state == S_DAC_WR || state == S_DAC_WR_CH) && !ldac_unsafe) begin
+      ldac_unsafe <= 1'b1; // LDAC becomes unsafe as soon as a DAC write begins
+    end else if (ldac_unsafe && do_ldac && cmd_done) begin
+      ldac_unsafe <= 1'b0; // LDAC becomes safe again as an LDAC pulse is triggered by a command
+    end
   end
   // Update absolute DAC values concatenation
   always @(posedge clk) begin
@@ -413,7 +439,7 @@ module ad5676_dac_ctrl #(
       cal_val[7] <= cal_init_val;
       cal_oob <= 1'b0;
     end else if (do_next_cmd && command == CMD_SET_CAL) begin
-      if ($signed(cmd_word[15:0]) <= $signed(ABS_CAL_MAX) && $signed(cmd_word[15:0]) >= -$signed(ABS_CAL_MAX)) begin
+      if ($signed(cmd_word[15:0]) <= $signed(ABS_CAL_MAX_SIGNED) && $signed(cmd_word[15:0]) >= -$signed(ABS_CAL_MAX_SIGNED)) begin
         cal_val[cmd_word[18:16]] <= cmd_word[15:0]; // Set calibration value for the channel if within bounds
       end else begin
         cal_oob <= 1'b1; // Set out-of-bounds flag if calibration value is out of range

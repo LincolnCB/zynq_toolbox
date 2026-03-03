@@ -1,7 +1,7 @@
 `timescale 1 ns / 1 ps
 
 module trigger_core #(
-  parameter TRIGGER_LOCKOUT_DEFAULT = 10000000 // Default lockout period in clock cycles (e.g., 10000000 at 20 MHz SPI clock -> 0.5 seconds)
+  parameter unsigned TRIGGER_LOCKOUT_DEFAULT = 10000000 // Default lockout period in clock cycles (e.g., 10000000 at 20 MHz SPI clock -> 0.5 seconds)
 ) (
   input  wire        clk,
   input  wire        resetn,
@@ -28,6 +28,15 @@ module trigger_core #(
   output reg         data_buf_overflow,
   output reg         bad_cmd
 );
+
+  // Trigger lockout minimum
+  localparam [27:0] TRIGGER_LOCKOUT_MIN = 4;
+  // Validate parameters
+  initial begin
+    if (TRIGGER_LOCKOUT_DEFAULT < TRIGGER_LOCKOUT_MIN || TRIGGER_LOCKOUT_DEFAULT > 28'hFFFFFFF)
+      $error("Invalid value for TRIGGER_LOCKOUT_DEFAULT parameter: %d. Must be between %d and %d.", TRIGGER_LOCKOUT_DEFAULT, TRIGGER_LOCKOUT_MIN, 28'hFFFFFFF);
+  end
+
   // Command encoding
   localparam CMD_SYNC_CH         = 3'd1;
   localparam CMD_SET_LOCKOUT     = 3'd2;
@@ -44,9 +53,6 @@ module trigger_core #(
   localparam S_EXPECT_TRIG = 3'd3;
   localparam S_DELAY       = 3'd4;
   localparam S_ERROR       = 3'd5;
-
-  // Trigger lockout minimum
-  localparam TRIGGER_LOCKOUT_MIN = 4;
 
   // State machine info
   reg  [ 2:0] state;

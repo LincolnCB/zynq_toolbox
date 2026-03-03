@@ -77,6 +77,20 @@ module hw_manager #(
   output  reg           ps_interrupt       // Interrupt signal
 );
 
+  // Validate parameters
+  initial begin
+    if (SHUTDOWN_FORCE_DELAY < 0)
+      $error("Invalid value for SHUTDOWN_FORCE_DELAY parameter: %d. Must be non-negative.", SHUTDOWN_FORCE_DELAY);
+    if (SHUTDOWN_RESET_PULSE < 0)
+      $error("Invalid value for SHUTDOWN_RESET_PULSE parameter: %d. Must be non-negative.", SHUTDOWN_RESET_PULSE);
+    if (SHUTDOWN_RESET_DELAY < 0)
+      $error("Invalid value for SHUTDOWN_RESET_DELAY parameter: %d. Must be non-negative.", SHUTDOWN_RESET_DELAY);
+    if (SPI_RESET_WAIT < 0)
+      $error("Invalid value for SPI_RESET_WAIT parameter: %d. Must be non-negative.", SPI_RESET_WAIT);
+    if (SPI_START_WAIT < 0)
+      $error("Invalid value for SPI_START_WAIT parameter: %d. Must be non-negative.", SPI_START_WAIT);
+  end
+
   // Internal signals
   reg [ 3:0] state;       // State machine state
   reg [31:0] timer;       // Timer for various timeouts

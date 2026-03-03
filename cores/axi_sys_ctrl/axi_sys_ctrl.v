@@ -10,8 +10,7 @@ module axi_sys_ctrl #
   parameter integer DEBUG = 0, // Default to no debug
   parameter integer MOSI_SCK_POL_DEFAULT = 0, // Default to 0 MOSI SCK polarity (don't invert)
   parameter integer MISO_SCK_POL_DEFAULT = 1, // Default to 1 MISO SCK polarity (invert)
-  parameter integer DAC_CAL_INIT_DEFAULT = 0, // Default calibration value for DAC (in 2's complement)
-  parameter ABS_CAL_MAX = 16'd4096 // Maximum absolute calibration value (calibration value is signed)
+  parameter integer DAC_CAL_INIT_DEFAULT = 0  // Default calibration value for DAC (in 2's complement)
 )
 (
   // System signals
@@ -102,50 +101,51 @@ module axi_sys_ctrl #
   localparam integer DAC_CAL_INIT_WIDTH = 16;
 
   // Localparams for MIN/MAX values
-  localparam integer CTRL_EN_MAX                 = {{CTRL_EN_WIDTH{1'b1}}};
-  localparam integer POW_EN_MAX                  = {{POW_EN_WIDTH{1'b1}}};
-  localparam integer CMD_BUF_RESET_MAX           = {{CMD_BUF_RESET_WIDTH{1'b1}}};
-  localparam integer DATA_BUF_RESET_MAX          = {{DATA_BUF_RESET_WIDTH{1'b1}}};
-  localparam integer INTEG_THRESHOLD_AVERAGE_MIN = {{(INTEG_THRESHOLD_AVERAGE_WIDTH-1){1'b0}}, 1'b1}; // Minimum is 1
-  localparam integer INTEG_THRESHOLD_AVERAGE_MAX = {{INTEG_THRESHOLD_AVERAGE_WIDTH{1'b1}}};
-  localparam integer INTEG_WINDOW_MIN            = 2048;
-  localparam integer INTEG_WINDOW_MAX            = {{INTEG_WINDOW_WIDTH{1'b1}}};
-  localparam integer INTEG_EN_MAX                = {{INTEG_EN_WIDTH{1'b1}}};
-  localparam integer BOOT_TEST_SKIP_MAX          = {{BOOT_TEST_SKIP_WIDTH{1'b1}}};
-  localparam integer DEBUG_MAX                   = {{DEBUG_WIDTH{1'b1}}};
-  localparam integer MOSI_SCK_POL_MAX            = {{MOSI_SCK_POL_WIDTH{1'b1}}};
-  localparam integer MISO_SCK_POL_MAX            = {{MISO_SCK_POL_WIDTH{1'b1}}};
-  localparam integer DAC_CAL_INIT_MIN            = -$signed(ABS_CAL_MAX);
-  localparam integer DAC_CAL_INIT_MAX            = $signed(ABS_CAL_MAX);
+  localparam [CTRL_EN_WIDTH-1:0] CTRL_EN_MAX                                 = {CTRL_EN_WIDTH{1'b1}};
+  localparam [POW_EN_WIDTH-1:0] POW_EN_MAX                                   = {POW_EN_WIDTH{1'b1}};
+  localparam [CMD_BUF_RESET_WIDTH-1:0] CMD_BUF_RESET_MAX                     = {CMD_BUF_RESET_WIDTH{1'b1}};
+  localparam [DATA_BUF_RESET_WIDTH-1:0] DATA_BUF_RESET_MAX                   = {DATA_BUF_RESET_WIDTH{1'b1}};
+  localparam [INTEG_THRESHOLD_AVERAGE_WIDTH-1:0] INTEG_THRESHOLD_AVERAGE_MIN = {{(INTEG_THRESHOLD_AVERAGE_WIDTH-1){1'b0}}, 1'b1}; // Minimum is 1
+  localparam [INTEG_THRESHOLD_AVERAGE_WIDTH-1:0] INTEG_THRESHOLD_AVERAGE_MAX = {INTEG_THRESHOLD_AVERAGE_WIDTH{1'b1}};
+  localparam [INTEG_WINDOW_WIDTH-1:0] INTEG_WINDOW_MIN                       = 2048;
+  localparam [INTEG_WINDOW_WIDTH-1:0] INTEG_WINDOW_MAX                       = {INTEG_WINDOW_WIDTH{1'b1}};
+  localparam [INTEG_EN_WIDTH-1:0] INTEG_EN_MAX                               = {INTEG_EN_WIDTH{1'b1}};
+  localparam [BOOT_TEST_SKIP_WIDTH-1:0] BOOT_TEST_SKIP_MAX                   = {BOOT_TEST_SKIP_WIDTH{1'b1}};
+  localparam [DEBUG_WIDTH-1:0] DEBUG_MAX                                     = {DEBUG_WIDTH{1'b1}};
+  localparam [MOSI_SCK_POL_WIDTH-1:0] MOSI_SCK_POL_MAX                       = {MOSI_SCK_POL_WIDTH{1'b1}};
+  localparam [MISO_SCK_POL_WIDTH-1:0] MISO_SCK_POL_MAX                       = {MISO_SCK_POL_WIDTH{1'b1}};
+  localparam signed [DAC_CAL_INIT_WIDTH-1:0] DAC_CAL_INIT_MIN                = {1'b1, {(DAC_CAL_INIT_WIDTH-1){1'b0}}}; // Minimum in 2's complement
+  localparam signed [DAC_CAL_INIT_WIDTH-1:0] DAC_CAL_INIT_MAX                = {1'b0, {(DAC_CAL_INIT_WIDTH-1){1'b1}}}; // Maximum in 2's complement
 
-  // Local capped default values
-  localparam integer INTEG_THRESHOLD_AVERAGE_DEFAULT_CAPPED = 
-    (INTEG_THRESHOLD_AVERAGE_DEFAULT < INTEG_THRESHOLD_AVERAGE_MIN) ? INTEG_THRESHOLD_AVERAGE_MIN :
-    (INTEG_THRESHOLD_AVERAGE_DEFAULT > INTEG_THRESHOLD_AVERAGE_MAX) ? INTEG_THRESHOLD_AVERAGE_MAX :
-    INTEG_THRESHOLD_AVERAGE_DEFAULT;
-  localparam integer INTEG_WINDOW_DEFAULT_CAPPED = 
-    (INTEG_WINDOW_DEFAULT < INTEG_WINDOW_MIN) ? INTEG_WINDOW_MIN :
-    (INTEG_WINDOW_DEFAULT > INTEG_WINDOW_MAX) ? INTEG_WINDOW_MAX :
-    INTEG_WINDOW_DEFAULT;
-  localparam integer INTEG_EN_DEFAULT_CAPPED = 
-    (INTEG_EN_DEFAULT > INTEG_EN_MAX) ? INTEG_EN_MAX :
-    INTEG_EN_DEFAULT;
-  localparam integer BOOT_TEST_SKIP_DEFAULT_CAPPED =
-    (BOOT_TEST_SKIP_DEFAULT > BOOT_TEST_SKIP_MAX) ? BOOT_TEST_SKIP_MAX :
-    BOOT_TEST_SKIP_DEFAULT;
-  localparam integer DEBUG_DEFAULT_CAPPED =
-    (DEBUG > DEBUG_MAX) ? DEBUG_MAX :
-    DEBUG;
-  localparam integer MOSI_SCK_POL_DEFAULT_CAPPED =
-    (MOSI_SCK_POL_DEFAULT > MOSI_SCK_POL_MAX) ? MOSI_SCK_POL_MAX :
-    MOSI_SCK_POL_DEFAULT;
-  localparam integer MISO_SCK_POL_DEFAULT_CAPPED =
-    (MISO_SCK_POL_DEFAULT > MISO_SCK_POL_MAX) ? MISO_SCK_POL_MAX :
-    MISO_SCK_POL_DEFAULT;
-  localparam integer DAC_CAL_INIT_DEFAULT_CAPPED =
-    (DAC_CAL_INIT_DEFAULT < DAC_CAL_INIT_MIN) ? DAC_CAL_INIT_MIN :
-    (DAC_CAL_INIT_DEFAULT > DAC_CAL_INIT_MAX) ? DAC_CAL_INIT_MAX :
-    DAC_CAL_INIT_DEFAULT;
+  // Validate parameters
+  initial begin
+    if(INTEG_THRESHOLD_AVERAGE_DEFAULT < INTEG_THRESHOLD_AVERAGE_MIN || INTEG_THRESHOLD_AVERAGE_DEFAULT > INTEG_THRESHOLD_AVERAGE_MAX)
+      $error("Invalid value for INTEG_THRESHOLD_AVERAGE_DEFAULT parameter: %d. Must be between %d and %d.", INTEG_THRESHOLD_AVERAGE_DEFAULT, INTEG_THRESHOLD_AVERAGE_MIN, INTEG_THRESHOLD_AVERAGE_MAX);
+    if(INTEG_WINDOW_DEFAULT < INTEG_WINDOW_MIN || INTEG_WINDOW_DEFAULT > INTEG_WINDOW_MAX)
+      $error("Invalid value for INTEG_WINDOW_DEFAULT parameter: %d. Must be between %d and %d.", INTEG_WINDOW_DEFAULT, INTEG_WINDOW_MIN, INTEG_WINDOW_MAX);
+    if(INTEG_EN_DEFAULT < 0 || INTEG_EN_DEFAULT > INTEG_EN_MAX)
+      $error("Invalid value for INTEG_EN_DEFAULT parameter: %d. Must be between 0 and %d.", INTEG_EN_DEFAULT, INTEG_EN_MAX);
+    if(BOOT_TEST_SKIP_DEFAULT < 0 || BOOT_TEST_SKIP_DEFAULT > BOOT_TEST_SKIP_MAX)
+      $error("Invalid value for BOOT_TEST_SKIP_DEFAULT parameter: %d. Must be between 0 and %d.", BOOT_TEST_SKIP_DEFAULT, BOOT_TEST_SKIP_MAX);
+    if(DEBUG < 0 || DEBUG > DEBUG_MAX)
+      $error("Invalid value for DEBUG parameter: %d. Must be between 0 and %d.", DEBUG, DEBUG_MAX);
+    if(MOSI_SCK_POL_DEFAULT < 0 || MOSI_SCK_POL_DEFAULT > MOSI_SCK_POL_MAX)
+      $error("Invalid value for MOSI_SCK_POL_DEFAULT parameter: %d. Must be between 0 and %d.", MOSI_SCK_POL_DEFAULT, MOSI_SCK_POL_MAX);
+    if(MISO_SCK_POL_DEFAULT < 0 || MISO_SCK_POL_DEFAULT > MISO_SCK_POL_MAX)
+      $error("Invalid value for MISO_SCK_POL_DEFAULT parameter: %d. Must be between 0 and %d.", MISO_SCK_POL_DEFAULT, MISO_SCK_POL_MAX);
+    if(DAC_CAL_INIT_DEFAULT < DAC_CAL_INIT_MIN || DAC_CAL_INIT_DEFAULT > DAC_CAL_INIT_MAX)
+      $error("Invalid value for DAC_CAL_INIT_DEFAULT parameter: %d. Must be between %d and %d.", DAC_CAL_INIT_DEFAULT, DAC_CAL_INIT_MIN, DAC_CAL_INIT_MAX);
+  end
+
+  // Local default values with explicit widths
+  localparam [INTEG_THRESHOLD_AVERAGE_WIDTH-1:0] INTEG_THRESHOLD_AVERAGE_DEFAULT_W = INTEG_THRESHOLD_AVERAGE_DEFAULT;
+  localparam [INTEG_WINDOW_WIDTH-1:0] INTEG_WINDOW_DEFAULT_W                       = INTEG_WINDOW_DEFAULT;
+  localparam [INTEG_EN_WIDTH-1:0] INTEG_EN_DEFAULT_W                               = INTEG_EN_DEFAULT;
+  localparam [BOOT_TEST_SKIP_WIDTH-1:0] BOOT_TEST_SKIP_DEFAULT_W                   = BOOT_TEST_SKIP_DEFAULT;
+  localparam [DEBUG_WIDTH-1:0] DEBUG_DEFAULT_W                                     = DEBUG;
+  localparam [MOSI_SCK_POL_WIDTH-1:0] MOSI_SCK_POL_DEFAULT_W                       = MOSI_SCK_POL_DEFAULT;
+  localparam [MISO_SCK_POL_WIDTH-1:0] MISO_SCK_POL_DEFAULT_W                       = MISO_SCK_POL_DEFAULT;
+  localparam signed [DAC_CAL_INIT_WIDTH-1:0] DAC_CAL_INIT_DEFAULT_W                = DAC_CAL_INIT_DEFAULT;
 
   // Local parameters for AXI configuration
   localparam integer CFG_DATA_WIDTH = 1024;
@@ -213,14 +213,14 @@ module axi_sys_ctrl #
   assign int_initial_data_wire[POW_EN_32_OFFSET*32+POW_EN_WIDTH-1:POW_EN_32_OFFSET*32] = {POW_EN_WIDTH{1'b0}}; // Power enable defaults to 0
   assign int_initial_data_wire[CMD_BUF_RESET_32_OFFSET*32+CMD_BUF_RESET_WIDTH-1-:CMD_BUF_RESET_WIDTH] = {CMD_BUF_RESET_WIDTH{1'b0}}; // Command buffer reset defaults to 0
   assign int_initial_data_wire[DATA_BUF_RESET_32_OFFSET*32+DATA_BUF_RESET_WIDTH-1-:DATA_BUF_RESET_WIDTH] = {DATA_BUF_RESET_WIDTH{1'b0}}; // Data buffer reset defaults to 0
-  assign int_initial_data_wire[INTEG_THRESHOLD_AVERAGE_32_OFFSET*32+INTEG_THRESHOLD_AVERAGE_WIDTH-1-:INTEG_THRESHOLD_AVERAGE_WIDTH] = INTEG_THRESHOLD_AVERAGE_DEFAULT_CAPPED[INTEG_THRESHOLD_AVERAGE_WIDTH-1:0];
-  assign int_initial_data_wire[INTEG_WINDOW_32_OFFSET*32+INTEG_WINDOW_WIDTH-1-:INTEG_WINDOW_WIDTH] = INTEG_WINDOW_DEFAULT_CAPPED[INTEG_WINDOW_WIDTH-1:0];
-  assign int_initial_data_wire[INTEG_EN_32_OFFSET*32+INTEG_EN_WIDTH-1:INTEG_EN_32_OFFSET*32] = INTEG_EN_DEFAULT_CAPPED[INTEG_EN_WIDTH-1:0];
-  assign int_initial_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1-:BOOT_TEST_SKIP_WIDTH] = BOOT_TEST_SKIP_DEFAULT_CAPPED[BOOT_TEST_SKIP_WIDTH-1:0];
-  assign int_initial_data_wire[DEBUG_32_OFFSET*32+DEBUG_WIDTH-1-:DEBUG_WIDTH] = DEBUG_DEFAULT_CAPPED[DEBUG_WIDTH-1:0];
-  assign int_initial_data_wire[MOSI_SCK_POL_32_OFFSET*32+MOSI_SCK_POL_WIDTH-1:MOSI_SCK_POL_32_OFFSET*32] = MOSI_SCK_POL_DEFAULT_CAPPED[MOSI_SCK_POL_WIDTH-1:0];
-  assign int_initial_data_wire[MISO_SCK_POL_32_OFFSET*32+MISO_SCK_POL_WIDTH-1:MISO_SCK_POL_32_OFFSET*32] = MISO_SCK_POL_DEFAULT_CAPPED[MISO_SCK_POL_WIDTH-1:0];
-  assign int_initial_data_wire[DAC_CAL_INIT_32_OFFSET*32+DAC_CAL_INIT_WIDTH-1-:DAC_CAL_INIT_WIDTH] = DAC_CAL_INIT_DEFAULT_CAPPED[DAC_CAL_INIT_WIDTH-1:0];
+  assign int_initial_data_wire[INTEG_THRESHOLD_AVERAGE_32_OFFSET*32+INTEG_THRESHOLD_AVERAGE_WIDTH-1-:INTEG_THRESHOLD_AVERAGE_WIDTH] = INTEG_THRESHOLD_AVERAGE_DEFAULT_W;
+  assign int_initial_data_wire[INTEG_WINDOW_32_OFFSET*32+INTEG_WINDOW_WIDTH-1-:INTEG_WINDOW_WIDTH] = INTEG_WINDOW_DEFAULT_W;
+  assign int_initial_data_wire[INTEG_EN_32_OFFSET*32+INTEG_EN_WIDTH-1:INTEG_EN_32_OFFSET*32] = INTEG_EN_DEFAULT_W;
+  assign int_initial_data_wire[BOOT_TEST_SKIP_32_OFFSET*32+BOOT_TEST_SKIP_WIDTH-1-:BOOT_TEST_SKIP_WIDTH] = BOOT_TEST_SKIP_DEFAULT_W;
+  assign int_initial_data_wire[DEBUG_32_OFFSET*32+DEBUG_WIDTH-1-:DEBUG_WIDTH] = DEBUG_DEFAULT_W;
+  assign int_initial_data_wire[MOSI_SCK_POL_32_OFFSET*32+MOSI_SCK_POL_WIDTH-1:MOSI_SCK_POL_32_OFFSET*32] = MOSI_SCK_POL_DEFAULT_W;
+  assign int_initial_data_wire[MISO_SCK_POL_32_OFFSET*32+MISO_SCK_POL_WIDTH-1:MISO_SCK_POL_32_OFFSET*32] = MISO_SCK_POL_DEFAULT_W;
+  assign int_initial_data_wire[DAC_CAL_INIT_32_OFFSET*32+DAC_CAL_INIT_WIDTH-1-:DAC_CAL_INIT_WIDTH] = DAC_CAL_INIT_DEFAULT_W;
 
   // Out of bounds checks. Use the whole word for the check to error on truncation
   assign ctrl_en_oob = $unsigned(int_data_wire[CTRL_EN_32_OFFSET*32+CTRL_EN_WIDTH-1:CTRL_EN_32_OFFSET*32]) > CTRL_EN_MAX;
@@ -283,14 +283,14 @@ module axi_sys_ctrl #
 
       cmd_buf_reset <= {CMD_BUF_RESET_WIDTH{1'b1}}; // Command buffer reset is high if reset is asserted, but defaults to 0 otherwise
       data_buf_reset <= {DATA_BUF_RESET_WIDTH{1'b1}}; // Data buffer reset is high if reset is asserted, but defaults to 0 otherwise
-      integ_thresh_avg <= INTEG_THRESHOLD_AVERAGE_DEFAULT_CAPPED;
-      integ_window <= INTEG_WINDOW_DEFAULT_CAPPED;
-      integ_en <= INTEG_EN_DEFAULT_CAPPED;
-      boot_test_skip <= BOOT_TEST_SKIP_DEFAULT_CAPPED;
-      debug <= DEBUG_DEFAULT_CAPPED;
-      mosi_sck_pol <= MOSI_SCK_POL_DEFAULT_CAPPED;
-      miso_sck_pol <= MISO_SCK_POL_DEFAULT_CAPPED;
-      dac_cal_init <= DAC_CAL_INIT_DEFAULT_CAPPED;
+      integ_thresh_avg <= INTEG_THRESHOLD_AVERAGE_DEFAULT_W;
+      integ_window <= INTEG_WINDOW_DEFAULT_W;
+      integ_en <= INTEG_EN_DEFAULT_W;
+      boot_test_skip <= BOOT_TEST_SKIP_DEFAULT_W;
+      debug <= DEBUG_DEFAULT_W;
+      mosi_sck_pol <= MOSI_SCK_POL_DEFAULT_W;
+      miso_sck_pol <= MISO_SCK_POL_DEFAULT_W;
+      dac_cal_init <= DAC_CAL_INIT_DEFAULT_W;
 
       locked <= 1'b0;
       lock_viol <= 1'b0;
