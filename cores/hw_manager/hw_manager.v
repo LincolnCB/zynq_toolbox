@@ -33,7 +33,7 @@ module hw_manager #(
   input   wire          miso_sck_pol_oob,     // MISO SCK polarity out of bounds
   input   wire          dac_cal_init_oob,     // DAC calibration initial value out of bounds
   // Shutdown sense (per board)
-  input   wire  [ 7:0]  shutdown_sense, // Shutdown sense
+  input   wire  [ 7:0]  shutdown_sense_sts, // Shutdown sense
   // Integrator (per board)
   input   wire  [ 7:0]  over_thresh,      // DAC over threshold
   input   wire  [ 7:0]  thresh_underflow, // DAC threshold core FIFO underflow
@@ -395,7 +395,7 @@ module hw_manager #(
               || mosi_sck_pol_oob
               || miso_sck_pol_oob
               // Shutdown sense
-              || |shutdown_sense
+              || |shutdown_sense_sts
               || !ext_en
               // Integrator threshold core
               || |over_thresh
@@ -434,9 +434,9 @@ module hw_manager #(
             else if (mosi_sck_pol_oob) status_code <= STS_MOSI_SCK_POL_OOB;
             else if (miso_sck_pol_oob) status_code <= STS_MISO_SCK_POL_OOB;
             // Shutdown sense
-            else if (|shutdown_sense) begin
+            else if (|shutdown_sense_sts) begin
               status_code <= STS_SHUTDOWN_SENSE;
-              board_num <= extract_board_num(shutdown_sense);
+              board_num <= extract_board_num(shutdown_sense_sts);
             end
             else if (!ext_en) status_code <= STS_EXT_SHUTDOWN;
             // Integrator threshold core

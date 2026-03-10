@@ -10,7 +10,8 @@ module axi_sys_ctrl #
   parameter integer DEBUG = 0, // Default to no debug
   parameter integer MOSI_SCK_POL_DEFAULT = 0, // Default to 0 MOSI SCK polarity (don't invert)
   parameter integer MISO_SCK_POL_DEFAULT = 1, // Default to 1 MISO SCK polarity (invert)
-  parameter integer DAC_CAL_INIT_DEFAULT = 0  // Default calibration value for DAC (in 2's complement)
+  parameter integer DAC_CAL_INIT_DEFAULT = 0,  // Default calibration value for DAC (in 2's complement)
+  parameter integer DO_DAC_PRE_DELAY = 1 // Default to doing the DAC command at the END of the write delay, instead of the START
 )
 (
   // System signals
@@ -32,6 +33,7 @@ module axi_sys_ctrl #
   output reg                 mosi_sck_pol,
   output reg                 miso_sck_pol,
   output reg  signed [15:0]  dac_cal_init,
+  output reg                 do_dac_pre_delay,
 
   // Configuration bounds
   output wire  ctrl_en_oob,
@@ -46,6 +48,7 @@ module axi_sys_ctrl #
   output wire  mosi_sck_pol_oob,
   output wire  miso_sck_pol_oob,
   output wire  dac_cal_init_oob,
+  output wire  do_dac_pre_delay_oob,
   output reg   lock_viol,
 
   // AXI4-Line subordinate port
@@ -85,6 +88,7 @@ module axi_sys_ctrl #
   localparam integer MOSI_SCK_POL_32_OFFSET            = 9;
   localparam integer MISO_SCK_POL_32_OFFSET            = 10;
   localparam integer DAC_CAL_INIT_32_OFFSET            = 11;
+  localparam integer DO_DAC_PRE_DELAY_32_OFFSET        = 12;
 
   // Localparams for widths
   localparam integer CTRL_EN_WIDTH = 1;
@@ -99,6 +103,7 @@ module axi_sys_ctrl #
   localparam integer MOSI_SCK_POL_WIDTH = 1;
   localparam integer MISO_SCK_POL_WIDTH = 1;
   localparam integer DAC_CAL_INIT_WIDTH = 16;
+  localparam integer DO_DAC_PRE_DELAY_WIDTH = 1;
 
   // Localparams for MIN/MAX values
   localparam [CTRL_EN_WIDTH-1:0] CTRL_EN_MAX                                 = {CTRL_EN_WIDTH{1'b1}};
@@ -116,6 +121,7 @@ module axi_sys_ctrl #
   localparam [MISO_SCK_POL_WIDTH-1:0] MISO_SCK_POL_MAX                       = {MISO_SCK_POL_WIDTH{1'b1}};
   localparam signed [DAC_CAL_INIT_WIDTH-1:0] DAC_CAL_INIT_MIN                = {1'b1, {(DAC_CAL_INIT_WIDTH-1){1'b0}}}; // Minimum in 2's complement
   localparam signed [DAC_CAL_INIT_WIDTH-1:0] DAC_CAL_INIT_MAX                = {1'b0, {(DAC_CAL_INIT_WIDTH-1){1'b1}}}; // Maximum in 2's complement
+  localparam [DO_DAC_PRE_DELAY_WIDTH-1:0] DO_DAC_PRE_DELAY_MAX               = {DO_DAC_PRE_DELAY_WIDTH{1'b1}};
 
   // Validate parameters
   initial begin
@@ -135,6 +141,8 @@ module axi_sys_ctrl #
       $error("Invalid value for MISO_SCK_POL_DEFAULT parameter: %d. Must be between 0 and %d.", MISO_SCK_POL_DEFAULT, MISO_SCK_POL_MAX);
     if(DAC_CAL_INIT_DEFAULT < DAC_CAL_INIT_MIN || DAC_CAL_INIT_DEFAULT > DAC_CAL_INIT_MAX)
       $error("Invalid value for DAC_CAL_INIT_DEFAULT parameter: %d. Must be between %d and %d.", DAC_CAL_INIT_DEFAULT, DAC_CAL_INIT_MIN, DAC_CAL_INIT_MAX);
+    if(DO_DAC_PRE_DELAY < 0 || DO_DAC_PRE_DELAY > DO_DAC_PRE_DELAY_MAX)
+      $error("Invalid value for DO_DAC_PRE_DELAY parameter: %d. Must be between 0 and %d.", DO_DAC_PRE_DELAY, DO_DAC_PRE_DELAY_MAX);
   end
 
   // Local default values with explicit widths
@@ -146,6 +154,7 @@ module axi_sys_ctrl #
   localparam [MOSI_SCK_POL_WIDTH-1:0] MOSI_SCK_POL_DEFAULT_W                       = MOSI_SCK_POL_DEFAULT;
   localparam [MISO_SCK_POL_WIDTH-1:0] MISO_SCK_POL_DEFAULT_W                       = MISO_SCK_POL_DEFAULT;
   localparam signed [DAC_CAL_INIT_WIDTH-1:0] DAC_CAL_INIT_DEFAULT_W                = DAC_CAL_INIT_DEFAULT;
+  localparam [DO_DAC_PRE_DELAY_WIDTH-1:0] DO_DAC_PRE_DELAY_DEFAULT_W               = DO_DAC_PRE_DELAY;
 
   // Local parameters for AXI configuration
   localparam integer CFG_DATA_WIDTH = 1024;
@@ -221,6 +230,7 @@ module axi_sys_ctrl #
   assign int_initial_data_wire[MOSI_SCK_POL_32_OFFSET*32+MOSI_SCK_POL_WIDTH-1:MOSI_SCK_POL_32_OFFSET*32] = MOSI_SCK_POL_DEFAULT_W;
   assign int_initial_data_wire[MISO_SCK_POL_32_OFFSET*32+MISO_SCK_POL_WIDTH-1:MISO_SCK_POL_32_OFFSET*32] = MISO_SCK_POL_DEFAULT_W;
   assign int_initial_data_wire[DAC_CAL_INIT_32_OFFSET*32+DAC_CAL_INIT_WIDTH-1-:DAC_CAL_INIT_WIDTH] = DAC_CAL_INIT_DEFAULT_W;
+  assign int_initial_data_wire[DO_DAC_PRE_DELAY_32_OFFSET*32+DO_DAC_PRE_DELAY_WIDTH-1:DO_DAC_PRE_DELAY_32_OFFSET*32] = DO_DAC_PRE_DELAY_DEFAULT_W;
 
   // Out of bounds checks. Use the whole word for the check to error on truncation
   assign ctrl_en_oob = $unsigned(int_data_wire[CTRL_EN_32_OFFSET*32+CTRL_EN_WIDTH-1:CTRL_EN_32_OFFSET*32]) > CTRL_EN_MAX;
@@ -239,6 +249,7 @@ module axi_sys_ctrl #
   assign miso_sck_pol_oob = $unsigned(int_data_wire[MISO_SCK_POL_32_OFFSET*32+MISO_SCK_POL_WIDTH-1:MISO_SCK_POL_32_OFFSET*32]) > MISO_SCK_POL_MAX;
   assign dac_cal_init_oob = $signed(int_data_wire[DAC_CAL_INIT_32_OFFSET*32+DAC_CAL_INIT_WIDTH-1-:DAC_CAL_INIT_WIDTH]) < $signed(DAC_CAL_INIT_MIN)
                          || $signed(int_data_wire[DAC_CAL_INIT_32_OFFSET*32+DAC_CAL_INIT_WIDTH-1-:DAC_CAL_INIT_WIDTH]) > $signed(DAC_CAL_INIT_MAX);
+  assign do_dac_pre_delay_oob = $unsigned(int_data_wire[DO_DAC_PRE_DELAY_32_OFFSET*32+DO_DAC_PRE_DELAY_WIDTH-1:DO_DAC_PRE_DELAY_32_OFFSET*32]) > DO_DAC_PRE_DELAY_MAX;
 
   // Address and value bound compliance sent to write response
   // Send SLVERR if there are any violations
@@ -255,6 +266,7 @@ module axi_sys_ctrl #
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == MOSI_SCK_POL_32_OFFSET) ? ((locked || mosi_sck_pol_oob) ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == MISO_SCK_POL_32_OFFSET) ? ((locked || miso_sck_pol_oob) ? 2'b10 : 2'b00) :
     (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == DAC_CAL_INIT_32_OFFSET) ? ((locked || dac_cal_init_oob) ? 2'b10 : 2'b00) :
+    (s_axi_awaddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB] == DO_DAC_PRE_DELAY_32_OFFSET) ? ((locked || do_dac_pre_delay_oob) ? 2'b10 : 2'b00) :
     2'b10;
   
   assign ctrl_en = int_data_wire[CTRL_EN_32_OFFSET*32];
@@ -270,7 +282,9 @@ module axi_sys_ctrl #
             || debug != int_data_wire[DEBUG_32_OFFSET*32+DEBUG_WIDTH-1:DEBUG_32_OFFSET*32]
             || mosi_sck_pol != int_data_wire[MOSI_SCK_POL_32_OFFSET*32]
             || miso_sck_pol != int_data_wire[MISO_SCK_POL_32_OFFSET*32]
-            || dac_cal_init != int_data_wire[DAC_CAL_INIT_32_OFFSET*32+DAC_CAL_INIT_WIDTH-1:DAC_CAL_INIT_32_OFFSET*32];
+            || dac_cal_init != int_data_wire[DAC_CAL_INIT_32_OFFSET*32+DAC_CAL_INIT_WIDTH-1:DAC_CAL_INIT_32_OFFSET*32]
+            || do_dac_pre_delay != int_data_wire[DO_DAC_PRE_DELAY_32_OFFSET*32]
+          ;
 
   // Configuration register sanitization logic
   always @(posedge aclk)
@@ -291,6 +305,7 @@ module axi_sys_ctrl #
       mosi_sck_pol <= MOSI_SCK_POL_DEFAULT_W;
       miso_sck_pol <= MISO_SCK_POL_DEFAULT_W;
       dac_cal_init <= DAC_CAL_INIT_DEFAULT_W;
+      do_dac_pre_delay <= DO_DAC_PRE_DELAY_DEFAULT_W;
 
       locked <= 1'b0;
       lock_viol <= 1'b0;
@@ -316,6 +331,7 @@ module axi_sys_ctrl #
         mosi_sck_pol <= int_data_wire[MOSI_SCK_POL_32_OFFSET*32];
         miso_sck_pol <= int_data_wire[MISO_SCK_POL_32_OFFSET*32];
         dac_cal_init <= int_data_wire[DAC_CAL_INIT_32_OFFSET*32+DAC_CAL_INIT_WIDTH-1:DAC_CAL_INIT_32_OFFSET*32];
+        do_dac_pre_delay <= int_data_wire[DO_DAC_PRE_DELAY_32_OFFSET*32];
       end else if (unlock) begin
         locked <= 1'b0;
         lock_viol <= 1'b0;
