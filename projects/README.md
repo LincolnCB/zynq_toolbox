@@ -89,7 +89,7 @@ cell xilinx.com:ip:xlconcat:2.1 sts_concat {
 ```
 or
 ```tcl
-cell rev_d_shim:user:axi_sys_ctrl axi_sys_ctrl {
+cell shim:user:axi_sys_ctrl axi_sys_ctrl {
   INTEG_THRESHOLD_AVERAGE_DEFAULT 16384
   INTEG_WINDOW_DEFAULT 5000000
   INTEG_EN_DEFAULT 1
