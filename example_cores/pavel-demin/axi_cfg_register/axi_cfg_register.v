@@ -43,10 +43,13 @@ module axi_cfg_register #
   localparam integer CFG_SIZE = CFG_DATA_WIDTH/AXI_DATA_WIDTH;
   localparam integer CFG_WIDTH = CFG_SIZE > 1 ? clogb2(CFG_SIZE-1) : 1;
 
-  reg int_bvalid_reg, int_bvalid_next;
+  reg  int_bvalid_reg;
+  wire int_bvalid_next;
 
-  reg int_rvalid_reg, int_rvalid_next;
-  reg [AXI_DATA_WIDTH-1:0] int_rdata_reg, int_rdata_next;
+  reg  int_rvalid_reg;
+  wire int_rvalid_next;
+  reg  [AXI_DATA_WIDTH-1:0] int_rdata_reg;
+  wire [AXI_DATA_WIDTH-1:0] int_rdata_next;
 
   wire [AXI_DATA_WIDTH-1:0] int_data_mux [CFG_SIZE-1:0];
   wire [CFG_DATA_WIDTH-1:0] int_data_wire;
@@ -93,37 +96,16 @@ module axi_cfg_register #
     end
   end
 
-  always @*
-  begin
-    int_bvalid_next = int_bvalid_reg;
+  assign int_bvalid_next =  (s_axi_bready & int_bvalid_reg) ? 1'b0
+                            : (int_wvalid_wire) ? 1'b1 
+                            : int_bvalid_reg;
 
-    if(int_wvalid_wire)
-    begin
-      int_bvalid_next = 1'b1;
-    end
-
-    if(s_axi_bready & int_bvalid_reg)
-    begin
-      int_bvalid_next = 1'b0;
-    end
-  end
-
-  always @*
-  begin
-    int_rvalid_next = int_rvalid_reg;
-    int_rdata_next = int_rdata_reg;
-
-    if(s_axi_arvalid)
-    begin
-      int_rvalid_next = 1'b1;
-      int_rdata_next = int_data_mux[s_axi_araddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB]];
-    end
-
-    if(s_axi_rready & int_rvalid_reg)
-    begin
-      int_rvalid_next = 1'b0;
-    end
-  end
+  assign int_rvalid_next =  (s_axi_rready & int_rvalid_reg) ? 1'b0 :
+                            : (s_axi_arvalid) ? 1'b1
+                            : int_rvalid_reg;
+  
+  assign int_rdata_next = (s_axi_arvalid) ? int_data_mux[s_axi_araddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB]]
+                          : int_rdata_reg;
 
   assign cfg_data = int_data_wire;
 

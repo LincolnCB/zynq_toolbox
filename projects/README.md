@@ -90,9 +90,9 @@ cell xilinx.com:ip:xlconcat:2.1 sts_concat {
 or
 ```tcl
 cell shim:user:axi_sys_ctrl axi_sys_ctrl {
-  INTEG_THRESHOLD_AVERAGE_DEFAULT 16384
-  INTEG_WINDOW_DEFAULT 5000000
-  INTEG_EN_DEFAULT 1
+  THRESHOLD_VALUE_DEFAULT 16384
+  THRESHOLD_WINDOW_DEFAULT 5000000
+  THRESHOLD_EN_DEFAULT 1
 } {
   aclk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn

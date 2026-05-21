@@ -43,7 +43,7 @@ if {$board_part eq ""} {
 
 ## Initialize the project and dependencies
 # Clear out old build files
-file delete -force $tmp_dir/project.cache $tmp_dir/project.gen $tmp_dir/project.hw $tmp_dir/project.ip_user_files $tmp_dir/project.runs $tmp_dir/project.sim $tmp_dir/project.srcs $tmp_dir/project.xpr
+file delete -force $tmp_dir/project.cache $tmp_dir/project.gen $tmp_dir/project.hw $tmp_dir/project.ip_user_files $tmp_dir/project.runs $tmp_dir/project.sim $tmp_dir/project.srcs $tmp_dir/project.xpr $tmp_dir/project.ioplanning
 
 # Create the project
 create_project -part $part_name project $tmp_dir
