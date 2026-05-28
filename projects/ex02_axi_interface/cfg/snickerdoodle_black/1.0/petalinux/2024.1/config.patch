@@ -18,7 +18,7 @@
 -CONFIG_SUBSYSTEM_COPY_TO_TFTPBOOT=y
 -CONFIG_SUBSYSTEM_TFTPBOOT_DIR="/tftpboot"
 +# CONFIG_SUBSYSTEM_COPY_TO_TFTPBOOT is not set
- 
+
  #
  # Firmware Version Configuration
 @@ -269,4 +267,4 @@

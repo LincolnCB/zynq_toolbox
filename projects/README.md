@@ -10,7 +10,7 @@ See the **Building a different board, board version, or project** and **Intermed
 
 ## `block_design.tcl`
 
-This is the main file that defines the programmable logic (PL) design for the project. It constructs the Vivado block design using Tcl commands. It also handles port definitions and can include other Tcl "modules" from the `modules/` directory. 
+This is the main file that defines the programmable logic (PL) design for the project. It constructs the Vivado block design using Tcl commands. It also handles port definitions and can include other Tcl "modules" from the `modules/` directory.
 
 For Tcl commands, you can use any Vivado procedures directly, or use helper procedures defined in `scripts/vivado/project.tcl`. These helper procedures simplify the process of creating cells and modules, assigning AXI addresses, and initializing the processing system (PS). See the below section [`scripts/vivado/project.tcl` procedures](#scriptsvivadoprojecttcl-procedures) for more information on the available procedures, or look at the comments in `scripts/vivado/project.tcl` directly.
 
@@ -18,7 +18,7 @@ If you're exploring development, one useful approach is to try things out in Viv
 
 ### `scripts/vivado/project.tcl` procedures
 
-#### `wire` 
+#### `wire`
 
 Arguments:
 - `name1`: The name of the first pin to wire.
@@ -40,7 +40,7 @@ Arguments:
 - `target_intf_pin`: name of the interface pin which will be assigned an address
 - `addr_space_intf_pin`: name of the pin containing the address space
 
-Procedure for assigning an address for a connected AXI interface pin (`target_intf_pin`) in an address space defined by another interface pin (`addr_space_intf_pin`). The address is defined by the `offset` and `range` arguments. 
+Procedure for assigning an address for a connected AXI interface pin (`target_intf_pin`) in an address space defined by another interface pin (`addr_space_intf_pin`). The address is defined by the `offset` and `range` arguments.
 
 Example usage:
 ```tcl
@@ -158,11 +158,11 @@ This directory contains the project's configuration files for different boards a
 This directory contains the PetaLinux configuration files for the project. These files are loaded as part of the PetaLinux build process, particularly by scripts in the `scripts/petalinux` directory. PetaLinux's configuration files are slightly more version-sensitive than Vivado, and so need to be configured for each version. The files are:
 
 #### `config.patch`
-A patch file for the PetaLinux project configuration. This file contains changes to the default PetaLinux configuration for the project's system. It's stored in a patch format both for density and clarity -- it's much easier to see what options need to be changed from the default to make everything work than it is to parse the fairly large configuration files. 
+A patch file for the PetaLinux project configuration. This file contains changes to the default PetaLinux configuration for the project's system. It's stored in a patch format both for density and clarity -- it's much easier to see what options need to be changed from the default to make everything work than it is to parse the fairly large configuration files.
 
-If you want to make or update this file, you can run `make` in the top-level directory with the `petalinux_cfg` target (with the `PROJECT`, `BOARD`, and `VERSION` variables set to the appropriate values). If you're using a different version of PetaLinux than is currently supported, the recommended approach to create your own configuration file is to use the above `make petalinux_cfg` approach to manually set the listed non-default options read directly from the text of another version's `config.patch` file 
+If you want to make or update this file, you can run `make` in the top-level directory with the `petalinux_cfg` target (with the `PROJECT`, `BOARD`, and `VERSION` variables set to the appropriate values). If you're using a different version of PetaLinux than is currently supported, the recommended approach to create your own configuration file is to use the above `make petalinux_cfg` approach to manually set the listed non-default options read directly from the text of another version's `config.patch` file
 
-For example, to create a new `config.patch` file for your computer's PetaLinux 2023.2, you would open 
+For example, to create a new `config.patch` file for your computer's PetaLinux 2023.2, you would open
 ```
 projects/[project_name]/cfg/[board_name]/[board_version]/petalinux/2024.2/config.patch
 ```
@@ -215,7 +215,7 @@ This is the beta version of the Rev D Shim firmware, written almost entirely by 
 
 ## Example projects
 
-To understand the build processes in this repo, it's recommended to explore the example projects in this directory. Each project has its own folder, and the example projects are prefixed with `ex##_`, where `##` is the example number. They're ordered to progressively build up the scripting and configuration concepts I personally needed to learn to build the Rev D Shim firmware, so they should be a good starting point for understanding how to build your own projects. 
+To understand the build processes in this repo, it's recommended to explore the example projects in this directory. Each project has its own folder, and the example projects are prefixed with `ex##_`, where `##` is the example number. They're ordered to progressively build up the scripting and configuration concepts I personally needed to learn to build the Rev D Shim firmware, so they should be a good starting point for understanding how to build your own projects.
 
 You should read through the README in each of their respective folders, but in brief, the example projects are:
 

@@ -71,7 +71,7 @@ else
     fi
   else
     # Failure if results.xml is not found
-    echo "[CORE TESTS] ERROR: No results.xml found in ${TEST_DIR}/results" 
+    echo "[CORE TESTS] ERROR: No results.xml found in ${TEST_DIR}/results"
     STATUS="FAILED tests"
   fi
 fi

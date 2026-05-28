@@ -62,7 +62,7 @@ update_ip_catalog
 
 ################################################################################
 ### Define a set of Tcl procedures to simplify the creation of block designs
-################################################################################  
+################################################################################
 
 # Procedure for connecting (wiring) two pins together
 # Can handle both regular and interface pins.
@@ -178,12 +178,12 @@ proc module {module_src module_name {module_conn {}}} {
   global project_name
   set upper_instance [current_bd_instance .]
   current_bd_instance [create_bd_cell -type hier $module_name]
-  
+
   # Check if the module source file exists
   if {![file exists projects/${project_name}/modules/${module_src}.tcl]} {
     error "Module source file projects/${project_name}/modules/${module_src}.tcl does not exist."
   }
-  
+
   # Include the module source file
   source projects/$project_name/modules/${module_src}.tcl
 

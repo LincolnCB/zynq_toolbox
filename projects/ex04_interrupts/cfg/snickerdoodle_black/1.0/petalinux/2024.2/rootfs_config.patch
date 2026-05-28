@@ -1,15 +1,15 @@
 @@ -15,7 +15,7 @@
  #
- # sudo 
+ # sudo
  #
 -# CONFIG_sudo is not set
 +CONFIG_sudo=y
  # CONFIG_sudo-dbg is not set
  # CONFIG_sudo-dev is not set
- 
+
 @@ -194,11 +194,11 @@
  #
- # kmod 
+ # kmod
  #
 -# CONFIG_kmod is not set
 +CONFIG_kmod=y
@@ -19,15 +19,15 @@
  # CONFIG_kmod-dev is not set
 -# CONFIG_kmod-bash-completion is not set
 +CONFIG_kmod-bash-completion=y
- 
+
  #
- # linuxptp 
+ # linuxptp
 @@ -2192,7 +2192,7 @@
  #
- # gcc-runtime 
+ # gcc-runtime
  #
 -# CONFIG_libstdcPLUSPLUS is not set
 +CONFIG_libstdcPLUSPLUS=y
  # CONFIG_libstdcPLUSPLUS-dev is not set
- 
+
  #

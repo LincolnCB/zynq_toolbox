@@ -36,7 +36,7 @@ $(info -  "$(firstword $(MAKEFILE_LIST))" is the top Makefile ($$(firstword $$(M
 $(info --------------------------)
 
 # Additional compile arguments, including Verilog core parameters (from parameters.json)
-EXTRA_ARGS += --trace --trace-structs -Wno-fatal --timing 
+EXTRA_ARGS += --trace --trace-structs -Wno-fatal --timing
 # Parse parameters.json with jq and add as -pvalue+KEY=VALUE to EXTRA_ARGS
 ifneq ("$(wildcard parameters.json)","")
 EXTRA_ARGS += $(foreach kv,$(shell jq -r 'to_entries|map("\(.key)=\(.value|tostring)")|.[]' parameters.json),-pvalue+$(kv))

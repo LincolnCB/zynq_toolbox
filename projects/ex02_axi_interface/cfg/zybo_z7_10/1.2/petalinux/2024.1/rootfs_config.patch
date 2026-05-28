@@ -1,15 +1,15 @@
 @@ -15,7 +15,7 @@
  #
- # sudo 
+ # sudo
  #
 -# CONFIG_sudo is not set
 +CONFIG_sudo=y
  # CONFIG_sudo-dbg is not set
  # CONFIG_sudo-dev is not set
- 
+
 @@ -194,11 +194,11 @@
  #
- # kmod 
+ # kmod
  #
 -# CONFIG_kmod is not set
 +CONFIG_kmod=y
@@ -19,24 +19,24 @@
  # CONFIG_kmod-dev is not set
 -# CONFIG_kmod-bash-completion is not set
 +CONFIG_kmod-bash-completion=y
- 
+
  #
- # linuxptp 
+ # linuxptp
 @@ -3705,7 +3705,7 @@
  #
- # packagegroup-petalinux 
+ # packagegroup-petalinux
  #
 -# CONFIG_packagegroup-petalinux is not set
 +CONFIG_packagegroup-petalinux=y
  # CONFIG_packagegroup-petalinux-dev is not set
  # CONFIG_packagegroup-petalinux-dbg is not set
- 
+
 @@ -3797,7 +3797,7 @@
  #
- # packagegroup-petalinux-utils 
+ # packagegroup-petalinux-utils
  #
 -# CONFIG_packagegroup-petalinux-utils is not set
 +CONFIG_packagegroup-petalinux-utils=y
  # CONFIG_packagegroup-petalinux-utils-dbg is not set
  # CONFIG_packagegroup-petalinux-utils-dev is not set
- 
+

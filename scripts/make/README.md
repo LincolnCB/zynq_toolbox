@@ -40,7 +40,7 @@ Usage:
 ./scripts/make/get_board_part.sh <board_name> <board_version>
 ```
 
-Extracts the vendor, board name, component name, and file version from the XML file for a given board and version. Outputs the information in the format:  
+Extracts the vendor, board name, component name, and file version from the XML file for a given board and version. Outputs the information in the format:
 `<vendor>:<name>:<component>:<file_version>`
 
 Returns a nonzero exit code if any information is missing or the XML file does not exist. Used by the Makefile and `scripts/vivado/` scripts to determine the necessary board information for the Vivado project from the board files in `boards/`.

@@ -28,7 +28,7 @@
 //////////////////// Interrupt State Variables ////////////////////
 
 uint8_t irq_status[8]; // Array to hold the status of each interrupt (0-7)
-pthread_mutex_t irq_mutexes[8]; // Mutexes for each interrupt to ensure thread safety 
+pthread_mutex_t irq_mutexes[8]; // Mutexes for each interrupt to ensure thread safety
 
 //////////////////// Function Prototypes ////////////////////
 
@@ -124,9 +124,9 @@ int main()
 
     // No command entered
     if(token == NULL) continue;
-    
+
     // Help command
-    if(strcmp(token, "help") == 0) { 
+    if(strcmp(token, "help") == 0) {
       print_help();
 
     } else if(strcmp(token, "set") == 0) { // Set a single interrupt
@@ -141,7 +141,7 @@ int main()
       uint32_t value = strtoul(token, &num_endptr, 10); // Convert string to unsigned long
       if(num_endptr == token || (value != 0 && value != 1)) { printf("Invalid value specified: %s\n", token); continue; } // Check for valid value
       set_interrupt(cfg, interrupt_num, value); // Set the interrupt
-    
+
     } else if(strcmp(token, "set_mask") == 0) { // Set multiple interrupts with an 8-bit mask to a value
       token = strtok(NULL, " ");
       if(token == NULL) { printf("Please specify an 8-bit mask (e.g., 0b00001111).\n"); continue; } // Check for mask
@@ -152,7 +152,7 @@ int main()
       uint32_t value = strtoul(token, &num_endptr, 10); // Convert string to unsigned long
       if(num_endptr == token || (value != 0 && value != 1)) { printf("Invalid value specified: %s\n", token); continue; } // Check for valid value
       set_interrupt_mask(cfg, (uint8_t)mask, value); // Set the interrupt mask with the specified value
-    
+
     } else if(strcmp(token, "set_all") == 0) { // Set all interrupts to a single given bit
       token = strtok(NULL, " ");
       if(token == NULL) { printf("Please specify a value (0 to disable, 1 to enable).\n"); continue; } // Check for value
@@ -173,7 +173,7 @@ int main()
       uint32_t interrupt_num = strtoul(token, &num_endptr, 10); // Convert string to unsigned long
       if(num_endptr == token || interrupt_num > 7) { printf("Invalid interrupt number specified: %s\n", token); continue; } // Check for valid interrupt number
       clear_interrupt(interrupt_num); // Clear the interrupt
-      
+
     } else if(strcmp(token, "clear_mask") == 0) { // Clear multiple interrupts with an 8-bit mask
       token = strtok(NULL, " ");
       if(token == NULL) { printf("Please specify an 8-bit mask to clear (e.g., 0b00001111).\n"); continue; } // Check for mask
@@ -192,7 +192,7 @@ int main()
       print_help(); // Print help message
     }
   } // End of command loop
-  
+
   // Cycle the interrupt bits twice to make sure all the interrupts are triggered
   printf("Cycling interrupt bits...\n");
   for (int j = 0; j < 2; j++) {
@@ -214,11 +214,11 @@ int main()
     pthread_join(interrupt_threads[i], NULL); // Wait for the thread to finish
     printf("Thread for interrupt %d joined.\n", i);
   }
-  
+
   // Clear all interrupts
   printf("Clearing all interrupts...\n");
   clear_all_interrupts(); // Clear all interrupts to ensure no pending interrupts remain
-  
+
   // Destroy mutexes
   printf("Destroying mutexes...\n");
   for (int i = 0; i < 8; i++) {
@@ -231,7 +231,7 @@ int main()
     perror("Failed to unmap CFG register");
   }
   close(fd);
-  
+
   // Exit message
   printf("Exiting program.\n");
 
@@ -373,29 +373,29 @@ void *interrupt_thread_func(void *arg) {
   int interrupt_num = *(int *)arg;
   char uio_path[32];
   snprintf(uio_path, sizeof(uio_path), "/dev/uio%d", interrupt_num);
-  
+
   while(1) {
     // Lock the mutex for this interrupt
     pthread_mutex_lock(&irq_mutexes[interrupt_num]);
-    
+
     // Check if the interrupt is pending
     if (irq_status[interrupt_num] == 0) {
       // If pending, wait for the interrupt
-      
+
       // Open the UIO device file for this interrupt
       int fd = open(uio_path, O_RDWR);
       if (fd < 0) {
         perror("Failed to open UIO device file");
         pthread_exit(NULL);
       }
-      
+
       // Wait for interrupt (blocking read)
       unsigned int irq = 0;
       if (read(fd, &irq, sizeof(irq)) <= 0) {
         perror("Failed to read interrupt");
         break;
       }
-      
+
       // Mark the interrupt as received
       irq_status[interrupt_num] = 1;
       close(fd); // Close the UIO device file
@@ -414,7 +414,7 @@ void *interrupt_thread_func(void *arg) {
         pthread_mutex_unlock(&irq_mutexes[interrupt_num]);
       }
     }
-    
+
     // Sleep for a short duration to avoid busy waiting
     usleep(1000); // Sleep for 1 ms
   }

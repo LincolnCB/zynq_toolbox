@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
   uint32_t div1 = (fclk0_ctrl_val >> 20) & FCLK0_DIVISOR_MAX;
 
   printf("FCLK0 control register: div0 = %u, div1 = %u\n", div0, div1);
-  
+
   while(1) {
     int divisor_num;
     uint32_t divisor_value;

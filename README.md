@@ -22,7 +22,7 @@ This repository contains the source code and documentation for the Revision D Sh
 
 Zynq 7000 SoCs are a series of System on Chip (SoC) devices from AMD/Xilinx that combine an ARM processor with an FPGA. There are several variants of the Zynq 7000 SoC series, including the Zynq 7010, Zynq 7020, and beyond. Different variants will have different I/O, memory, and processing capabilities, but they all share the same basic architecture, which allows most projects to be ported between them with minimal changes (unless you're at the limit of one of those resources and trying to port to a less-capable variant).
 
-Zynq 7000 SoCs are available on a number of boards, including the Red Pitaya, the Snickerdoodle, Zybo boards, and many others. Different boards will have different Zynq variants -- for instance, the Red Pitaya STEMlab 125-14 uses the smaller Zynq 7010 chip, while the Snickerdoodle Black and Red Pitaya SDRlab 122-16 use the midrange Zynq 7020. In addition, different boards will expose different amounts of the Zynq's available I/O -- for instance, while the Snickerdoodle Black and Red Pitaya SDRlab 122-16 have the same Zynq 7020 chip, the Snickerdoodle Black has significantly more I/O pins accessible. 
+Zynq 7000 SoCs are available on a number of boards, including the Red Pitaya, the Snickerdoodle, Zybo boards, and many others. Different boards will have different Zynq variants -- for instance, the Red Pitaya STEMlab 125-14 uses the smaller Zynq 7010 chip, while the Snickerdoodle Black and Red Pitaya SDRlab 122-16 use the midrange Zynq 7020. In addition, different boards will expose different amounts of the Zynq's available I/O -- for instance, while the Snickerdoodle Black and Red Pitaya SDRlab 122-16 have the same Zynq 7020 chip, the Snickerdoodle Black has significantly more I/O pins accessible.
 
 This repository is designed to allow compatibility with any board that uses a Zynq 7000 series chip, but may require some addition board files and configuration changes to work with a specific board. The full capabilities of the Rev D shim amplifier require the Zynq 7020 or above, as it uses the additional I/O and memory available on those chips. However, reducing the number of shim channels and buffer size would allow for porting.
 
@@ -51,19 +51,19 @@ Finally, there's some files:
 
 This repo uses the AMD/Xilinx FPGA toolchain to build projects for the chips in the Zynq 7000 SoC series family. Below are some instructions on how to set up the tools. The versions listed are the ones that are primarily used, but other versions may work as well. If you use other versions of tools, you may need to add configuration files for them to projects (PetaLinux, in particular, changes its configuration files meaningfully between versions) -- you can read more about this in the **Configuring PetaLinux** section of the `projects/` README.
 
-I recommend using a VM for these tools, as the installation can be large and messy, and the tools' supported OSes are slightly limited. For the recommended versions listed below, I used a VM running [Ubuntu 20.04.6 (Desktop image)](https://www.releases.ubuntu.com/focal/) with 200 GB of storage(/disk space), 16 GB of RAM(/memory), and 8 CPU cores. If you're running on a Mac with a M1/M2 or other non-x86 chip, you may need to be picky with your VM to do this ([UTM](https://mac.getutm.app/) seems to be the recommended option. Make sure to select "iso image" when selecting the downloaded Ubuntu ISO). In terms of installing Ubuntu on the VM, I recommend a "Minimal Install" and not to "Download Updates" to keep it as simple and close to the original, supported edition as possible. 
+I recommend using a VM for these tools, as the installation can be large and messy, and the tools' supported OSes are slightly limited. For the recommended versions listed below, I used a VM running [Ubuntu 20.04.6 (Desktop image)](https://www.releases.ubuntu.com/focal/) with 200 GB of storage(/disk space), 16 GB of RAM(/memory), and 8 CPU cores. If you're running on a Mac with a M1/M2 or other non-x86 chip, you may need to be picky with your VM to do this ([UTM](https://mac.getutm.app/) seems to be the recommended option. Make sure to select "iso image" when selecting the downloaded Ubuntu ISO). In terms of installing Ubuntu on the VM, I recommend a "Minimal Install" and not to "Download Updates" to keep it as simple and close to the original, supported edition as possible.
 
 My process is explained below, but is definitely not the only way to do this.
 
 - PetaLinux (2024.2)
 - Vivado (2024.2)
 
-These can be installed together from the AMD unified installer (2024.2 version [here](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/vivado-design-tools/2024-2.html) -- select "AMD Unified Installer for FPGAs & Adaptive SoCs 2024.2: Linux Self Extracting Web Installer", do this and everything else on the system you want these tools installed to, which is recommended to be a VM). You will need to create an AMD account to download and use the installer, but it should be free to do so. 
+These can be installed together from the AMD unified installer (2024.2 version [here](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/vivado-design-tools/2024-2.html) -- select "AMD Unified Installer for FPGAs & Adaptive SoCs 2024.2: Linux Self Extracting Web Installer", do this and everything else on the system you want these tools installed to, which is recommended to be a VM). You will need to create an AMD account to download and use the installer, but it should be free to do so.
 
 
 ### Unified installer
 
-Follow the documentation [here](https://docs.amd.com/r/en-US/ug1144-petalinux-tools-reference-guide/Installation-Steps) -- make sure the dropdown version at the top of the documentation matches the version you're using. 
+Follow the documentation [here](https://docs.amd.com/r/en-US/ug1144-petalinux-tools-reference-guide/Installation-Steps) -- make sure the dropdown version at the top of the documentation matches the version you're using.
 
 You should make sure the system had the required libraries. From the stock Ubuntu 20.04.6 install, I needed to install the following packages with `sudo apt install` to make PetaLinux and Vivado install successfully:
 ```shell
@@ -105,13 +105,13 @@ This will output something like:
 ```
 lrwxrwxrwx 1 root root 4 Mar 31  2024 /bin/sh -> dash
 ```
-This means that the default shell is currently Dash. 
+This means that the default shell is currently Dash.
 
 To change it to bash, you can run:
 ```shell
 sudo ln -sf /bin/bash /bin/sh
 ```
-which overrides the symlink to point to bash instead of Dash. 
+which overrides the symlink to point to bash instead of Dash.
 
 Checking again with `ls -l /bin/sh` should now output:
 ```
@@ -124,7 +124,7 @@ With this repository cloned into your VM (e.g. `/home/username/zynq_toolbox or s
 ```
 environment.sh.example
 ```
-This is a template file for the environment variables that you need to set up. Copy this file and name the copy 
+This is a template file for the environment variables that you need to set up. Copy this file and name the copy
 ```
 environment.sh
 ```
@@ -244,7 +244,7 @@ and make your edits there. Just like `environment.sh`, only the example file is 
 The PetaLinux build process requires downloading a lot of files from the internet, which can be slow and unreliable. Depending on your network connection, this could add upwards of ten minutes to the build time. If you want to put in a bit of effort for a more reliable build process, you can download these files and store them locally, so that PetaLinux can use them without needing to download them each time.
 
 For PetaLinux 2024.2, you can download the files from the [AMD download center](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/embedded-design-tools/2024-2.html). The files you will need are all the way at the bottom, under **PetaLinux Tools sstate-cache Artifacts** (you can ignore the final section, Update 1). You'll need to download two files:
-- `arm sstate-cache` (TAR/GZIP - ~9 GB) 
+- `arm sstate-cache` (TAR/GZIP - ~9 GB)
 - `Downloads` (TAR/GZIP - ~59 GB)
 
 You'll want to extract these files to some directory on your system. From there, you can set the `PETALINUX_DOWNLOADS_PATH` and `PETALINUX_SSTATE_PATH` environment variables in your `environment.sh` file to point to the directories where you extracted these files. Each archive has a simply named directory at the top, `downloads` and `arm`. For example, if you have the following directory structure:
@@ -361,7 +361,7 @@ Use GParted to partition the SD card as follows:
 
 Once the SD card is partitioned, you can uncompress the `BOOT.tar.gz` and `rootfs.tar.gz` files into the respective partitions. If you're using the same Ubuntu system on a VM that I was, and are using the default `BOARD`, `BOARD_VER`, and `PROJECT` (`snickerdoodle_black`, `1.0`, `zynq_toolbox`) you can do this with the following [target](#script-targets) (may need to eject and re-insert the SD card after partitioning):
 ```bash
-make write_sd 
+make write_sd
 ```
 which will attempt to find the SD card partitions automatically at `/media/username/BOOT` and `/media/username/RootFS`, where `username` is your username on the system. If the partitions are mounted somewhere else, you can specify the mount folder as an additional argument:
 ```bash
@@ -410,8 +410,8 @@ The Makefile is set up to build the project in a series of steps, with intermedi
 - `tests`: Run tests for all cores in the project. Test summaries per core will be placed in `custom_cores/[vendor]/cores/[core]/tests/test_status`, and a summary of all core tests for the project will be placed in `projects/[project]/tests/core_tests_summary`.
 - `write_sd`: Write the SD card files to the SD card. The default mount point is `/media/[username]/`, but can be overridden with the `MOUNT_DIR` variable. This will write the `BOOT.tar.gz` and `rootfs.tar.gz` files to the appropriate partitions on the SD card, as described in the [Building an SD card](#building-an-sd-card) section. Uses the `scripts/make/write_sd.sh` script.
 - `petalinux_cfg`: Generate or update the PetaLinux system configuration files for the project, under `projects/[project]/cfg/[board]/[board_ver]/petalinux/[petalinux_ver]/`. Uses the `scripts/petalinux/petalinux_cfg.sh` script. Requires the terminal to be above a certain size to display the PetaLinux config GUI.
-- `petalinux_rootfs_cfg`: Generate or update the PetaLinux root filesystem configuration files for the project, under `projects/[project]/cfg/[board]/[board_ver]/petalinux/[petalinux_ver]/`. Uses the `scripts/petalinux/petalinux_rootfs_cfg.sh` script. Requires the terminal to be above a certain size to display the PetaLinux config GUI. 
-- `clean_sd`: Clean the SD card files from a mounted SD card. The default mount point is `/media/[username]/`, but can be overridden with the `MOUNT_DIR` variable. Uses the `scripts/make/clean_sd.sh` script. 
+- `petalinux_rootfs_cfg`: Generate or update the PetaLinux root filesystem configuration files for the project, under `projects/[project]/cfg/[board]/[board_ver]/petalinux/[petalinux_ver]/`. Uses the `scripts/petalinux/petalinux_rootfs_cfg.sh` script. Requires the terminal to be above a certain size to display the PetaLinux config GUI.
+- `clean_sd`: Clean the SD card files from a mounted SD card. The default mount point is `/media/[username]/`, but can be overridden with the `MOUNT_DIR` variable. Uses the `scripts/make/clean_sd.sh` script.
 - `clean_project`: Remove a single project's intermediate and temporary files, including Vivado-packaged cores from `tmp/`
 - `clean_build`: Remove all the intermediate and temporary files, including Vivado-packaged cores from `tmp/`, as well as reports in `tmp_reports`.
 - `clean_tests`: Remove the `results` directory from all core test folders (under `custom_cores/[vendor]/cores/[core]/tests/`), but leave the `test_status` file.
@@ -430,7 +430,7 @@ The Makefile is set up to build the project in a series of steps, with intermedi
 - `xsa`: Build the Vivado Xilinx hardware definition `XSA` file for the project, which will be placed at `tmp/[board]/[board_ver]/[project]/hw_def.xsa`. This step requires `xpr` and is part of the overall `sd` target.
 - `petalinux`: Build the PetaLinux project for the project, which will be the folder `tmp/[board]/[board_ver]/[project]/petalinux/`. This step requires `xsa` and is part of the overall `sd` target.
 
-There are other specific targets in the Makefile, but I don't recommend using them directly unless you know what you're doing. 
+There are other specific targets in the Makefile, but I don't recommend using them directly unless you know what you're doing.
 
 ## Using the Rev D Shim Amplifier
 
@@ -438,7 +438,7 @@ Once you've built the Rev D Shim firmware, please refer to the README in the `pr
 
 # Example projects
 
-To understand the build processes in this repo, it's recommended to explore the example projects in the `projects/` directory, as well as the README in the `projects/` directory itself. As a quick summary, each project has its own folder, and the example projects are prefixed with `ex##_`, where `##` is the example number. They're ordered to progressively build up the scripting and configuration concepts I personally needed to learn to build the Rev D Shim firmware, so they should be a good starting point for understanding how to build your own projects. 
+To understand the build processes in this repo, it's recommended to explore the example projects in the `projects/` directory, as well as the README in the `projects/` directory itself. As a quick summary, each project has its own folder, and the example projects are prefixed with `ex##_`, where `##` is the example number. They're ordered to progressively build up the scripting and configuration concepts I personally needed to learn to build the Rev D Shim firmware, so they should be a good starting point for understanding how to build your own projects.
 
 You should read through the README in each of their respective folders, but in brief, the example projects are:
 

@@ -1,6 +1,6 @@
 # Initialize the Vivado environment for the Snickerdoodle Rev D, declaring directories
 
-# Source this from your Vivado_init.tcl. 
+# Source this from your Vivado_init.tcl.
 # Make sure to set the ZYNQ_TOOLBOX environment variable to the root of the this repository.
 # Example (to paste into Vivado_init.tcl):
 # ------------------------------------------------------------

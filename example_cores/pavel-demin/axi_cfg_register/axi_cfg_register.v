@@ -97,13 +97,13 @@ module axi_cfg_register #
   end
 
   assign int_bvalid_next =  (s_axi_bready & int_bvalid_reg) ? 1'b0
-                            : (int_wvalid_wire) ? 1'b1 
+                            : (int_wvalid_wire) ? 1'b1
                             : int_bvalid_reg;
 
   assign int_rvalid_next =  (s_axi_rready & int_rvalid_reg) ? 1'b0 :
                             : (s_axi_arvalid) ? 1'b1
                             : int_rvalid_reg;
-  
+
   assign int_rdata_next = (s_axi_arvalid) ? int_data_mux[s_axi_araddr[ADDR_LSB+CFG_WIDTH-1:ADDR_LSB]]
                           : int_rdata_reg;
 

@@ -50,7 +50,7 @@ void print_help();
 //////////////////// Main ////////////////////
 int main()
 {
-  
+
   //////////////////// 1. Setup ////////////////////
   printf("Test program for AXI FIFO and BRAM interfaces\n");
   printf("Setup:\n");
@@ -95,7 +95,7 @@ int main()
   uint32_t bram_page_count = (BRAM_SIZE - 1) / pagesize + 1; // Calculate number of pages needed for BRAM
   bram = mmap(NULL, bram_page_count * pagesize, PROT_READ|PROT_WRITE, MAP_SHARED, fd, AXI_BRAM);
   printf("BRAM (port 1) mapped to 0x%x:0x%x (%d pages)\n", AXI_BRAM, AXI_BRAM + BRAM_SIZE - 1, bram_page_count);
-  
+
   // File can be closed after mapping without affecting the mapped memory
   close(fd);
   printf("Mapping complete.\n");
@@ -125,7 +125,7 @@ int main()
     if(token == NULL) continue;
 
     // Help command
-    if(strcmp(token, "help") == 0) { 
+    if(strcmp(token, "help") == 0) {
       print_help();
 
     // FIFO reset command
@@ -181,8 +181,8 @@ int main()
       uint32_t addr = strtoul(token, &num_endptr, 10); // Convert string to unsigned long
       if(num_endptr == token) { printf("Invalid address specified: %s\n", token); continue; } // Check for valid address
       if (addr >= BRAM_SIZE) { // Check for valid address range
-        printf("Invalid address. Please specify an address between 0 and %"PRIu32".\n", BRAM_SIZE - 1); 
-        continue; 
+        printf("Invalid address. Please specify an address between 0 and %"PRIu32".\n", BRAM_SIZE - 1);
+        continue;
       }
       // 2nd token is value
       token = strtok(NULL, " ");
@@ -200,8 +200,8 @@ int main()
       uint32_t addr = strtoul(token, &num_endptr, 10); // Convert string to unsigned long
       if(num_endptr == token) { printf("Invalid address specified: %s\n", token); continue; } // Check for valid address
       if (addr >= BRAM_SIZE) { // Check for valid address range
-        printf("Invalid address. Please specify an address between 0 and %"PRIu32".\n", BRAM_SIZE - 1); 
-        continue; 
+        printf("Invalid address. Please specify an address between 0 and %"PRIu32".\n", BRAM_SIZE - 1);
+        continue;
       }
       uint32_t value = *((volatile uint32_t *)(bram + addr)); // Read value from BRAM
       printf("Read value %u from BRAM address %u.\n", value, addr);

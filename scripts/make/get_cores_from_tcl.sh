@@ -57,7 +57,7 @@ while IFS= read -r line; do
       paths+=("${parts[0]}/${parts[2]}")
     fi
 
-  # Otherwise, if the line is a module (allow leading whitespace), 
+  # Otherwise, if the line is a module (allow leading whitespace),
   #  call the script recursively on the tcl script sourced by the module
   elif [[ $line =~ ^[[:space:]]*module ]]; then
     words=($line)

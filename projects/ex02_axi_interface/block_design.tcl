@@ -45,7 +45,7 @@ cell xilinx.com:ip:smartconnect:1.0 axi_smc {
 #     63:0 are used for NAND example
 #     95:64 are used for FIFO control
 # - Connect the axi_cfg to the processing system's clock and the reset manager's reset
-# - Connect the axi_cfg to the processing system's GP AXI 0 interface through the 
+# - Connect the axi_cfg to the processing system's GP AXI 0 interface through the
 #    first AXI4 SmartConnect Manager/Master port
 cell pavel-demin:user:axi_cfg_register axi_cfg {
   CFG_DATA_WIDTH 96
@@ -68,7 +68,7 @@ addr 0x40000000 128 axi_cfg/S_AXI ps/M_AXI_GP0
 #     31:0 are used for NAND example
 #     63:32 are used for FIFO status
 # - Connect the axi_sts to the processing system's clock and the reset manager's reset
-# - Connect the axi_sts to the processing system's GP AXI 0 interface through the 
+# - Connect the axi_sts to the processing system's GP AXI 0 interface through the
 #    second AXI4 SmartConnect Manager/Master port
 cell pavel-demin:user:axi_sts_register axi_sts {
   STS_DATA_WIDTH 64
@@ -129,7 +129,7 @@ cell xilinx.com:ip:axi_bram_ctrl:4.1 axi_bram_ctrl {
 }
 # Create a BRAM block using Vivado's Block Memory Generator
 # - Set the memory type to Single_Port_RAM
-# - Set the BRAM block to BRAM_Controller mode 
+# - Set the BRAM block to BRAM_Controller mode
 #     (for when interfacing directly with Xilinx BRAM controller. Use Stand_Alone if using your own controller)
 # - Set the byte size to 8 bits
 # - Set the write width to 32 bits
@@ -166,7 +166,7 @@ addr 0x43000000 64K axi_bram_ctrl/S_AXI ps/M_AXI
 ############# Simple Register Tests #############
 # Uses the first 64 bits of the CFG data and the first 32 bits of the STS data
 # This is a simple test to verify that the registers are working
-# The first 32 bits of the STS data are the bitwise NAND 
+# The first 32 bits of the STS data are the bitwise NAND
 #   of the first 32 bits and the second 32 bits of the CFG data
 
 # Slice off CFG 63:0 for the concatenated NAND input
