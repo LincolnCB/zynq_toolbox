@@ -16,6 +16,3 @@
 [submodule "projects/rev_d_shim"]
 	path = projects/rev_d_shim
 	url = https://github.com/LincolnCB/rev_d_shim.git
-[submodule "projects/shim_controller_v0"]
-	path = projects/shim_controller_v0
-	url = https://github.com/LincolnCB/shim_controller_v0.git
