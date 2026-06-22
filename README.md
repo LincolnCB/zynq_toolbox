@@ -1,4 +1,5 @@
 ***Updated 2025-06-27***
+[![DOI](https://zenodo.org/badge/846674502.svg)](https://doi.org/10.5281/zenodo.20802348)
 
 Forked off of and based originally on [Pavel Demin](https://github.com/pavel-demin)'s [Red Pitaya Notes](http://pavel-demin.github.io/red-pitaya-notes/).
 
