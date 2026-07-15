@@ -464,7 +464,7 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec: tmp/$(BOARD)/$(BOAR
 # Requires the PetaLinux project specification directory
 tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec scripts/petalinux/package_rootfs_files.sh $(wildcard projects/$(PROJECT)/rootfs_include/*)
 	@./scripts/make/status.sh "MAKING LINUX SYSTEM FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
-	$(call run_petalinux,cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && petalinux-build)
+	$(call run_petalinux,cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && source $(PETALINUX_PATH)/settings.sh && petalinux-build)
 	@./scripts/make/status.sh "PACKAGING ADDITIONAL ROOTFS FILES FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	$(call run_petalinux,scripts/petalinux/package_rootfs_files.sh $(BOARD) $(BOARD_VER) $(PROJECT))
 
