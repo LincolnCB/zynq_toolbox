@@ -1,0 +1,64 @@
+# Convenience wrapper around the `docker run` commands documented in
+# docker_install.md. Run from the repository root, e.g.:
+#   docker compose -f scripts/docker/docker-compose.yml run --rm vivado
+#   docker compose -f scripts/docker/docker-compose.yml run --rm petalinux
+#   docker compose -f scripts/docker/docker-compose.yml run --rm cocotb
+#
+# This assumes the `vivado-tools` and `petalinux-tools` volumes already
+# exist and have been populated (see scripts/docker/install-vivado.sh and
+# scripts/docker/install-petalinux.sh) and that this file lives at
+# zynq_toolbox/scripts/docker/docker-compose.yml, so `../` refers to the repo root.
+#
+# These are also invoked directly by the top-level Makefile when
+# MODE=container -- you generally won't need to run them by hand except for
+# interactive debugging inside a given tool's container.
+
+services:
+  vivado:
+    build:
+      context: .
+      dockerfile: vivado.Dockerfile
+      args:
+        BUILD_UID: ${BUILD_UID:-1000}
+        BUILD_GID: ${BUILD_GID:-1000}
+    image: zynq-toolbox-vivado:2024.2
+    network_mode: none
+    volumes:
+      - vivado-tools:/tools/Vivado:ro
+      - ../:/workspace/zynq_toolbox
+    stdin_open: true
+    tty: true
+
+  petalinux:
+    build:
+      context: .
+      dockerfile: petalinux.Dockerfile
+      args:
+        BUILD_UID: ${BUILD_UID:-1000}
+        BUILD_GID: ${BUILD_GID:-1000}
+    image: zynq-toolbox-petalinux:2024.2
+    volumes:
+      - petalinux-tools:/tools/PetaLinux:ro
+      - ../:/workspace/zynq_toolbox
+    stdin_open: true
+    tty: true
+
+  cocotb:
+    build:
+      context: .
+      dockerfile: cocotb.Dockerfile
+      args:
+        BUILD_UID: ${BUILD_UID:-1000}
+        BUILD_GID: ${BUILD_GID:-1000}
+    image: zynq-toolbox-cocotb:latest
+    network_mode: none
+    volumes:
+      - ../:/workspace/zynq_toolbox
+    stdin_open: true
+    tty: true
+
+volumes:
+  vivado-tools:
+    external: true
+  petalinux-tools:
+    external: true

@@ -35,19 +35,43 @@ $(warning - Current directory: $(shell pwd))
 $(error - ZYNQ_TOOLBOX: $(ZYNQ_TOOLBOX))
 endif
 
+# MODE selects vm (tools installed directly on this host, today's behavior)
+# or container (tools live in Docker volumes, invoked via scripts/docker/docker-compose.yml)
+MODE ?= vm
+
+# VM Mode
+ifeq ($(MODE),vm)
+
+# Handle path variables in VM mode
 # Check if the Vivado settings64.sh file exists
 ifeq ($(wildcard $(VIVADO_PATH)/settings64.sh),)
 $(error Vivado path environment variable VIVADO_PATH is not/incorrectly set - "$(VIVADO_PATH)". VIVADO_PATH/settings64.sh must exist)
 endif
-
 # Check if the PetaLinux settings.sh file exists
 ifeq ($(wildcard $(PETALINUX_PATH)/settings.sh),)
 $(error PetaLinux path environment variable PETALINUX_PATH is not/incorrectly set - "$(PETALINUX_PATH)". PETALINUX_PATH/settings.sh must exist)
 endif
-
 # Check that the PetaLinux version environment variable is set
 ifeq ($(PETALINUX_VERSION),)
 $(error PetaLinux version environment variable PETALINUX_VERSION is not set)
+endif
+
+# Container Mode
+else ifeq ($(MODE),container)
+
+# In container mode the tools live in Docker volumes, not on the host
+# check for Docker and the two volumes instead of host paths.
+ifeq ($(shell which docker 2>/dev/null),)
+$(error MODE=container requires Docker to be installed and on PATH)
+endif
+ifeq ($(shell docker volume inspect vivado-tools >/dev/null 2>&1 && echo yes),)
+$(error Docker volume "vivado-tools" not found - run scripts/docker/install-vivado.sh first)
+endif
+ifeq ($(shell docker volume inspect petalinux-tools >/dev/null 2>&1 && echo yes),)
+$(error Docker volume "petalinux-tools" not found - run scripts/docker/install-petalinux.sh first)
+endif
+else
+$(error MODE must be "vm" or "container" (got "$(MODE)"))
 endif
 
 # Check if the project and board matter for the make targets
@@ -62,6 +86,7 @@ PROJECT_MATTERS = false
 endif
 endif
 
+# Give some verbosity explaining what's happening when running
 $(info --------------------------)
 ifeq ($(),$(MAKECMDGOALS))
 $(info ---- Making "all")
@@ -101,10 +126,70 @@ $(info ----   $(BOARD_XDC))
 endif # Clean check
 $(info --------------------------)
 
-# Set up commands
+#### Set up commands
+
+ifeq ($(MODE),container)
+# Compose builds the image lazily on first run if it doesn't exist yet.
+# -T disables the pseudo-tty compose normally allocates for `run`, since
+# these are non-interactive recipe invocations, not a dev shell.
+VIVADO = docker compose -f scripts/docker/docker-compose.yml run --rm -T vivado \
+	vivado -nolog -nojournal -mode batch
+XSCT = docker compose -f scripts/docker/docker-compose.yml run --rm -T vivado xsct
+else
 VIVADO = vivado -nolog -nojournal -mode batch
 XSCT = xsct
+endif
 RM = rm -rf
+
+# RUN_PETALINUX prefixes any command that needs the PetaLinux toolchain.
+# In vm mode it's empty (scripts run natively, exactly as before). In
+# container mode it runs the command inside the petalinux-runner container,
+# via `bash -c` so multi-word commands survive the compose `run` boundary.
+# NOTE: this wraps every scripts/petalinux/*.sh call below on the assumption
+# that each one invokes petalinux-create/-config/-package internally --
+# if any of them turn out to be pure file-munging with no petalinux-*
+# command inside, they can safely be pulled back out of RUN_PETALINUX to
+# avoid the container-startup overhead.
+ifeq ($(MODE),container)
+RUN_PETALINUX = docker compose -f scripts/docker/docker-compose.yml run --rm -T petalinux bash -c
+define run_petalinux
+	$(RUN_PETALINUX) '$(1)'
+endef
+else
+define run_petalinux
+	$(1)
+endef
+endif
+
+# Same as run_petalinux, but keeps a real TTY attached (no -T) -- needed for
+# the petalinux_*_cfg targets below, which open interactive ncurses
+# menuconfig UIs. In vm mode this is identical to run_petalinux.
+ifeq ($(MODE),container)
+RUN_PETALINUX_INTERACTIVE = docker compose -f scripts/docker/docker-compose.yml run --rm petalinux bash -c
+define run_petalinux_interactive
+	$(RUN_PETALINUX_INTERACTIVE) '$(1)'
+endef
+else
+define run_petalinux_interactive
+	$(1)
+endef
+endif
+
+# Same pattern for the cocotb/Verilator container. NOTE: like RUN_PETALINUX
+# above, this assumes test_core.sh invokes the simulator itself -- it wasn't
+# available to inspect while making this change, so double check it doesn't
+# also depend on anything Vivado-side (e.g. core packaging) that would need
+# a different container.
+ifeq ($(MODE),container)
+RUN_COCOTB = docker compose -f scripts/docker/docker-compose.yml run --rm -T cocotb bash -c
+define run_cocotb
+	$(RUN_COCOTB) '$(1)'
+endef
+else
+define run_cocotb
+	$(1)
+endef
+endif
 
 #############################################
 
@@ -175,17 +260,17 @@ write_sd: sd
 # Write or update the PetaLinux system configuration file
 petalinux_cfg: xsa
 	@./scripts/make/status.sh "CONFIGURING PETALINUX PROJECT"
-	./scripts/petalinux/config_system.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+	$(call run_petalinux_interactive,./scripts/petalinux/config_system.sh $(BOARD) $(BOARD_VER) $(PROJECT))
 
 # Write or update the PetaLinux root filesystem configuration file
 petalinux_rootfs_cfg: xsa
 	@./scripts/make/status.sh "CONFIGURING PETALINUX ROOTFS"
-	./scripts/petalinux/config_rootfs.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+	$(call run_petalinux_interactive,./scripts/petalinux/config_rootfs.sh $(BOARD) $(BOARD_VER) $(PROJECT))
 
 # Write or update the PetaLinux kernel configuration file
 petalinux_kernel_cfg: xsa
 	@./scripts/make/status.sh "CONFIGURING PETALINUX KERNEL"
-	./scripts/petalinux/config_kernel.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(OFFLINE)
+	$(call run_petalinux_interactive,./scripts/petalinux/config_kernel.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(OFFLINE))
 
 # Clean the SD card image at the mount point
 clean_sd:
@@ -301,7 +386,7 @@ projects/${PROJECT}/cores/%/tests/test_status: CORE = $(word 2,$(subst /, ,$*))
 projects/${PROJECT}/cores/%/tests/test_status: projects/${PROJECT}/cores/$$(VENDOR)/$$(CORE)/$$(CORE).v $$(wildcard projects/${PROJECT}/cores/$$(VENDOR)/$$(CORE)/tests/src/*) $$(wildcard projects/${PROJECT}/cores/$$(VENDOR)/$$(CORE)/submodules/*.v) scripts/make/test_core.sh scripts/make/cocotb.mk
 	@./scripts/make/status.sh "MAKING TEST STATUS FILE FOR CORE: '$(CORE)' by '$(VENDOR)' in '$(PROJECT)'"
 	mkdir -p $(@D)
-	scripts/make/test_core.sh $(PROJECT) $(VENDOR) $(CORE)
+	$(call run_cocotb,scripts/make/test_core.sh $(PROJECT) $(VENDOR) $(CORE))
 
 # Test summary for all the custom cores necessary for the project
 # The necessary cores for the specific project are extracted
@@ -370,27 +455,25 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PRO
 # Built using the scripts/petalinux/project.sh script
 tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa $(shell find projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION) -type f) $(shell find projects/$(PROJECT)/software -type f) $(shell find scripts/petalinux -type f)
 	@./scripts/make/status.sh "MAKING CONFIGURED PETALINUX PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
-	scripts/petalinux/project.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(OFFLINE)
-	scripts/petalinux/software.sh $(BOARD) $(BOARD_VER) $(PROJECT)
-	scripts/petalinux/kernel_modules.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+	$(call run_petalinux,scripts/petalinux/project.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(OFFLINE))
+	$(call run_petalinux,scripts/petalinux/software.sh $(BOARD) $(BOARD_VER) $(PROJECT))
+	$(call run_petalinux,scripts/petalinux/kernel_modules.sh $(BOARD) $(BOARD_VER) $(PROJECT))
 	scripts/petalinux/device_tree.sh $(BOARD) $(BOARD_VER) $(PROJECT)
 
 # The compressed root filesystem
 # Requires the PetaLinux project specification directory
 tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec scripts/petalinux/package_rootfs_files.sh $(wildcard projects/$(PROJECT)/rootfs_include/*)
 	@./scripts/make/status.sh "MAKING LINUX SYSTEM FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
-	cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && \
-		source $(PETALINUX_PATH)/settings.sh && \
-		petalinux-build
+	$(call run_petalinux,cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && petalinux-build)
 	@./scripts/make/status.sh "PACKAGING ADDITIONAL ROOTFS FILES FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
-	scripts/petalinux/package_rootfs_files.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+	$(call run_petalinux,scripts/petalinux/package_rootfs_files.sh $(BOARD) $(BOARD_VER) $(PROJECT))
 
 # The compressed boot files
 # Requires the root filesystem
 # Built using the petalinux package boot command
 tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/BOOT.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz scripts/petalinux/package_boot.sh
 	@./scripts/make/status.sh "PACKAGING BOOT FILES FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
-	scripts/petalinux/package_boot.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+	$(call run_petalinux,scripts/petalinux/package_boot.sh $(BOARD) $(BOARD_VER) $(PROJECT))
 
 # The bitstream file copied to the output directory
 out/$(BOARD)/$(BOARD_VER)/$(PROJECT)/system.bit: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/bitstream.bit
