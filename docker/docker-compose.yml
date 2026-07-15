@@ -1,0 +1,25 @@
+# Convenience wrapper around the `docker run` command in docker/README.md.
+# Run from the repository root with: docker compose -f docker/docker-compose.yml run --rm dev
+#
+# This assumes the `xilinx-tools` volume already exists and has been
+# populated (see "Setting up the tools volume" in docker/README.md) and
+# that this file lives at zynq_toolbox/docker/docker-compose.yml, so
+# `../` refers to the repo root.
+
+services:
+  dev:
+    build:
+      context: .
+      args:
+        BUILD_UID: ${BUILD_UID:-1000}
+        BUILD_GID: ${BUILD_GID:-1000}
+    image: zynq-toolbox-dev:2024.2
+    volumes:
+      - xilinx-tools:/tools/Xilinx
+      - ../:/workspace/zynq_toolbox
+    stdin_open: true
+    tty: true
+
+volumes:
+  xilinx-tools:
+    external: true
