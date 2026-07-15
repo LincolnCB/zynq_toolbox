@@ -40,7 +40,7 @@ This repo is structured to allow for easy building of projects. It's primarily a
 The top-level directory contains the following folders (which each contain their own more in-depth README files):
 
 - `boards`: Contains board files for boards that use the Zynq 7000 series SoCs. These files contain information about the board's hardware, like which Zynq variant is used or the I/O pinout. If you want to add support for a new board, you can take their board files (found online) and add a new folder here with the board's name containing the `board_files` folder.
-- `docker`: Only used if you're following the Docker installation path. Contains the `Dockerfile`, the `entrypoint.sh` that wires up the tool environment automatically, the `install-xilinx-tools.sh` one-time installer helper, and a `docker-compose.yml` convenience wrapper. See [Option B: Installing the tools in Docker](#option-b-installing-the-tools-in-docker).
+- `docker`: Only used if you're following the Docker installation path. Contains the `Dockerfile`, the `entrypoint.sh` that wires up the tool environment automatically, the `setup-tools.sh` and `setup-offline.sh` helpers for the one-time Xilinx/offline-cache setup steps, and a `docker-compose.yml` convenience wrapper. See [Option B: Installing the tools in Docker](#option-b-installing-the-tools-in-docker).
 - `example_cores`: Contains example/custom cores used in the scripted build of the FPGA system, separated by "vendor" (original author). You can add your own custom cores here in your own folder, following the same structure as the others.
 - `kernel_modules`: Contains kernel modules that can be included in the Linux kernel build for projects.
 - `projects`: Contains the projects that can be built with this repo. Each project has its own folder, and is mainly defined by its `block_design.tcl` file, which defines the FPGA system's block design. Each project will also need folders under `cfg` that define compatibility with different boards, and can have a few other special folders that augment the build process.
@@ -301,11 +301,11 @@ With this done, your VM install is complete -- skip ahead to [Optional: Makefile
 
 ## Option B: Installing the tools in Docker
 
-Instead of installing the tools directly onto a VM, this path sets up:
+Instead of installing the tools directly onto a VM, this path builds a reusable dev image and keeps the toolchain in Docker volumes. The image in `docker/Dockerfile` is built once and then used in three modes via `ZYNQ_MODE`:
 
-1. **Docker**, on whatever host OS you're using.
-2. A **dev container image**, built from `docker/Dockerfile`, containing just the OS packages the tools need.
-3. A **Docker volume** (`xilinx-tools`), containing the actual PetaLinux + Vivado install, done once via the real Xilinx GUI installer and reusable across containers indefinitely.
+1. **tools** -- runs the real Xilinx GUI installer or installs extra support packages such as cocotb and Verilator into the shared tools volume.
+2. **offline** -- extracts the PetaLinux offline-cache tarballs into a second volume.
+3. **dev** -- the day-to-day build environment, with the repo bind-mounted and the tools/offline volumes mounted automatically.
 
 ### Installing Docker
 
@@ -336,7 +336,7 @@ You'll run all the commands in this README from either PowerShell, Windows Termi
    ```
    docker run hello-world
    ```
-4. If you plan to run the Xilinx GUI installer (see [Setting up the tools volume](#setting-up-the-tools-volume) below), also install [XQuartz](https://www.xquartz.org/), open **XQuartz -> Settings -> Security**, and enable "Allow connections from network clients". Restart XQuartz after changing this.
+4. If you plan to run the Xilinx GUI installer (see [Setting up the Xilinx tools](#setting-up-the-xilinx-tools) below), also install [XQuartz](https://www.xquartz.org/), open **XQuartz -> Settings -> Security**, and enable "Allow connections from network clients". Restart XQuartz after changing this.
 
 #### Ubuntu
 
@@ -409,7 +409,8 @@ With the repo cloned (see [Cloning the repo](#cloning-the-repo) above), from the
 docker build \
   --build-arg BUILD_UID=$(id -u) \
   --build-arg BUILD_GID=$(id -g) \
-  -t zynq-toolbox-dev:2024.2 \
+  -t zynq-build:2024.2 \
+  -f docker/Dockerfile \
   docker/
 ```
 
@@ -417,25 +418,35 @@ docker build \
 
 This builds the image described in `docker/Dockerfile`: Ubuntu 20.04, bash set as the default shell, the apt packages the unified installer and PetaLinux builds need, and a non-root `builder` user (PetaLinux refuses to run as root). It does **not** contain Vivado or PetaLinux -- that's the next step.
 
-### Setting up the tools volume
+### Preparing the Docker volumes
+
+The Compose file expects two external Docker volumes to exist before you use the `tools` and `offline` services:
+
+```bash
+docker volume create zynq-tools
+docker volume create zynq-petalinux-offline
+```
+
+### Setting up the Xilinx tools
 
 This is the Docker equivalent of the VM path's "Unified installer" step, and like that step, it only needs to be done once (or once per Xilinx tools version you want available).
 
-1. Make the script executable and run it with your downloaded installer:
+1. Run the helper script with your downloaded installer:
 
    ```bash
-   chmod +x docker/install-xilinx-tools.sh
-   ./docker/install-xilinx-tools.sh /path/to/FPGAs_AdaptiveSoCs_Unified_2024.2_*.bin
+   INSTALLER_BIN=/path/to/FPGAs_AdaptiveSoCs_Unified_2024.2_*.bin \
+   docker compose -f docker/docker-compose.yml run --rm tools xilinx
    ```
 
-   This creates a Docker volume named `xilinx-tools` and opens the real Xilinx GUI installer inside a throwaway container, displaying it on your host via X11. (On Windows, run this from a WSL2 shell with an X server such as the one bundled in recent WSLg, or [VcXsrv](https://sourceforge.net/projects/vcxsrv/), running on the Windows side.)
+   This starts the real Xilinx GUI installer inside the container, displaying it on your host via X11. (On Windows, run this from a WSL2 shell with an X server such as the one bundled in recent WSLg, or [VcXsrv](https://sourceforge.net/projects/vcxsrv/), running on the Windows side.)
 
 2. On the **Select Product to Install** page, select **PetaLinux** (scroll down to the bottom), then **PetaLinux arm** under Select Edition, accept the license agreements, and leave the destination directory as the default (`/tools/Xilinx/`, creating a `PetaLinux/2024.2` folder). Click Install.
 
-3. Run the script again with the same installer file for the second product:
+3. Run the helper again with the same installer file for the second product:
 
    ```bash
-   ./docker/install-xilinx-tools.sh /path/to/FPGAs_AdaptiveSoCs_Unified_2024.2_*.bin
+   INSTALLER_BIN=/path/to/FPGAs_AdaptiveSoCs_Unified_2024.2_*.bin \
+   docker compose -f docker/docker-compose.yml run --rm tools xilinx
    ```
 
    Select **Vivado**, then **Vivado ML Standard** under Select Edition. On the components page, uncheck everything, then re-check:
@@ -444,32 +455,42 @@ This is the Docker equivalent of the VM path's "Unified installer" step, and lik
 
    Accept the license agreements, leave the destination as default (`/tools/Xilinx/`, creating a `Vivado/2024.2` folder), and click Install.
 
-When both finish, the `xilinx-tools` volume contains the same `/tools/Xilinx/PetaLinux/2024.2/` and `/tools/Xilinx/Vivado/2024.2/` layout the VM path produces -- just living in an isolated Docker volume instead of directly on a disk. You can confirm its contents any time with:
+If you also want the optional Python/Verilator support packages in the same tools volume, you can install them with:
 
 ```bash
-docker run --rm -v xilinx-tools:/tools/Xilinx ubuntu:20.04 ls -la /tools/Xilinx
+docker compose -f docker/docker-compose.yml run --rm tools cocotb
+docker compose -f docker/docker-compose.yml run --rm tools verilator stable
+```
+
+When both Xilinx products finish, the `zynq-tools` volume contains the same `/tools/Xilinx/PetaLinux/2024.2/` and `/tools/Xilinx/Vivado/2024.2/` layout the VM path produces -- just living in an isolated Docker volume instead of directly on a disk. You can confirm its contents any time with:
+
+```bash
+docker run --rm -v zynq-tools:/tools/Xilinx ubuntu:20.04 ls -la /tools/Xilinx
 ```
 
 You won't need to touch this volume again unless you're installing a different tools version, and you never need to re-run the installer just because you rebuilt or removed a dev container -- the volume is independent of any container.
+
+### Setting up the PetaLinux offline cache (optional)
+
+If you want the offline build cache available inside the dev container, extract the tarballs into the `zynq-petalinux-offline` volume:
+
+```bash
+PETALINUX_DOWNLOADS_TAR=/path/to/downloads.tar.gz \
+PETALINUX_SSTATE_TAR=/path/to/sstate.tar.gz \
+docker compose -f docker/docker-compose.yml run --rm offline
+```
+
+The helper script expects the two tarballs and will place their contents under `downloads/` and `arm/` inside the volume, which the dev container will discover automatically.
 
 ### Running the dev container
 
 From the repo root:
 
 ```bash
-docker run -it --rm \
-  -v xilinx-tools:/tools/Xilinx \
-  -v "$(pwd):/workspace/zynq_toolbox" \
-  zynq-toolbox-dev:2024.2
-```
-
-Or, using the included Compose file (does the same thing with less typing, and rebuilds the image automatically if `docker/Dockerfile` changed):
-
-```bash
 docker compose -f docker/docker-compose.yml run --rm dev
 ```
 
-Either way, you'll land in a bash shell as the `builder` user inside `/workspace/zynq_toolbox`. This replaces the VM path's **Profile setup** and **Vivado init script** steps -- `docker/entrypoint.sh` runs automatically on container start and exports `ZYNQ_TOOLBOX`, `PETALINUX_PATH`, and `VIVADO_PATH`, sources Vivado's `settings64.sh`, and (re)writes `~/.Xilinx/Vivado/Vivado_init.tcl` for you. Confirm it worked:
+This launches the dev environment as the `builder` user inside `/workspace/zynq_toolbox`. The `docker/entrypoint.sh` script runs automatically on container start and exports `ZYNQ_TOOLBOX`, `PETALINUX_PATH`, and `VIVADO_PATH`, sources Vivado's `settings64.sh`, and (re)writes `~/.Xilinx/Vivado/Vivado_init.tcl` for you. Confirm it worked:
 
 ```bash
 echo $ZYNQ_TOOLBOX $PETALINUX_PATH $VIVADO_PATH

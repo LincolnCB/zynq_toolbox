@@ -1,11 +1,23 @@
 # ---------------------------------------------------------------------------
-# zynq_toolbox build environment
+# zynq_toolbox unified build image
 #
-# Provides the OS-level environment PetaLinux and Vivado need to run
-# (bash-as-default-shell, required apt packages, non-root build user).
-# Does NOT contain the Xilinx tools themselves -- those are installed once
-# into the separate `xilinx-tools` Docker volume (see docker/README.md),
-# then mounted read-only into containers started from this image.
+# One image, three jobs (selected at `docker run` time via ZYNQ_MODE, see
+# entrypoint.sh):
+#
+#   ZYNQ_MODE=tools    Runs the AMD/Xilinx unified installer, builds
+#                      cocotb/Verilator -- all written into the `zynq-tools`
+#                      volume. One-time (or once-per-version) setup step.
+#   ZYNQ_MODE=offline  Extracts the PetaLinux sstate-cache/downloads tarballs
+#                      into the `zynq-petalinux-offline` volume. Optional,
+#                      one-time setup step.
+#   ZYNQ_MODE=dev      (default) The actual build environment -- mounts the
+#                      repo and both volumes, sets up env vars, drops you
+#                      into a shell.
+#
+# Every package this image could possibly need for any of the three jobs is
+# baked in up front, so none of the three modes need their own `apt-get` at
+# `docker run` time (the old install-xilinx-tools.sh ran one in a throwaway
+# ubuntu:20.04 container -- that's gone now, it's all here instead).
 # ---------------------------------------------------------------------------
 
 FROM ubuntu:20.04
@@ -17,16 +29,11 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG BUILD_UID=1000
 ARG BUILD_GID=1000
 
-# PetaLinux requires /bin/sh -> bash, not dash (Ubuntu's default). Baking
-# this into the image means nobody has to do this step by hand.
+# PetaLinux requires /bin/sh -> bash, not dash (Ubuntu's default).
 RUN ln -sf /bin/bash /bin/sh
 
-# Packages required by the unified installer / PetaLinux build process,
-# plus git/make/sudo for the build workflow and libpython3-dev for cocotb
-# (installed via pip below -- there's no python3-cocotb apt package on
-# Ubuntu 20.04). Verilator is intentionally NOT included -- see
-# docker/README.md, "Testing" section.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    # --- PetaLinux / general build workflow ---------------------------
     gcc \
     xterm \
     autoconf \
@@ -48,6 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iproute2 \
     unzip \
     tar \
+    xz-utils \
     diffstat \
     cpio \
     rsync \
@@ -59,23 +67,53 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpython3-dev \
     wget \
     curl \
+    less \
+    bc \
+    lsb-release \
+    # --- AMD/Xilinx unified installer GUI (X11) ------------------------
+    libxext6 \
+    libxtst6 \
+    libxi6 \
+    libxrender1 \
+    libsm6 \
+    libice6 \
+    fontconfig \
+    libfreetype6 \
+    # --- Verilator build prerequisites ---------------------------------
+    help2man \
+    perl \
+    perl-doc \
+    flex \
+    bison \
+    ccache \
+    libgoogle-perftools-dev \
+    numactl \
+    libfl2 \
+    libfl-dev \
+    zlibc \
     && rm -rf /var/lib/apt/lists/*
+
+# The unified installer expects a `python` binary on PATH.
+RUN ln -sf /usr/bin/python3 /usr/bin/python
 
 RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
 
-# Non-root build user -- PetaLinux refuses to run as root.
+# Non-root build user -- PetaLinux refuses to run as root. `tools`/`offline`
+# mode still run as root (see docker-compose.yml), since they write into
+# fresh volumes that start out root-owned; both chmod their output to be
+# world-readable/executable afterward so this user can use it in `dev` mode.
 RUN groupadd -g ${BUILD_GID} builder \
     && useradd -m -u ${BUILD_UID} -g ${BUILD_GID} -s /bin/bash builder \
     && echo "builder ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-USER builder
-RUN pip3 install --user cocotb cocotb_coverage
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY setup-tools.sh /usr/local/bin/setup-tools.sh
+COPY setup-offline.sh /usr/local/bin/setup-offline.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/setup-tools.sh /usr/local/bin/setup-offline.sh
 
+USER builder
 WORKDIR /workspace
 
-COPY --chown=builder:builder entrypoint.sh /home/builder/entrypoint.sh
-RUN sudo chmod +x /home/builder/entrypoint.sh
-
-ENTRYPOINT ["/home/builder/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 CMD ["/bin/bash"]

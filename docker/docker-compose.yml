@@ -1,25 +1,74 @@
-# Convenience wrapper around the `docker run` command in docker/README.md.
-# Run from the repository root with: docker compose -f docker/docker-compose.yml run --rm dev
+# Convenience wrapper around the `docker run` commands documented in
+# docker/README.md. Run from the repository root, e.g.:
+#   docker compose -f docker/docker-compose.yml run --rm dev
 #
-# This assumes the `xilinx-tools` volume already exists and has been
-# populated (see "Setting up the tools volume" in docker/README.md) and
-# that this file lives at zynq_toolbox/docker/docker-compose.yml, so
-# `../` refers to the repo root.
+# All three services build from the same image (docker/Dockerfile) and
+# differ only in ZYNQ_MODE + which volumes/host paths they mount:
+#
+#   tools    one-time (or per-version): installs Xilinx tools / cocotb /
+#            verilator into the `zynq-tools` volume. Needs a host path
+#            passed in via INSTALLER_BIN.
+#   offline  optional, one-time: extracts the PetaLinux sstate-cache /
+#            downloads archives into the `zynq-petalinux-offline` volume.
+#            Needs host paths via PETALINUX_DOWNLOADS_TAR / PETALINUX_SSTATE_TAR.
+#   dev      the actual build environment. Bind-mounts the repo and both
+#            volumes; this is the one you'll use day to day.
+#
+# `zynq-tools` and `zynq-petalinux-offline` must already exist (compose
+# won't silently create `external: true` volumes for you) -- the `tools`
+# and `offline` services below create them on first use via `docker volume
+# create`, or just run:
+#   docker volume create zynq-tools
+#   docker volume create zynq-petalinux-offline
+
+x-image: &image
+  build:
+    context: .
+    args:
+      BUILD_UID: ${BUILD_UID:-1000}
+      BUILD_GID: ${BUILD_GID:-1000}
+  image: zynq-build:2024.2
 
 services:
   dev:
-    build:
-      context: .
-      args:
-        BUILD_UID: ${BUILD_UID:-1000}
-        BUILD_GID: ${BUILD_GID:-1000}
-    image: zynq-toolbox-dev:2024.2
+    <<: *image
+    environment:
+      ZYNQ_MODE: dev
     volumes:
-      - xilinx-tools:/tools/Xilinx
+      - zynq-tools:/tools/Xilinx
+      - zynq-petalinux-offline:/tools/petalinux_offline
       - ../:/workspace/zynq_toolbox
     stdin_open: true
     tty: true
 
+  # Usage: INSTALLER_BIN=/path/to/installer.bin docker compose -f docker/docker-compose.yml run --rm tools xilinx
+  #        docker compose -f docker/docker-compose.yml run --rm tools cocotb
+  #        docker compose -f docker/docker-compose.yml run --rm tools verilator [tag]
+  tools:
+    <<: *image
+    environment:
+      ZYNQ_MODE: tools
+      DISPLAY: ${DISPLAY}
+    volumes:
+      - zynq-tools:/tools/Xilinx
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - ${INSTALLER_BIN:-/dev/null}:/tmp/installer.bin:ro
+    user: root
+
+  # Usage: PETALINUX_DOWNLOADS_TAR=/path/to/downloads.tar.gz PETALINUX_SSTATE_TAR=/path/to/sstate.tar.gz \
+  #          docker compose -f docker/docker-compose.yml run --rm offline
+  offline:
+    <<: *image
+    environment:
+      ZYNQ_MODE: offline
+    volumes:
+      - zynq-petalinux-offline:/tools/petalinux_offline
+      - ${PETALINUX_DOWNLOADS_TAR:-/dev/null}:/tmp/downloads.tar.gz:ro
+      - ${PETALINUX_SSTATE_TAR:-/dev/null}:/tmp/sstate.tar.gz:ro
+    user: root
+
 volumes:
-  xilinx-tools:
+  zynq-tools:
+    external: true
+  zynq-petalinux-offline:
     external: true
