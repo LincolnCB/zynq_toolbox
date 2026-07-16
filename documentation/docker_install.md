@@ -207,23 +207,32 @@ Extract these to some directory on your system. Each archive has a simply named 
 ├── downloads_2024.2_11061705
 │   └── downloads
 └── sstate-cache_2024.2_11061705
-    └── arm
+└── arm
 ```
 
-Mount the two directories into the `petalinux` container read-only, and pass their paths as env vars, overriding the compose-managed container with a one-off `docker run` (the compose service definition doesn't include these bind mounts, since the paths are host-specific):
+Then copy both into the `petalinux-offline-cache` Docker volume with the helper script, pointing it at the two extracted directories:
 
 ```bash
-docker run -it --rm \
-  -v petalinux-tools:/tools/PetaLinux:ro \
-  -v "$(pwd):/workspace/zynq_toolbox" \
-  -v ~/petalinux_downloads/downloads_2024.2_11061705/downloads:/workspace/petalinux_downloads:ro \
-  -v ~/petalinux_downloads/sstate-cache_2024.2_11061705/arm:/workspace/petalinux_sstate:ro \
-  -e PETALINUX_DOWNLOADS_PATH=/workspace/petalinux_downloads \
-  -e PETALINUX_SSTATE_PATH=/workspace/petalinux_sstate \
-  zynq-toolbox-petalinux:2024.2
+./scripts/docker/petalinux-offline-cache.sh \
+  ~/petalinux_downloads/downloads_2024.2_11061705/downloads \
+  ~/petalinux_downloads/sstate-cache_2024.2_11061705/arm
 ```
 
-If you want the offline cache available automatically every time the `Makefile` drives the `petalinux` container (i.e. under `MODE=container`, without a manual `docker run`), add the same two bind mounts and env vars to the `petalinux` service in `scripts/docker/docker-compose.yml`, then set `OFFLINE=true` in `make_defaults.mk` or on the command line. That's the only piece of this offline setup that's genuinely host-specific -- everything else in this repo works the same for everyone.
+Once this finishes, the volume has its own independent copy of both, so you can delete `~/petalinux_downloads` -- nothing further depends on that directory sticking around.
+
+With the volume populated, set `OFFLINE=true` in `make_defaults.mk` or on the command line, same as any other `make` variable:
+
+```bash
+make bit MODE=container OFFLINE=true
+```
+
+The `petalinux` container always has the cache volume mounted (although it could be empty if you didn't download the files); `OFFLINE=true` just tells the build scripts inside it to point at that mounted cache instead of hitting the network.
+
+You can confirm the volume's contents any time with:
+
+```bash
+docker run --rm -v petalinux-offline-cache:/cache ubuntu:20.04 ls -la /cache
+```
 
 ## Running builds
 

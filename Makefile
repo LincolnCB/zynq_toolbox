@@ -128,6 +128,7 @@ $(info --------------------------)
 
 #### Set up commands
 
+## Vivado
 ifeq ($(MODE),container)
 # Compose builds the image lazily on first run if it doesn't exist yet.
 # -T disables the pseudo-tty compose normally allocates for `run`, since
@@ -141,45 +142,41 @@ XSCT = xsct
 endif
 RM = rm -rf
 
+## PetaLinux
 # RUN_PETALINUX prefixes any command that needs the PetaLinux toolchain.
 # In vm mode it's empty (scripts run natively, exactly as before). In
 # container mode it runs the command inside the petalinux-runner container,
 # via `bash -c` so multi-word commands survive the compose `run` boundary.
-# NOTE: this wraps every scripts/petalinux/*.sh call below on the assumption
-# that each one invokes petalinux-create/-config/-package internally --
-# if any of them turn out to be pure file-munging with no petalinux-*
-# command inside, they can safely be pulled back out of RUN_PETALINUX to
-# avoid the container-startup overhead.
+# This is only necessary for scripts that actually call PetaLinux commands.
 ifeq ($(MODE),container)
+# When OFFLINE=true, point the build scripts at the offline cache mounted
+# into the petalinux container (see petalinux-offline-cache.sh and the
+# petalinux service's volumes in docker-compose.yml). These are fixed
+# in-container paths, not host paths -- nothing host-specific left here.
+ifeq ($(OFFLINE),true)
+export PETALINUX_DOWNLOADS_PATH = /workspace/petalinux_cache/downloads
+export PETALINUX_SSTATE_PATH = /workspace/petalinux_cache/sstate-cache
+endif
 RUN_PETALINUX = docker compose -f scripts/docker/docker-compose.yml run --rm -T petalinux bash -c
 define run_petalinux
 	$(RUN_PETALINUX) '$(1)'
 endef
-else
-define run_petalinux
-	$(1)
-endef
-endif
-
-# Same as run_petalinux, but keeps a real TTY attached (no -T) -- needed for
-# the petalinux_*_cfg targets below, which open interactive ncurses
-# menuconfig UIs. In vm mode this is identical to run_petalinux.
-ifeq ($(MODE),container)
+# Interactive keeps a real TTY attached for ncurses menuconfig UIs (no -T flag)
 RUN_PETALINUX_INTERACTIVE = docker compose -f scripts/docker/docker-compose.yml run --rm petalinux bash -c
 define run_petalinux_interactive
 	$(RUN_PETALINUX_INTERACTIVE) '$(1)'
 endef
 else
+define run_petalinux
+	$(1)
+endef
 define run_petalinux_interactive
 	$(1)
 endef
 endif
 
-# Same pattern for the cocotb/Verilator container. NOTE: like RUN_PETALINUX
-# above, this assumes test_core.sh invokes the simulator itself -- it wasn't
-# available to inspect while making this change, so double check it doesn't
-# also depend on anything Vivado-side (e.g. core packaging) that would need
-# a different container.
+## Cocotb
+# Same pattern for the cocotb/Verilator container.
 ifeq ($(MODE),container)
 RUN_COCOTB = docker compose -f scripts/docker/docker-compose.yml run --rm -T cocotb bash -c
 define run_cocotb

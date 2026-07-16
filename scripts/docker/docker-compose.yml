@@ -39,7 +39,11 @@ services:
     image: zynq-toolbox-petalinux:2024.2
     volumes:
       - petalinux-tools:/tools/PetaLinux:ro
+      - petalinux-offline-cache:/workspace/petalinux_cache:ro
       - ../:/workspace/zynq_toolbox
+    environment:
+      - PETALINUX_DOWNLOADS_PATH
+      - PETALINUX_SSTATE_PATH
     stdin_open: true
     tty: true
 
@@ -61,4 +65,6 @@ volumes:
   vivado-tools:
     external: true
   petalinux-tools:
+    external: true
+  petalinux-offline-cache:
     external: true
