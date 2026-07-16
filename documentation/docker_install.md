@@ -126,7 +126,7 @@ docker run hello-world
 
 ## Building the runner images
 
-With the repo cloned (see [Cloning the repo](#cloning-the-repo) above), from the repo root, build all three images at once:
+With the repo cloned (see [Cloning the repo](#cloning-the-repo) above), from the repo root, build all three images at once. This could take a couple minutes.
 
 ```bash
 BUILD_UID=$(id -u) BUILD_GID=$(id -g) \
@@ -135,13 +135,13 @@ BUILD_UID=$(id -u) BUILD_GID=$(id -g) \
 
 (On Windows without WSL2, `$(id -u)`/`$(id -g)` won't resolve -- just omit that first line; file ownership inside the containers is less of a concern on Docker Desktop for Windows, and the images fall back to a default UID/GID of 1000.)
 
-Or build just one at a time if you only need it right now, e.g.:
+You can also build each of the three (`vivado`, `petalinux`, and `cocotb`) individually, e.g.:
 
 ```bash
 BUILD_UID=$(id -u) BUILD_GID=$(id -g) docker compose -f scripts/docker/docker-compose.yml build vivado
 ```
 
-Each image is deliberately thin -- `vivado.Dockerfile` and `petalinux.Dockerfile` contain only the OS packages their respective tool needs to run, not the tool itself; Vivado and PetaLinux are installed once into separate Docker volumes in the next step, then mounted read-only at runtime. `cocotb.Dockerfile` is the exception -- cocotb and Verilator are small enough to bake directly into that image, so there's no separate volume for it.
+Each image is deliberately thin -- `vivado.Dockerfile` and `petalinux.Dockerfile` contain only the OS packages their respective tool needs to run, not the tool itself; Vivado and PetaLinux are installed once into separate Docker volumes in the next step, then mounted read-only at runtime. `cocotb.Dockerfile` (for the cocotb testbenches, optional) is simpler, because cocotb and the associated simulation tool Verilator are lightweight enough to be installed inside of an image.
 
 ## Setting up the Xilinx tools
 

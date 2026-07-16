@@ -40,7 +40,7 @@ This repo is structured to allow for easy building of projects. It's primarily a
 The top-level directory contains the following folders (which each contain their own more in-depth README files):
 
 - `boards`: Contains board files for boards that use the Zynq 7000 series SoCs. These files contain information about the board's hardware, like which Zynq variant is used or the I/O pinout. If you want to add support for a new board, you can take their board files (found online) and add a new folder here with the board's name containing the `board_files` folder.
-- `docker`: Only used if you're following the Docker installation path. Contains the `Dockerfile`, the `entrypoint.sh` that wires up the tool environment automatically, the `setup-tools.sh` and `setup-offline.sh` helpers for the one-time Xilinx/offline-cache setup steps, and a `docker-compose.yml` convenience wrapper. See [Option B: Installing the tools in Docker](#option-b-installing-the-tools-in-docker).
+- `documentation`: Contains images, markdown files, and other documentation external to the folder READMEs.
 - `example_cores`: Contains example/custom cores used in the scripted build of the FPGA system, separated by "vendor" (original author). You can add your own custom cores here in your own folder, following the same structure as the others.
 - `kernel_modules`: Contains kernel modules that can be included in the Linux kernel build for projects.
 - `projects`: Contains the projects that can be built with this repo. Each project has its own folder, and is mainly defined by its `block_design.tcl` file, which defines the FPGA system's block design. Each project will also need folders under `cfg` that define compatibility with different boards, and can have a few other special folders that augment the build process.
@@ -52,7 +52,7 @@ Finally, there's some files:
 
 - `.gitmodules`: Declares this repo's git submodules. Make sure to clone with `--recurse-submodules` or run `git submodule update --init --recursive` afterward -- see [Cloning the repo](#cloning-the-repo).
 - `environment.sh.example`: A template for environment variables, used by the **VM** installation path as explained in [Profile setup](#profile-setup). If you're following the **Docker** path, this file is generated for you automatically inside the container, and you generally won't need to touch it.
-- `make_defaults.mk.example`: Can optionally be copied as explained in [Optional: Makefile variable defaults](#optional-makefile-variable-defaults).
+- `make_defaults.mk.example`: A template for makefile defaults (see [Optional: Makefile variable defaults](#optional-makefile-variable-defaults)).
 - `Makefile`: The main Makefile that is used to build everything, see [Building an SD card](#building-an-sd-card).
 
 # Getting started
