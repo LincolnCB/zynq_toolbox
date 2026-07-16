@@ -61,6 +61,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
 
+# Workaround for a known libudev bug that crashes under Docker: Vivado's
+# license manager / WebTalk telemetry calls udev_enumerate_scan_devices()
+# to gather host info, which corrupts the glibc heap in containers
+# ("mremap_chunk(): invalid pointer", SIGABRT). Forcing libudev to be the
+# first library loaded avoids the corrupt allocator state that triggers it.
+# Set as an image-wide ENV (not just in a launch script) because
+# launch_runs spawns child processes that each need it too.
+ENV LD_PRELOAD=/lib/x86_64-linux-gnu/libudev.so.1
+
 RUN groupadd -g ${BUILD_GID} builder \
     && useradd -m -u ${BUILD_UID} -g ${BUILD_GID} -s /bin/bash builder
 

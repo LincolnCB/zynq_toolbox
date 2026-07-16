@@ -23,9 +23,10 @@ services:
         BUILD_GID: ${BUILD_GID:-1000}
     image: zynq-toolbox-vivado:2024.2
     network_mode: none
+    working_dir: /workspace/zynq_toolbox
     volumes:
       - vivado-tools:/tools/Xilinx:ro
-      - ../:/workspace/zynq_toolbox
+      - ../../:/workspace/zynq_toolbox
     stdin_open: true
     tty: true
 
@@ -37,10 +38,11 @@ services:
         BUILD_UID: ${BUILD_UID:-1000}
         BUILD_GID: ${BUILD_GID:-1000}
     image: zynq-toolbox-petalinux:2024.2
+    working_dir: /workspace/zynq_toolbox
     volumes:
       - petalinux-tools:/tools/Xilinx:ro
       - petalinux-offline-cache:/workspace/petalinux_cache:ro
-      - ../:/workspace/zynq_toolbox
+      - ../../:/workspace/zynq_toolbox
     environment:
       - PETALINUX_DOWNLOADS_PATH
       - PETALINUX_SSTATE_PATH
@@ -56,8 +58,9 @@ services:
         BUILD_GID: ${BUILD_GID:-1000}
     image: zynq-toolbox-cocotb:latest
     network_mode: none
+    working_dir: /workspace/zynq_toolbox
     volumes:
-      - ../:/workspace/zynq_toolbox
+      - ../../:/workspace/zynq_toolbox
     stdin_open: true
     tty: true
 
