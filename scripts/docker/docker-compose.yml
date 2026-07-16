@@ -24,7 +24,7 @@ services:
     image: zynq-toolbox-vivado:2024.2
     network_mode: none
     volumes:
-      - vivado-tools:/tools/Vivado:ro
+      - vivado-tools:/tools/Xilinx:ro
       - ../:/workspace/zynq_toolbox
     stdin_open: true
     tty: true
@@ -38,7 +38,7 @@ services:
         BUILD_GID: ${BUILD_GID:-1000}
     image: zynq-toolbox-petalinux:2024.2
     volumes:
-      - petalinux-tools:/tools/PetaLinux:ro
+      - petalinux-tools:/tools/Xilinx:ro
       - petalinux-offline-cache:/workspace/petalinux_cache:ro
       - ../:/workspace/zynq_toolbox
     environment:

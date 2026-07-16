@@ -17,9 +17,10 @@
 # In the installer, choose:
 #   PetaLinux (scroll to the bottom) -> PetaLinux arm under Select Edition
 #   -> accept the license agreements -> leave the destination as the
-#      default (/tools/Xilinx/), which lands as
-#      /tools/Xilinx/PetaLinux/<version> and gets mounted at
-#      /tools/PetaLinux inside the petalinux-runner container.
+#      default (/tools/Xilinx/)
+#      The whole /tools/Xilinx tree is mounted (as /tools/Xilinx) inside the
+#      petalinux-runner container, both here and at runtime, so nothing
+#      installed alongside Vivado gets silently dropped.
 #
 # Usage:
 #   ./install-petalinux.sh /path/to/FPGAs_AdaptiveSoCs_Unified_2024.2_*.bin
@@ -59,13 +60,40 @@ docker run -it --rm \
     --entrypoint bash \
     -e DISPLAY="$DISPLAY" \
     -v /tmp/.X11-unix:/tmp/.X11-unix \
-    -v petalinux-tools:/tools/Xilinx/PetaLinux \
+    -v petalinux-tools:/tools/Xilinx \
     -v "$(realpath "$INSTALLER_BIN")":/tmp/installer.bin \
     "$PETALINUX_IMAGE" \
-    -c "chmod +x /tmp/installer.bin && /tmp/installer.bin && chown -R ${BUILD_UID}:${BUILD_GID} /tools/Xilinx/PetaLinux"
+    -c "chmod +x /tmp/installer.bin && /tmp/installer.bin && chown -R ${BUILD_UID}:${BUILD_GID} /tools/Xilinx"
 
 if [ "$(uname)" = "Linux" ]; then
     xhost -local:docker >/dev/null
+fi
+
+
+# Sanity-check that everything we expect the installer to have written
+# actually landed in the volume. Each of these is checked independently so
+# a missing one is reported by name instead of just failing at the first
+# check -- e.g. if you forgot to re-check Vitis/Vitis HLS in the component
+# picker, this tells you exactly that, instead of failing opaquely later
+# on inside a build container.
+MISSING=()
+for product in PetaLinux; do
+    if ! docker run --rm --entrypoint bash \
+        -v vivado-tools:/tools/Xilinx "$PETALINUX_IMAGE" \
+        -c "[ -d /tools/Xilinx/${product} ]" \
+        >/dev/null 2>&1; then
+        MISSING+=("$product")
+    fi
+done
+
+if [ "${#MISSING[@]}" -gt 0 ]; then
+    echo ""
+    echo "WARNING: install finished, but the following expected directories" >&2
+    echo "are missing from the 'petalinux-tools' volume under /tools/Xilinx:" >&2
+    for product in "${MISSING[@]}"; do
+        echo "  - $product" >&2
+    done
+    echo "" >&2
 fi
 
 echo ""

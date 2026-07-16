@@ -4,7 +4,7 @@
 
 set -e
 
-TOOLS_ROOT="/tools/PetaLinux"
+TOOLS_ROOT="/tools/Xilinx/PetaLinux"
 REPO_ROOT="/workspace/zynq_toolbox"
 
 if [ -d "$REPO_ROOT" ]; then
@@ -26,8 +26,8 @@ if [ -n "$PETALINUX_VERSION" ]; then
     export PETALINUX_PATH="$TOOLS_ROOT/$PETALINUX_VERSION/tool"
 else
     echo "WARNING: no PetaLinux install found under $TOOLS_ROOT." >&2
-    echo "         Mount your petalinux-tools volume there, e.g.:" >&2
-    echo "         -v petalinux-tools:/tools/PetaLinux"  >&2
+    echo "         Mount your petalinux-tools volume at /tools/Xilinx, e.g.:" >&2
+    echo "         -v petalinux-tools:/tools/Xilinx"  >&2
 fi
 
 if [ -f "$PETALINUX_PATH/settings.sh" ]; then
@@ -35,16 +35,5 @@ if [ -f "$PETALINUX_PATH/settings.sh" ]; then
 else
     echo "WARNING: PetaLinux settings.sh not found at $PETALINUX_PATH" >&2
 fi
-
-# ---- Optional: offline build cache -----------------------------------------
-# For offline builds, mount the extracted cache directories and pass their
-# paths at `docker run` time, e.g.:
-#   -v /host/path/to/downloads:/workspace/petalinux_downloads:ro \
-#   -v /host/path/to/sstate/arm:/workspace/petalinux_sstate:ro \
-#   -e PETALINUX_DOWNLOADS_PATH=/workspace/petalinux_downloads \
-#   -e PETALINUX_SSTATE_PATH=/workspace/petalinux_sstate
-# Omit those two -e flags entirely for an online build -- this container has
-# network access by default (unlike the Vivado runner), so OFFLINE=false
-# works out of the box.
 
 exec "$@"

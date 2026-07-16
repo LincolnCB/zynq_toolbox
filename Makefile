@@ -28,19 +28,19 @@ include make_defaults.mk
 ## Some scripts to initialize the environment and check for necessary tools/src
 #############################################
 
-# Check for the REV D environment variable
-ifneq ($(shell pwd),$(ZYNQ_TOOLBOX))
-$(warning Environment variable ZYNQ_TOOLBOX does not match the current directory)
-$(warning - Current directory: $(shell pwd))
-$(error - ZYNQ_TOOLBOX: $(ZYNQ_TOOLBOX))
-endif
-
 # MODE selects vm (tools installed directly on this host, today's behavior)
 # or container (tools live in Docker volumes, invoked via scripts/docker/docker-compose.yml)
 MODE ?= vm
 
 # VM Mode
 ifeq ($(MODE),vm)
+
+# Check for the REV D environment variable if in VM mode
+ifneq ($(shell pwd),$(ZYNQ_TOOLBOX))
+$(warning Environment variable ZYNQ_TOOLBOX does not match the current directory)
+$(warning - Current directory: $(shell pwd))
+$(error - ZYNQ_TOOLBOX: $(ZYNQ_TOOLBOX))
+endif
 
 # Handle path variables in VM mode
 # Check if the Vivado settings64.sh file exists

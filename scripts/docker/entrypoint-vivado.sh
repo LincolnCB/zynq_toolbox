@@ -4,7 +4,7 @@
 
 set -e
 
-TOOLS_ROOT="/tools/Vivado"
+TOOLS_ROOT="/tools/Xilinx/Vivado"
 REPO_ROOT="/workspace/zynq_toolbox"
 
 if [ -d "$REPO_ROOT" ]; then
@@ -26,8 +26,8 @@ if [ -n "$VIVADO_VERSION" ]; then
     export VIVADO_PATH="$TOOLS_ROOT/$VIVADO_VERSION"
 else
     echo "WARNING: no Vivado install found under $TOOLS_ROOT." >&2
-    echo "         Mount your vivado-tools volume there, e.g.:" >&2
-    echo "         -v vivado-tools:/tools/Vivado" >&2
+    echo "         Mount your vivado-tools volume at /tools/Xilinx, e.g.:" >&2
+    echo "         -v vivado-tools:/tools/Xilinx" >&2
 fi
 
 if [ -f "$VIVADO_PATH/settings64.sh" ]; then
