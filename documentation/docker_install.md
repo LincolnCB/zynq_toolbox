@@ -207,7 +207,7 @@ Extract these to some directory on your system. Each archive has a simply named 
 ├── downloads_2024.2_11061705
 │   └── downloads
 └── sstate-cache_2024.2_11061705
-└── arm
+    └── arm
 ```
 
 Then copy both into the `petalinux-offline-cache` Docker volume with the helper script, pointing it at the two extracted directories:
