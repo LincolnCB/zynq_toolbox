@@ -29,7 +29,9 @@ if [ ! -d "projects/${PRJ}/software" ]; then
 fi
 
 # Source the PetaLinux settings script (make sure to clear positional parameters first)
-source ${PETALINUX_PATH}/settings.sh
+if [ -z "$PETALINUX" ]; then
+  source ${PETALINUX_PATH}/settings.sh
+fi
 
 # Enter the project
 cd tmp/${BRD}/${VER}/${PRJ}/petalinux

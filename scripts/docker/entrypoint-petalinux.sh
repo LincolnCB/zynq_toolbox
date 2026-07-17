@@ -31,7 +31,26 @@ else
 fi
 
 if [ -f "$PETALINUX_PATH/settings.sh" ]; then
+    # Save the container's CMD args, then clear positional parameters so
+    # settings.sh (which may reference $1/$@ internally) doesn't choke on them.
+    saved_args=("$@")
+    set --
+
+    # settings.sh contains commands (e.g. petalinux-env-check, the Yocto SDK
+    # environment-setup script) that can return non-zero for non-fatal
+    # warnings. Since settings.sh is sourced, our `set -e` above would apply
+    # to it too and silently kill the whole container on any such non-zero
+    # return. Disable -e just for the duration of the source.
+    set +e
     source "$PETALINUX_PATH/settings.sh"
+    petalinux_rc=$?
+    set -e
+
+    if [ "$petalinux_rc" -ne 0 ]; then
+        echo "WARNING: settings.sh exited with status $petalinux_rc (continuing anyway)" >&2
+    fi
+
+    set -- "${saved_args[@]}"
 else
     echo "WARNING: PetaLinux settings.sh not found at $PETALINUX_PATH" >&2
 fi

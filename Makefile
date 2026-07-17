@@ -455,13 +455,15 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec: tmp/$(BOARD)/$(BOAR
 	$(call run_petalinux,scripts/petalinux/project.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(OFFLINE))
 	$(call run_petalinux,scripts/petalinux/software.sh $(BOARD) $(BOARD_VER) $(PROJECT))
 	$(call run_petalinux,scripts/petalinux/kernel_modules.sh $(BOARD) $(BOARD_VER) $(PROJECT))
-	scripts/petalinux/device_tree.sh $(BOARD) $(BOARD_VER) $(PROJECT)
+	$(call run_petalinux,scripts/petalinux/device_tree.sh $(BOARD) $(BOARD_VER) $(PROJECT))
 
 # The compressed root filesystem
 # Requires the PetaLinux project specification directory
+# It would be nice to run this interactively (progress visualization is better) so check for that with [-t 1]
 tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/images/linux/rootfs.tar.gz: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec scripts/petalinux/package_rootfs_files.sh $(wildcard projects/$(PROJECT)/rootfs_include/*)
 	@./scripts/make/status.sh "MAKING LINUX SYSTEM FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
-	$(call run_petalinux,cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && source $(PETALINUX_PATH)/settings.sh && petalinux-build)
+	if [-t 1]; then $(call run_petalinux_interactive,cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && if [ -z "$PETALINUX" ]; then source ${PETALINUX_PATH}/settings.sh; fi && petalinux-build);\
+	else $(call run_petalinux,cd tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux && if [ -z "$PETALINUX" ]; then source ${PETALINUX_PATH}/settings.sh; fi && petalinux-build); fi
 	@./scripts/make/status.sh "PACKAGING ADDITIONAL ROOTFS FILES FOR: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	$(call run_petalinux,scripts/petalinux/package_rootfs_files.sh $(BOARD) $(BOARD_VER) $(PROJECT))
 

@@ -29,7 +29,9 @@ if [ ! -f "${REL_KERNEL_MODULES_PATH}" ]; then
 fi
 
 # Source the PetaLinux settings script (make sure to clear positional parameters first)
-source ${PETALINUX_PATH}/settings.sh
+if [ -z "$PETALINUX" ]; then
+  source ${PETALINUX_PATH}/settings.sh
+fi
 
 # Enter the PetaLinux project directory
 cd tmp/${BRD}/${VER}/${PRJ}/petalinux
@@ -52,5 +54,3 @@ while IFS= read -r MOD; do
   find "${SRC_DIR}" -type f ! -name "Makefile" ! -name "${MOD}.c" -exec cp -f {} "${KMOD_DIR}/" \;
 
 done < ${ZYNQ_TOOLBOX}/${REL_KERNEL_MODULES_PATH}
-
-

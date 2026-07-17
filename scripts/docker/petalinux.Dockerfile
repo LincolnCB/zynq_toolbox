@@ -52,6 +52,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     file \
     gawk \
     device-tree-compiler \
+    dnsutils \
     python3 \
     python3-pip \
     libpython3-dev \

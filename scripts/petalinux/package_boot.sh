@@ -26,7 +26,9 @@ if [ ! -f "${PETALINUX_PATH}/settings.sh" ]; then
   echo "[PTLNX BOOT PKG] ERROR: PetaLinux settings script not found at ${PETALINUX_PATH}/settings.sh"
   exit 1
 fi
-source $PETALINUX_PATH/settings.sh
+if [ -z "$PETALINUX" ]; then
+  source $PETALINUX_PATH/settings.sh
+fi
 
 # Check that the necessary PetaLinux project exists
 ./scripts/check/petalinux_project.sh ${BRD} ${VER} ${PRJ}
