@@ -165,7 +165,9 @@ docker run hello-world
 
 ## Building the runner images
 
-With the repo cloned (see [Cloning the repo](#cloning-the-repo) above), from the repo root, build all three images at once. This could take a couple minutes.
+With the repo cloned (see [Cloning the repo](#cloning-the-repo) above), from the repo root, build all three images at once (note that this includes the [Optional: cocotb and Verilator](#optional-cocotb-and-verilator) image for core unit tests. If you don't want this, see the individual builds below).
+
+This could take a couple minutes.
 
 ```bash
 BUILD_UID=$(id -u) BUILD_GID=$(id -g) \
@@ -173,11 +175,13 @@ BUILD_UID=$(id -u) BUILD_GID=$(id -g) \
 ```
 
 <details>
-<summary><i>You can also build each of the three (`vivado`, `petalinux`, and `cocotb`) individually, for example:</i></summary>
+<summary><i>You can also build each of the three individually, for example:</i></summary>
 
 ```bash
 BUILD_UID=$(id -u) BUILD_GID=$(id -g) docker compose -f scripts/docker/docker-compose.yml build vivado
 ```
+
+Replace `vivado` with either `petalinux` or `cocotb` depending on which you want to build.
 </details><p></p>
 
 Each image is deliberately thin -- `vivado.Dockerfile` and `petalinux.Dockerfile` contain only the OS packages their respective tool needs to run, not the tool itself; Vivado and PetaLinux are installed once into separate Docker volumes in the next step, then mounted read-only at runtime. `cocotb.Dockerfile` (for the cocotb testbenches, optional) is simpler, because cocotb and the associated simulation tool Verilator are lightweight enough to be installed inside of an image.
@@ -281,29 +285,10 @@ You can confirm the volume's contents any time with:
 docker run --rm -v petalinux-offline-cache:/cache ubuntu:20.04 ls -la /cache
 ```
 
-## Running builds
+With this done, your Docker install is complete -- continue to [Makefile variable defaults](../README.md#makefile-variable-defaults) and **make sure to set your `MODE` to `container`**.
 
-There are two ways to use the containers day to day:
-
-### Driven by the Makefile (recommended)
-
-Set `MODE=container` in `make_defaults.mk` (copy it from `make_defaults.mk.example` if you haven't already):
-
-```make
-MODE ?= container
-```
-
-Then just run `make` targets from your host exactly as you would with a native VM install -- `make bit`, `make sd`, `make tests`, etc. The Makefile transparently runs the Vivado steps in the `vivado` container, the PetaLinux steps in the `petalinux` container, and cocotb/Verilator tests in the `cocotb` container, using `docker compose -f scripts/docker/docker-compose.yml run` under the hood. Your host itself only needs `make`, `bash`, and Docker -- no Vivado, no PetaLinux, no cocotb.
-
-`MODE` can also be overridden per-invocation without touching `make_defaults.mk`:
-
-```bash
-make bit MODE=container
-```
-
-`write_sd` always runs directly on the host regardless of `MODE`, since it needs access to a real block device or mount point that a container can't reasonably reach.
-
-### Interactive, for debugging
+<details>
+<summary><i>Opening containers for debugging</i></summary>
 
 To get a shell inside a given tool's container -- useful for poking around, checking `vivado -version`, or debugging a failed build by hand:
 
@@ -326,7 +311,4 @@ which petalinux-create
 ```
 
 Because the repo directory is bind-mounted rather than copied into the image, anything a container writes into it (build outputs under `out/` and `tmp/`, generated config files) shows up directly on your host, and nothing is lost when the container exits -- `--rm` just means Docker throws away the *container*, not the mounted data or the tool volumes.
-
-With this done, your Docker install is complete -- continue to [Optional: Makefile variable defaults](#optional-makefile-variable-defaults) or straight to [Building an SD card](#building-an-sd-card).
-
----
+</details>

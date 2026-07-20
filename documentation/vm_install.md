@@ -219,10 +219,10 @@ set zynq_toolbox $::env(ZYNQ_TOOLBOX)
 source $zynq_toolbox/scripts/vivado/repo_paths.tcl
 ```
 
-With this done, your VM install is complete -- skip ahead to [Optional: Makefile variable defaults](#optional-makefile-variable-defaults) or straight to [Building an SD card](#building-an-sd-card).
+With this done, your VM install is complete. You can install the optional tools/files below (some highly recommended) or just continue on to [Makefile variable defaults](../README.md#makefile-variable-defaults) and **make sure to set your `MODE` to `vm`**.
 
 
-## Optional: PetaLinux offline build setup
+## Optional (RECOMMENDED): PetaLinux offline build setup
 
 The PetaLinux build process requires downloading a lot of files from the internet, which can be slow and unreliable. Depending on your network connection, this could add upwards of ten minutes to the build time. If you want a more reliable build process, you can download these files once and reuse them.
 
@@ -248,7 +248,7 @@ export PETALINUX_DOWNLOADS_PATH="$HOME/petalinux_downloads/downloads_2024.2_1106
 export PETALINUX_SSTATE_PATH="$HOME/petalinux_downloads/sstate-cache_2024.2_11061705/arm"
 ```
 
-With these variables set, include `OFFLINE=true` in the `make` command -- see [Building PetaLinux offline](#building-petalinux-offline).
+With these variables set, include `OFFLINE=true` in the `make` command -- see [Building PetaLinux offline](../README.md#building-petalinux-offline).
 
 ## Optional: Running tests
 

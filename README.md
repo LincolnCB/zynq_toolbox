@@ -52,34 +52,24 @@ Finally, there's some files:
 
 - `.gitmodules`: Declares this repo's git submodules. Make sure to clone with `--recurse-submodules` or run `git submodule update --init --recursive` afterward -- see [Cloning the repo](#cloning-the-repo).
 - `environment.sh.example`: A template for environment variables, used by the **VM** installation path as explained in [Profile setup](#profile-setup). If you're following the **Docker** path, this file is generated for you automatically inside the container, and you generally won't need to touch it.
-- `make_defaults.mk.example`: A template for makefile defaults (see [Optional: Makefile variable defaults](#optional-makefile-variable-defaults)).
+- `make_defaults.mk.example`: A template for makefile defaults (see [Makefile variable defaults](#makefile-variable-defaults)).
 - `Makefile`: The main Makefile that is used to build everything, see [Building an SD card](#building-an-sd-card).
 
 # Getting started
 
 You should read through this section before starting any installation or cloning, to be sure you're setting up your environment as you intend.
 
+Note that the recommended build environment is **LARGE** -- you're looking at needing 200 GB of disk space to store all the tools and your output files. You can get away with a bit less than this by using the online PetaLinux caches instead of pre-downloading them, but you should make sure your system can handle the size of this build pipeline!
+
 ## Required tools
 
-This repo uses the AMD/Xilinx FPGA toolchain to build projects for the chips in the Zynq 7000 SoC series family. These tools are fairly large and have particular requirements. As a result, you will have the best results installing them in a controlled Linux environment. The recommended options for this are to either install in a Virtual Machine (VM) or in a Docker container. Both of these options are supported, and each have their benefits.
+This repo uses the AMD/Xilinx FPGA toolchain to build projects for the chips in the Zynq 7000 SoC series family. These tools are fairly large and have particular requirements. As a result, you will have the best results installing them in a controlled Linux environment. The recommended options for this are to either install in a Virtual Machine (VM) or using Docker containers. 
 
-## Choosing an installation method
+Both of these options are supported, and each have their benefits. VM's are more monolithic, but may require more fiddling to connect your USB peripherals and will definitely cause a performance hit. Using Docker containers is a bit more engaged of a setup process, but allows this build repo to live directly on your host computer (easier to adjust and handle build results) and dynamically utilize much more of your system's resources.
 
-|    | VM    | Docker |
-|----|-------|--------|
-| Manual steps | Significant | More automated |
-| Build resources available | Limited by the VM's virtual disk | Can utilize the host's resources more completely |
-| Where the repo lives | Directly on the VM's virtual disk | On your host machine |
-| Where the tools live | Directly on the VM's virtual disk | In an isolated Docker volume, separate from your host|
-| Host footprint | One large VM disk image | Repo folder + a small docker image + a large but self-contained Docker volume |
-| Rebuilding your dev environment | Usually means redoing the whole process | Rebuild the container any time; the tools volume is untouched |
-| GUI for installer and Vivado | Native, since you're on the VM's desktop | Forwarded from the container to your host via X11 (one-time setup) |
+> Please read the [VM install instructions](documentation/vm_install.md) or the [Docker install instructions](documentation/docker_install.md) for your chosen path. The rest of this README is basically the same for both paths (but make sure to indicate which one you chose in your [Makefile variable defaults](#makefile-variable-defaults)).
 
-Both paths use the exact same `.bin` installer.
-
-> Please read the [VM install instructions](documentation/vm_install.md) or the [Docker install instructions](documentation/docker_install.md) for your chosen path. The rest of this README is basically the same for both paths.
-
-## Optional: Makefile variable defaults
+## Makefile variable defaults
 
 The Makefile is set up to use the variables `PROJECT`, `BOARD`, and `BOARD_VER` to determine which project, board, and board version to build, as well as a couple others (see [Building an SD card](#building-an-sd-card), [Building a different board, board version, or project](#building-a-different-board-board-version-or-project), [Building PetaLinux offline](#building-petalinux-offline), and [Script targets](#script-targets) for more information). To set personal default values for these variables, copy
 
@@ -93,7 +83,11 @@ into the file
 make_defaults.mk
 ```
 
-and make your edits there, inside your repo checkout (VM path: directly on the VM; Docker path: on the host -- it'll be visible from inside the container too, since the whole repo is bind-mounted). Just like `environment.sh`, only the example file is tracked, so you can edit `make_defaults.mk` without worrying about it being overwritten by a `git pull` or similar command.
+and make your edits there, inside your repo checkout.
+
+These can be set to anything you want for the most part, but you should **make sure to set your `MODE` to either `container` or `vm` depending on whether you installed in a Docker or VM configuration**.
+
+Just like `environment.sh`, only the example file is tracked, so you can edit `make_defaults.mk` without worrying about it being overwritten by a `git pull` or similar command.
 
 # Building an SD card
 
@@ -165,11 +159,13 @@ Boards and board versions are defined in the `boards/` directory, where the boar
 
 ## Building PetaLinux offline
 
-If you set up [Optional: PetaLinux offline build setup](#optional-petalinux-offline-build-setup) above, you can include the `OFFLINE=true` variable in the `make` command to use the local files instead of downloading them. For example, to build the Rev D Shim firmware for the Snickerdoodle Black with offline PetaLinux, you can run:
+If you set up the PetaLinux offline cache in either [your VM](./documentation/vm_install.md#optional-recommended-petalinux-offline-build-setup), you can include the `OFFLINE=true` variable in the `make` command to use the local files instead of downloading them. For example, to build the Rev D Shim firmware for the Snickerdoodle Black with offline PetaLinux, you can run:
 
 ```
 make OFFLINE=true
 ```
+
+You can also set this as a default in your [Makefile variable defaults](#makefile-variable-defaults).
 
 ## Intermediate build files and targets
 
