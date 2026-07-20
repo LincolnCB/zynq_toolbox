@@ -1,17 +1,10 @@
+***Updated 2026-07-20***
+
 # Installing the tools using Docker
 
-Instead of installing the tools directly onto a VM, this path keeps each tool in its
-own standalone container, with the large tool installs living in their own Docker
-volumes rather than baked into any image.
+Instead of installing the tools directly onto a VM, this path keeps each tool in its own standalone container, with the large tool installs living in their own Docker volumes rather than baked into any image.
 
-The repo itself is bind-mounted into whichever container is running, so build
-outputs (`tmp/`, `out/`) stay on your host.
-
-You don't have to run these containers by hand -- once they're built and the tool
-volumes are populated, the top-level `Makefile` drives all three automatically when
-you set `MODE=container` (see [Running builds](#running-builds) below). The manual
-`docker compose run` commands in this doc are mainly useful for the one-time tool
-installation and for interactive debugging inside a given tool's container.
+The repo itself is bind-mounted into whichever container is running, so build outputs (`tmp/`, `out/`) stay on your host. Once installed, they'll be managed entirely by the Makefile (`make`).
 
 ## Cloning the repo
 

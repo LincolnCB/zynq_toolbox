@@ -1,3 +1,5 @@
+***Updated 2026-07-20***
+
 # Installing the tools in a VM
 
 The tools' supported OSes are slightly limited. For the recommended versions listed above, I used a VM running [Ubuntu 20.04.6 (Desktop image)](https://www.releases.ubuntu.com/focal/) with 200 GB of storage/disk space, 16 GB of RAM/memory, and 8 CPU cores. If you're running on a Mac with an M1/M2 or other non-x86 chip, you may need to be picky with your VM software ([UTM](https://mac.getutm.app/) seems to be the recommended option -- make sure to select "iso image" when selecting the downloaded Ubuntu ISO). In terms of installing Ubuntu on the VM, I recommend a "Minimal Install" and not to "Download Updates" to keep it as simple and close to the original, supported edition as possible.

@@ -1,4 +1,4 @@
-***Updated 2026-07-13***
+***Updated 2026-07-20***
 
 [![DOI](https://zenodo.org/badge/846674502.svg)](https://doi.org/10.5281/zenodo.20802348)
 
@@ -85,7 +85,7 @@ make_defaults.mk
 
 and make your edits there, inside your repo checkout.
 
-These can be set to anything you want for the most part, but you should **make sure to set your `MODE` to either `container` or `vm` depending on whether you installed in a Docker or VM configuration**.
+**Make sure to set your `MODE` to either `container` or `vm` depending on whether you installed in a Docker or VM configuration**. You can set the other variables to whatever you'd like as your defaults.
 
 Just like `environment.sh`, only the example file is tracked, so you can edit `make_defaults.mk` without worrying about it being overwritten by a `git pull` or similar command.
 
