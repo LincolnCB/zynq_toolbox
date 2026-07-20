@@ -60,8 +60,8 @@ This guide uses Unix-style paths and shell syntax throughout, so on Windows you'
    wsl --shutdown
    ```
    and reopen your Ubuntu shell from the Start menu.
-5. With `systemd` enabled, follow the exact same steps as the [Ubuntu](#ubuntu) section below to install Docker Engine itself -- the apt-repo setup is identical whether it's native Linux or WSL2.
-6. Enable and start the Docker service, then confirm it's working:
+5. With `systemd` enabled, **follow the exact same steps as the [Ubuntu](#ubuntu) section below** to install Docker Engine itself -- the apt-repo setup is identical whether it's native Linux or WSL2.
+6. Once you've followed the Ubuntu installation, enable and start the Docker service, then confirm it's working:
    ```bash
    sudo systemctl enable --now docker
    docker run hello-world
