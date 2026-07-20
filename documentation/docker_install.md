@@ -33,6 +33,29 @@ git submodule update --init --recursive
 
 </details>
 
+### A note on line endings (Windows)
+
+If you're cloning on Windows -- even though you'll be working from a WSL2 Ubuntu shell (see below) -- watch out for line endings. Windows text editors traditionally save files with CRLF (`\r\n`) line endings, while this repo (like almost all Unix tooling) expects LF (`\n`) only. Git itself can also silently convert line endings on checkout if `core.autocrlf` is set to `true` on the Windows side, which is a common default in some Git-for-Windows installs. **This will cause issues if you don't fix it**.
+
+A few ways to avoid this:
+
+- **Clone from inside WSL2, not from Windows.** If you `git clone` from your WSL2 Ubuntu shell (rather than cloning on the Windows side and accessing the files through `\\wsl$\...`), Git for Linux inside WSL2 handles this correctly by default and won't rewrite line endings.
+- **Set `core.autocrlf` correctly.** Either way, it's worth explicitly setting this once inside WSL2:
+  ```bash
+  git config --global core.autocrlf input
+  ```
+  This tells Git to leave LF endings alone on checkout, and to convert any CRLF back to LF if you happen to commit a file that has them.
+- **Configure your editor to save with LF.** If you're editing repo files from a Windows-side editor (for example, VS Code with the WSL Remote extension, editing files that live inside the WSL2 filesystem), make sure it's set to save new lines as LF, not CRLF:
+  - In VS Code, open **Settings** (`Ctrl+,`), search for `eol`, and set **Files: Eol** to `\n`. You can also set this per-repo by adding to `.vscode/settings.json`:
+    ```json
+    {
+      "files.eol": "\n"
+    }
+    ```
+  - VS Code also shows the current line-ending style (`LF` or `CRLF`) in the bottom status bar for whichever file is open -- click it to change just that file, if you ever see it show `CRLF` unexpectedly.
+
+If you ever end up with a file that already has CRLF endings, you can convert it back with `dos2unix somefile.sh`, or `sed -i 's/\r$//' somefile.sh` if `dos2unix` isn't installed.
+
 ## Installing Docker
 
 Pick the section for your OS. You only need to do this once per machine.
