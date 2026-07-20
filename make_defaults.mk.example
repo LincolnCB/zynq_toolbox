@@ -21,4 +21,14 @@ BOARD_VER ?= 1.0
 OFFLINE ?= false
 MOUNT_DIR ?= # empty by default, set to the mount point of the SD card if needed
 
+# MODE selects how the build tools are reached:
+#   vm        - Vivado/PetaLinux/cocotb installed directly on this machine
+#               (the original workflow -- requires VIVADO_PATH,
+#               PETALINUX_PATH, and PETALINUX_VERSION to be set, e.g. by
+#               sourcing environment.sh)
+#   container - tools live in Docker volumes, reached via
+#               scripts/docker/docker-compose.yml -- see docker_install.md.
+#               No VIVADO_PATH/PETALINUX_PATH needed on the host in this mode.
+MODE ?= vm
+
 #############################################

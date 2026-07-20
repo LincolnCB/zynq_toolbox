@@ -51,7 +51,9 @@ else
 fi
 
 # Source the PetaLinux settings script (make sure to clear positional parameters first)
-source ${PETALINUX_PATH}/settings.sh
+if [ -z "$PETALINUX" ]; then
+  source ${PETALINUX_PATH}/settings.sh
+fi
 
 # Create a new template project
 cd tmp
