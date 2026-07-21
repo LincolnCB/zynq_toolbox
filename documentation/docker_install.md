@@ -231,7 +231,9 @@ Nothing to install separately -- both are baked into the `cocotb` image at build
 ```bash
 docker compose -f scripts/docker/docker-compose.yml build --build-arg VERILATOR_REF=v5.036 cocotb
 ```
-</details>
+</details><p></p>
+
+With this done, your Docker install is complete -- continue to [Makefile variable defaults](../README.md#makefile-variable-defaults) and **make sure to set `MODE = container`**.
 
 ## Optional (RECOMMENDED): PetaLinux offline build setup
 
@@ -264,21 +266,22 @@ Then copy both into the `petalinux-offline-cache` Docker volume with the helper 
 
 Once this finishes, the volume has its own independent copy of both, so you can delete `~/petalinux_downloads` -- nothing further depends on that directory sticking around.
 
-With the volume populated, set `OFFLINE=true` in `make_defaults.mk` or on the command line, same as any other `make` variable:
+With the volume populated, set `OFFLINE=true` in the [Makefile variable defaults](../README.md#makefile-variable-defaults) **(making sure `MODE=container`)** or on the command line, same as any other `make` variable  -- see [Building PetaLinux offline](../README.md#building-petalinux-offline).
 
+e.g:
 ```bash
-make bit MODE=container OFFLINE=true
+make xpr OFFLINE=true
 ```
 
 The `petalinux` container always has the cache volume mounted (although it could be empty if you didn't download the files); `OFFLINE=true` just tells the build scripts inside it to point at that mounted cache instead of hitting the network.
 
-You can confirm the volume's contents any time with:
+<details>
+<summary><i>You can confirm the volume's contents any time</i></summary>
 
 ```bash
 docker run --rm -v petalinux-offline-cache:/cache ubuntu:20.04 ls -la /cache
 ```
-
-With this done, your Docker install is complete -- continue to [Makefile variable defaults](../README.md#makefile-variable-defaults) and **make sure to set your `MODE` to `container`**.
+</details><p></p>
 
 <details>
 <summary><i>Opening containers for debugging</i></summary>

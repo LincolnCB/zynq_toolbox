@@ -221,7 +221,7 @@ set zynq_toolbox $::env(ZYNQ_TOOLBOX)
 source $zynq_toolbox/scripts/vivado/repo_paths.tcl
 ```
 
-With this done, your VM install is complete. You can install the optional tools/files below (some highly recommended) or just continue on to [Makefile variable defaults](../README.md#makefile-variable-defaults) and **make sure to set your `MODE` to `vm`**.
+With this done, your VM install is complete. You can install the optional tools/files below (some highly recommended) or just continue on to [Makefile variable defaults](../README.md#makefile-variable-defaults) and **make sure to set `MODE = vm`**.
 
 
 ## Optional (RECOMMENDED): PetaLinux offline build setup
@@ -250,7 +250,7 @@ export PETALINUX_DOWNLOADS_PATH="$HOME/petalinux_downloads/downloads_2024.2_1106
 export PETALINUX_SSTATE_PATH="$HOME/petalinux_downloads/sstate-cache_2024.2_11061705/arm"
 ```
 
-With these variables set, include `OFFLINE=true` in the `make` command -- see [Building PetaLinux offline](../README.md#building-petalinux-offline).
+With these variables set, include `OFFLINE=true` in the `make` command or [Makefile variable defaults](../README.md#makefile-variable-defaults) **(making sure `MODE=vm`)** -- see [Building PetaLinux offline](../README.md#building-petalinux-offline).
 
 ## Optional: Running tests
 
