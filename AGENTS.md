@@ -49,6 +49,7 @@ Output: `example_cores/[vendor]/cores/[core]/tests/test_status`, `projects/[proj
 | `cfg/.../petalinux/[ver]/rootfs_config.patch` | PetaLinux rootfs config patch |
 | `modules/` | Reusable Tcl block-design sub-modules *(optional)* |
 | `software/` | C software for rootfs *(optional)* |
+| `kernel_modules/` | Out-of-tree kernel modules, each subdirectory built automatically *(optional)* |
 | `rootfs_include/` | Files copied verbatim into rootfs `~` *(optional)* |
 | `cores/` | Project-specific IP cores *(optional)* |
 

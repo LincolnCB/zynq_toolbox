@@ -43,46 +43,45 @@ else
   ./scripts/check/petalinux_project.sh ${BRD} ${VER} ${PRJ} # Includes PetaLinux environment check
 fi
 
-# Check for the kernel_modules file
-KERNEL_MODULES_FILE="projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/kernel_modules"
-if [ -f "${KERNEL_MODULES_FILE}" ]; then
-  while IFS= read -r module || [ -n "$module" ]; do
-    # Ensure each line is a single word
+# Check the kernel_modules folder, if it exists
+KMOD_DIR="projects/${PRJ}/kernel_modules"
+if [ -d "${KMOD_DIR}" ]; then
+  for MOD_DIR in "${KMOD_DIR}"/*; do
+
+    # Skip anything that isn't a directory. The -d test follows symlinks, so
+    # modules symlinked in from examples/kernel_modules/ are checked normally.
+    [ -d "${MOD_DIR}" ] || continue
+    module=$(basename "${MOD_DIR}")
+
+    # The directory name becomes a Yocto recipe name, so it must be kebab-case
     if [[ ! "$module" =~ ^[a-z0-9-]+$ ]]; then
       echo "[CHECK KERNEL MODULES] ERROR:"
-      echo "Invalid module name '${module}' in ${KERNEL_MODULES_FILE}"
-      echo "Each line must contain only one valid word in kebab-case (lowercase alphanumeric and hyphens)."
+      echo "Invalid kernel module directory name '${module}'"
+      echo "Expected path: ${KMOD_DIR}/${module}"
+      echo "Directory names must be kebab-case (lowercase alphanumeric and hyphens)."
       exit 1
     fi
 
-    # Check if the directory for the module exists
-    if [ ! -d "kernel_modules/${module}" ]; then
-      echo "[CHECK KERNEL MODULES] ERROR:"
-      echo "Kernel module directory not found for '${module}'"
-      echo "Expected path: kernel_modules/${module}"
-      exit 1
-    fi
-
-    # Check that the directory for the module contains a PetaLinux folder of the correct version
-    if [ ! -d "kernel_modules/${module}/petalinux" ]; then
+    # Check that the directory contains a PetaLinux folder
+    if [ ! -d "${MOD_DIR}/petalinux" ]; then
       echo "[CHECK KERNEL MODULES] ERROR:"
       echo "Missing PetaLinux folder for '${module}'"
-      echo "Expected path: kernel_modules/${module}/petalinux"
+      echo "Expected path: ${KMOD_DIR}/${module}/petalinux"
       exit 1
     fi
 
     # Check that the PetaLinux folder contains a Makefile and C file of the same name
-    if [ ! -f "kernel_modules/${module}/petalinux/Makefile" ]; then
+    if [ ! -f "${MOD_DIR}/petalinux/Makefile" ]; then
       echo "[CHECK KERNEL MODULES] ERROR:"
       echo "Missing PetaLinux-configured Makefile for '${module}'"
-      echo "Expected path: kernel_modules/${module}/petalinux/Makefile"
+      echo "Expected path: ${KMOD_DIR}/${module}/petalinux/Makefile"
       exit 1
     fi
-    if [ ! -f "kernel_modules/${module}/petalinux/${module}.c" ]; then
+    if [ ! -f "${MOD_DIR}/petalinux/${module}.c" ]; then
       echo "[CHECK KERNEL MODULES] ERROR:"
       echo "Missing kernel module C file for '${module}'"
-      echo "Expected path: kernel_modules/${module}/petalinux/${module}.c"
+      echo "Expected path: ${KMOD_DIR}/${module}/petalinux/${module}.c"
       exit 1
     fi
-  done <"${KERNEL_MODULES_FILE}"
+  done
 fi

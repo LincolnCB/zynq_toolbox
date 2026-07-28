@@ -175,9 +175,6 @@ and manually look through the `2024.2` version as a guide to set the equivalent 
 #### `rootfs_config.patch`
 A patch file for the PetaLinux filesystem configuration. Similar to the `config.patch` file, this file contains changes to the default PetaLinux filesystem configuration for the project's system. It can be created or edited with the `make petalinux_rootfs_cfg` target in the top-level directory. Follow the same advice as above for creating a new version of this file.
 
-#### `kernel_modules` (**OPTIONAL**)
-A simple text file that lists the kernel modules that should be included in the PetaLinux build. This is used by the `scripts/petalinux/kernel_modules.sh` script to automatically include the specified custom kernel modules from the top-level directory `kernel_modules/` in your PetaLinux build. This file is optional, and if it is not present, no custom kernel modules will be included in the PetaLinux build.
-
 ### `xdc/`
 
 This directory contains any Xilinx Design Constraints (XDC) files for the project. These files define the hardware interface for the project and board (primarily pin assignments and types), and must match the ports defined in the block design. When building a project, any file in this directory with the `.xdc` extension will be included in the Vivado project. Often, a default or example `.xdc` file is provided with the the board files (see the `boards/` README for more detail). For boards already supported in this repo, there are some examples in that directory.
@@ -197,6 +194,14 @@ This directory simply contains files to be included in the PetaLinux root filesy
 ### `software/`
 
 This directory contains C code for software that will be automatically compiled and included in the PetaLinux build. Each folder will be built to a binary of the same name. The top C file should be named `[software_name].c`, where `[software_name]` is the name of the software (same name as the folder). Other `.c` files can be included in the same folder, and will be compiled together with the top-level file. The software binaries will be built as part of the PetaLinux build process, and will be included in the root filesystem.
+
+### `kernel_modules/`
+
+Source for out-of-tree kernel modules this project builds. Every subdirectory is treated as one module and is built automatically. Each module directory is named in kebab-case and contains a `petalinux/` folder with a kernel `Makefile` and a top-level `[module-name].c`. The directory name, the C filename, and the `obj-m` target must all match.
+
+Example projects usually symlink to shared modules in `examples/kernel_modules/` rather than duplicating source.
+
+Modules are built and installed into the image but are not loaded automatically -- use `modprobe` or `insmod` after boot.
 
 ### `tests/`
 

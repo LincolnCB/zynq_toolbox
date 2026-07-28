@@ -34,7 +34,7 @@ Usage:
 ./scripts/petalinux/kernel_modules.sh <board_name> <board_version> <project_name>
 ```
 
-Adds and configures kernel modules for the PetaLinux project. It reads a list of modules from the project and board's `kernel_modules`, creates the necessary recipes, and copies source files into the project for inclusion in the build.
+Adds and configures kernel modules for the PetaLinux project. Every subdirectory of the project's `kernel_modules/` folder is built as a module: the script creates the necessary recipe and copies the source files into the project for inclusion in the build.
 
 ---
 
