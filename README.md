@@ -458,9 +458,6 @@ This example project demonstrates some configuration options for the PS's interf
 
 This example project covers interrupts from the PL to the PS and software to handle that, allowing the PL to signal the PS when it needs attention. This is necessary for the safety features of the Rev D Shim firmware.
 
-## EX05 -- DMA
-
-This example project covers the Direct Memory Access (DMA) interface, which allows the PS to transfer data to and from the PL through the off-chip DDR memory.
 
 # Testing
 
