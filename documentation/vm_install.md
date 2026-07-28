@@ -1,3 +1,5 @@
+***Updated 2026-07-20***
+
 # Installing the tools in a VM
 
 The tools' supported OSes are slightly limited. For the recommended versions listed above, I used a VM running [Ubuntu 20.04.6 (Desktop image)](https://www.releases.ubuntu.com/focal/) with 200 GB of storage/disk space, 16 GB of RAM/memory, and 8 CPU cores. If you're running on a Mac with an M1/M2 or other non-x86 chip, you may need to be picky with your VM software ([UTM](https://mac.getutm.app/) seems to be the recommended option -- make sure to select "iso image" when selecting the downloaded Ubuntu ISO). In terms of installing Ubuntu on the VM, I recommend a "Minimal Install" and not to "Download Updates" to keep it as simple and close to the original, supported edition as possible.
@@ -219,10 +221,10 @@ set zynq_toolbox $::env(ZYNQ_TOOLBOX)
 source $zynq_toolbox/scripts/vivado/repo_paths.tcl
 ```
 
-With this done, your VM install is complete -- skip ahead to [Optional: Makefile variable defaults](#optional-makefile-variable-defaults) or straight to [Building an SD card](#building-an-sd-card).
+With this done, your VM install is complete. You can install the optional tools/files below (some highly recommended) or just continue on to [Makefile variable defaults](../README.md#makefile-variable-defaults) and **make sure to set `MODE = vm`**.
 
 
-## Optional: PetaLinux offline build setup
+## Optional (RECOMMENDED): PetaLinux offline build setup
 
 The PetaLinux build process requires downloading a lot of files from the internet, which can be slow and unreliable. Depending on your network connection, this could add upwards of ten minutes to the build time. If you want a more reliable build process, you can download these files once and reuse them.
 
@@ -248,7 +250,7 @@ export PETALINUX_DOWNLOADS_PATH="$HOME/petalinux_downloads/downloads_2024.2_1106
 export PETALINUX_SSTATE_PATH="$HOME/petalinux_downloads/sstate-cache_2024.2_11061705/arm"
 ```
 
-With these variables set, include `OFFLINE=true` in the `make` command -- see [Building PetaLinux offline](#building-petalinux-offline).
+With these variables set, include `OFFLINE=true` in the `make` command or [Makefile variable defaults](../README.md#makefile-variable-defaults) **(making sure `MODE=vm`)** -- see [Building PetaLinux offline](../README.md#building-petalinux-offline).
 
 ## Optional: Running tests
 

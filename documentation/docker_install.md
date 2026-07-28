@@ -1,17 +1,10 @@
+***Updated 2026-07-20***
+
 # Installing the tools using Docker
 
-Instead of installing the tools directly onto a VM, this path keeps each tool in its
-own standalone container, with the large tool installs living in their own Docker
-volumes rather than baked into any image.
+Instead of installing the tools directly onto a VM, this path keeps each tool in its own standalone container, with the large tool installs living in their own Docker volumes rather than baked into any image.
 
-The repo itself is bind-mounted into whichever container is running, so build
-outputs (`tmp/`, `out/`) stay on your host.
-
-You don't have to run these containers by hand -- once they're built and the tool
-volumes are populated, the top-level `Makefile` drives all three automatically when
-you set `MODE=container` (see [Running builds](#running-builds) below). The manual
-`docker compose run` commands in this doc are mainly useful for the one-time tool
-installation and for interactive debugging inside a given tool's container.
+The repo itself is bind-mounted into whichever container is running, so build outputs (`tmp/`, `out/`) stay on your host. Once installed, they'll be managed entirely by the Makefile (`make`).
 
 ## Cloning the repo
 
@@ -24,11 +17,37 @@ git clone --recurse-submodules https://github.com/LincolnCB/zynq_toolbox.git
 cd zynq_toolbox
 ```
 
-If you already cloned it without that flag, fetch the submodules afterward:
+<details>
+<summary><i>If you already cloned it without that flag, fetch the submodules afterward:</i></summary>
 
 ```bash
 git submodule update --init --recursive
 ```
+
+</details>
+
+### A note on line endings (Windows)
+
+If you're cloning on Windows -- even though you'll be working from a WSL2 Ubuntu shell (see below) -- watch out for line endings. Windows text editors traditionally save files with CRLF (`\r\n`) line endings, while this repo (like almost all Unix tooling) expects LF (`\n`) only. Git itself can also silently convert line endings on checkout if `core.autocrlf` is set to `true` on the Windows side, which is a common default in some Git-for-Windows installs. **This will cause issues if you don't fix it**.
+
+A few ways to avoid this:
+
+- **Clone from inside WSL2, not from Windows.** If you `git clone` from your WSL2 Ubuntu shell (rather than cloning on the Windows side and accessing the files through `\\wsl$\...`), Git for Linux inside WSL2 handles this correctly by default and won't rewrite line endings.
+- **Set `core.autocrlf` correctly.** Either way, it's worth explicitly setting this once inside WSL2:
+  ```bash
+  git config --global core.autocrlf input
+  ```
+  This tells Git to leave LF endings alone on checkout, and to convert any CRLF back to LF if you happen to commit a file that has them.
+- **Configure your editor to save with LF.** If you're editing repo files from a Windows-side editor (for example, VS Code with the WSL Remote extension, editing files that live inside the WSL2 filesystem), make sure it's set to save new lines as LF, not CRLF:
+  - In VS Code, open **Settings** (`Ctrl+,`), search for `eol`, and set **Files: Eol** to `\n`. You can also set this per-repo by adding to `.vscode/settings.json`:
+    ```json
+    {
+      "files.eol": "\n"
+    }
+    ```
+  - VS Code also shows the current line-ending style (`LF` or `CRLF`) in the bottom status bar for whichever file is open -- click it to change just that file, if you ever see it show `CRLF` unexpectedly.
+
+If you ever end up with a file that already has CRLF endings, you can convert it back with `dos2unix somefile.sh`, or `sed -i 's/\r$//' somefile.sh` if `dos2unix` isn't installed.
 
 ## Installing Docker
 
@@ -36,20 +55,33 @@ Pick the section for your OS. You only need to do this once per machine.
 
 ### Windows
 
+This guide uses Unix-style paths and shell syntax throughout, so on Windows you'll need WSL2 -- all commands in this README (and the rest of this doc) assume you're running them from a WSL2 Ubuntu shell, not PowerShell.
+
 1. Confirm virtualization is enabled in your BIOS/UEFI (it usually is by default on modern machines) and that you're on Windows 10 (build 19045+) or Windows 11.
-2. Install WSL2 if you don't already have it. Open PowerShell as Administrator and run:
+2. Install WSL2 with the Ubuntu distro. Open PowerShell as Administrator and run:
    ```
    wsl --install
    ```
-   Reboot if prompted.
-3. Download and install **Docker Desktop for Windows** from [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/).
-4. Launch Docker Desktop, and in **Settings -> General**, confirm "Use the WSL 2 based engine" is checked.
-5. Open a terminal (PowerShell, Windows Terminal, or a WSL2 shell) and confirm it's working:
+   This installs both WSL2 and Ubuntu by default. Reboot if prompted. If you hit any snags, or want more detail, see Microsoft's [WSL install guide](https://learn.microsoft.com/en-us/windows/wsl/install).
+3. From the Start menu, launch **Ubuntu** to finish first-time setup (it'll have you create a Unix username/password). This drops you into a bash shell -- this is the shell you'll use for everything else in this doc.
+4. Install Docker Engine *directly inside* that WSL2 Ubuntu shell, rather than installing Docker Desktop on the Windows side. This is lighter-weight (no separate Windows app or background VM) and avoids Docker Desktop's licensing terms for larger companies. First, enable `systemd`, which the Docker daemon needs to run as a service. From your WSL2 Ubuntu shell, run:
+   ```bash
+   sudo tee /etc/wsl.conf > /dev/null <<'EOF'
+   [boot]
+   systemd=true
+   EOF
    ```
+   Then, from PowerShell (not WSL), restart WSL for this to take effect:
+   ```
+   wsl --shutdown
+   ```
+   and reopen your Ubuntu shell from the Start menu.
+5. With `systemd` enabled, **follow the exact same steps as the [Ubuntu](#ubuntu) section below** to install Docker Engine itself -- the apt-repo setup is identical whether it's native Linux or WSL2.
+6. Once you've followed the Ubuntu installation, enable and start the Docker service, then confirm it's working:
+   ```bash
+   sudo systemctl enable --now docker
    docker run hello-world
    ```
-
-You'll run all the commands in this README from either PowerShell, Windows Terminal, or (recommended, since the rest of this guide uses Unix-style paths and shell syntax) a WSL2 Ubuntu shell.
 
 ### macOS
 
@@ -126,20 +158,24 @@ docker run hello-world
 
 ## Building the runner images
 
-With the repo cloned (see [Cloning the repo](#cloning-the-repo) above), from the repo root, build all three images at once. This could take a couple minutes.
+With the repo cloned (see [Cloning the repo](#cloning-the-repo) above), from the repo root, build all three images at once (note that this includes the [Optional: cocotb and Verilator](#optional-cocotb-and-verilator) image for core unit tests. If you don't want this, see the individual builds below).
+
+This could take a couple minutes.
 
 ```bash
 BUILD_UID=$(id -u) BUILD_GID=$(id -g) \
   docker compose -f scripts/docker/docker-compose.yml build
 ```
 
-(On Windows without WSL2, `$(id -u)`/`$(id -g)` won't resolve -- just omit that first line; file ownership inside the containers is less of a concern on Docker Desktop for Windows, and the images fall back to a default UID/GID of 1000.)
-
-You can also build each of the three (`vivado`, `petalinux`, and `cocotb`) individually, e.g.:
+<details>
+<summary><i>You can also build each of the three individually, for example:</i></summary>
 
 ```bash
 BUILD_UID=$(id -u) BUILD_GID=$(id -g) docker compose -f scripts/docker/docker-compose.yml build vivado
 ```
+
+Replace `vivado` with either `petalinux` or `cocotb` depending on which you want to build.
+</details><p></p>
 
 Each image is deliberately thin -- `vivado.Dockerfile` and `petalinux.Dockerfile` contain only the OS packages their respective tool needs to run, not the tool itself; Vivado and PetaLinux are installed once into separate Docker volumes in the next step, then mounted read-only at runtime. `cocotb.Dockerfile` (for the cocotb testbenches, optional) is simpler, because cocotb and the associated simulation tool Verilator are lightweight enough to be installed inside of an image.
 
@@ -152,13 +188,13 @@ This repo uses the AMD/Xilinx FPGA toolchain to build projects for the chips in 
 
 These can be installed together from the AMD unified installer ([2024.2 download page](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/vivado-design-tools/2024-2.html) -- select "AMD Unified Installer for FPGAs & Adaptive SoCs 2024.2: Linux Self Extracting Web Installer"). You'll need a free AMD account to download it. The same installer binary is used for both products, once per product, each writing into its own volume.
 
-1. Install Vivado, into the `vivado-tools` volume:
+1. Install Vivado, into the `vivado-tools` volume (**replace the path with the real onesto that file**):
 
    ```bash
    ./scripts/docker/install-vivado.sh /path/to/FPGAs_AdaptiveSoCs_Unified_2024.2.bin
    ```
 
-   This starts the real Xilinx GUI installer inside a throwaway container, displaying it on your host via X11. (On Windows, run this from a WSL2 shell with an X server such as the one bundled in recent WSLg, or [VcXsrv](https://sourceforge.net/projects/vcxsrv/), running on the Windows side.)
+   This starts the real Xilinx GUI installer inside a throwaway container, displaying it on your host via X11. (**On Windows, run this from your WSL2 Ubuntu shell; you'll need an X server** such as the one bundled in recent WSLg, or [VcXsrv](https://sourceforge.net/projects/vcxsrv/), running on the Windows side.)
 
    On the **Select Product to Install** page, select **Vivado**, then **Vivado ML Standard** under Select Edition. On the components page, uncheck everything, then re-check:
    - **DocNav** (optional, for in-app documentation)
@@ -166,7 +202,7 @@ These can be installed together from the AMD unified installer ([2024.2 download
 
    Accept the license agreements, leave the destination directory as the default (`/tools/Xilinx/`, creating a `Vivado/2024.2` folder inside the volume), and click Install.
 
-2. Install PetaLinux, into the separate `petalinux-tools` volume:
+2. Install PetaLinux, into the separate `petalinux-tools` volume (**replace the path with the real path to the file**):
 
    ```bash
    ./scripts/docker/install-petalinux.sh /path/to/FPGAs_AdaptiveSoCs_Unified_2024.2.bin
@@ -174,24 +210,32 @@ These can be installed together from the AMD unified installer ([2024.2 download
 
    Same installer, same throwaway-container pattern. On the **Select Product to Install** page, scroll to the bottom and select **PetaLinux**, then **PetaLinux arm** under Select Edition, accept the license agreements, and leave the destination directory as the default (again `/tools/Xilinx/`, this time creating a `PetaLinux/2024.2` folder inside the *other* volume).
 
-You can confirm the contents of either volume any time with:
+<details>
+<summary><i>You can confirm the contents of either volume any time:</i></summary>
 
 ```bash
 docker run --rm -v vivado-tools:/tools ubuntu:20.04 ls -la /tools
 docker run --rm -v petalinux-tools:/tools ubuntu:20.04 ls -la /tools
 ```
+</details><p></p>
 
 You won't need to touch these volumes again unless you're installing a different tools version, and you never need to re-run the installers just because you rebuilt or removed a runner container -- the volumes are independent of any container.
 
 ## Optional: cocotb and Verilator
 
-Nothing to install separately -- both are baked into the `cocotb` image at build time (see [Building the runner images](#building-the-runner-images) above). Verilator is built from source during the image build, pinned to a tag via the `VERILATOR_REF` build arg in `scripts/docker/cocotb.Dockerfile` (defaults to `stable`). To bump the Verilator version, edit that arg and rebuild:
+Nothing to install separately -- both are baked into the `cocotb` image at build time (see [Building the runner images](#building-the-runner-images) above). Verilator is built from source during the image build, pinned to a tag via the `VERILATOR_REF` build arg in `scripts/docker/cocotb.Dockerfile` (defaults to `stable`). 
+
+<details>
+<summary><i>To bump the Verilator version, edit that arg and rebuild:</i></summary>
 
 ```bash
 docker compose -f scripts/docker/docker-compose.yml build --build-arg VERILATOR_REF=v5.036 cocotb
 ```
+</details><p></p>
 
-## Optional: PetaLinux offline build setup
+With this done, your Docker install is complete -- continue to [Makefile variable defaults](../README.md#makefile-variable-defaults) and **make sure to set `MODE = container`**.
+
+## Optional (RECOMMENDED): PetaLinux offline build setup
 
 The PetaLinux build process requires downloading a lot of files from the internet, which can be slow and unreliable. Depending on your network connection, this could add upwards of ten minutes to the build time. If you want a more reliable build process, you can download these files once and reuse them -- the `petalinux` container has network access by default, so this step is entirely optional; skip it if an online build works fine for you.
 
@@ -200,7 +244,9 @@ For PetaLinux 2024.2, download from the [AMD download center](https://www.xilinx
 - `arm sstate-cache` (TAR/GZIP - ~9 GB)
 - `Downloads` (TAR/GZIP - ~59 GB)
 
-Extract these to some directory on your system. Each archive has a simply named directory at the top, `downloads` and `arm`. For example:
+Extract these to some directory on your system. Each archive has a simply named directory at the top, `downloads` and `arm`. 
+
+***Example path layout (not mandatory):***
 
 ```
 ~/petalinux_downloads
@@ -210,53 +256,35 @@ Extract these to some directory on your system. Each archive has a simply named 
     └── arm
 ```
 
-Then copy both into the `petalinux-offline-cache` Docker volume with the helper script, pointing it at the two extracted directories:
+Then copy both into the `petalinux-offline-cache` Docker volume with the helper script, pointing it at the two extracted directories (**replace the paths with the real ones to those folders**):
 
 ```bash
 ./scripts/docker/petalinux-offline-cache.sh \
-  ~/petalinux_downloads/downloads_2024.2_11061705/downloads \
-  ~/petalinux_downloads/sstate-cache_2024.2_11061705/arm
+  /path/to/petalinux/downloads \
+  /path/to/petalinux/arm
 ```
 
 Once this finishes, the volume has its own independent copy of both, so you can delete `~/petalinux_downloads` -- nothing further depends on that directory sticking around.
 
-With the volume populated, set `OFFLINE=true` in `make_defaults.mk` or on the command line, same as any other `make` variable:
+With the volume populated, set `OFFLINE=true` in the [Makefile variable defaults](../README.md#makefile-variable-defaults) **(making sure `MODE=container`)** or on the command line, same as any other `make` variable  -- see [Building PetaLinux offline](../README.md#building-petalinux-offline).
 
+e.g:
 ```bash
-make bit MODE=container OFFLINE=true
+make xpr OFFLINE=true
 ```
 
 The `petalinux` container always has the cache volume mounted (although it could be empty if you didn't download the files); `OFFLINE=true` just tells the build scripts inside it to point at that mounted cache instead of hitting the network.
 
-You can confirm the volume's contents any time with:
+<details>
+<summary><i>You can confirm the volume's contents any time</i></summary>
 
 ```bash
 docker run --rm -v petalinux-offline-cache:/cache ubuntu:20.04 ls -la /cache
 ```
+</details><p></p>
 
-## Running builds
-
-There are two ways to use the containers day to day:
-
-### Driven by the Makefile (recommended)
-
-Set `MODE=container` in `make_defaults.mk` (copy it from `make_defaults.mk.example` if you haven't already):
-
-```make
-MODE ?= container
-```
-
-Then just run `make` targets from your host exactly as you would with a native VM install -- `make bit`, `make sd`, `make tests`, etc. The Makefile transparently runs the Vivado steps in the `vivado` container, the PetaLinux steps in the `petalinux` container, and cocotb/Verilator tests in the `cocotb` container, using `docker compose -f scripts/docker/docker-compose.yml run` under the hood. Your host itself only needs `make`, `bash`, and Docker -- no Vivado, no PetaLinux, no cocotb.
-
-`MODE` can also be overridden per-invocation without touching `make_defaults.mk`:
-
-```bash
-make bit MODE=container
-```
-
-`write_sd` always runs directly on the host regardless of `MODE`, since it needs access to a real block device or mount point that a container can't reasonably reach.
-
-### Interactive, for debugging
+<details>
+<summary><i>Opening containers for debugging</i></summary>
 
 To get a shell inside a given tool's container -- useful for poking around, checking `vivado -version`, or debugging a failed build by hand:
 
@@ -279,7 +307,4 @@ which petalinux-create
 ```
 
 Because the repo directory is bind-mounted rather than copied into the image, anything a container writes into it (build outputs under `out/` and `tmp/`, generated config files) shows up directly on your host, and nothing is lost when the container exits -- `--rm` just means Docker throws away the *container*, not the mounted data or the tool volumes.
-
-With this done, your Docker install is complete -- continue to [Optional: Makefile variable defaults](#optional-makefile-variable-defaults) or straight to [Building an SD card](#building-an-sd-card).
-
----
+</details>
