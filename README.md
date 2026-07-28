@@ -1,4 +1,4 @@
-***Updated 2026-07-20***
+***Updated 2026-07-28***
 
 [![DOI](https://zenodo.org/badge/846674502.svg)](https://doi.org/10.5281/zenodo.20802348)
 
@@ -41,8 +41,8 @@ The top-level directory contains the following folders (which each contain their
 
 - `boards`: Contains board files for boards that use the Zynq 7000 series SoCs. These files contain information about the board's hardware, like which Zynq variant is used or the I/O pinout. If you want to add support for a new board, you can take their board files (found online) and add a new folder here with the board's name containing the `board_files` folder.
 - `documentation`: Contains images, markdown files, and other documentation external to the folder READMEs.
-- `example_cores`: Contains example/custom cores used in the scripted build of the FPGA system, separated by "vendor" (original author). You can add your own custom cores here in your own folder, following the same structure as the others.
-- `kernel_modules`: Contains kernel modules that can be included in the Linux kernel build for projects.
+- `examples/cores`: Contains example custom cores used in the scripted build of the FPGA system, separated by "vendor" (original author). Some example projects have symlinks to these.
+- `examples/kernel_modules`: Contains example kernel modules that can be included in the Linux kernel build for projects. Some example projects have symlinks to these.
 - `projects`: Contains the projects that can be built with this repo. Each project has its own folder, and is mainly defined by its `block_design.tcl` file, which defines the FPGA system's block design. Each project will also need folders under `cfg` that define compatibility with different boards, and can have a few other special folders that augment the build process.
 - `scripts`: Contains scripts that are used to build projects, separated by category (`check`, `make`, `petalinux`, and `vivado`).
 
@@ -177,14 +177,14 @@ The Makefile is set up to build the project in a series of steps, with intermedi
 
 ### Script targets
 
-- `tests`: Run tests for all cores in the project. Test summaries per core will be placed in `example_cores/[vendor]/cores/[core]/tests/test_status`, and a summary of all core tests for the project will be placed in `projects/[project]/tests/core_tests_summary`.
+- `tests`: Run tests for all cores in the project. Test summaries per core will be placed in the core directory, and a summary of all core tests for the project will be placed in `projects/[project]/tests/core_tests_summary`.
 - `write_sd`: Write the SD card files to the SD card. The default mount point is `/media/[username]/`, but can be overridden with the `MOUNT_DIR` variable. This will write the `BOOT.tar.gz` and `rootfs.tar.gz` files to the appropriate partitions on the SD card, as described in the [Building an SD card](#building-an-sd-card) section. (Docker path: run this on your host, not inside the container.) Uses the `scripts/make/write_sd.sh` script.
 - `petalinux_cfg`: Generate or update the PetaLinux system configuration files for the project, under `projects/[project]/cfg/[board]/[board_ver]/petalinux/[petalinux_ver]/`. Uses the `scripts/petalinux/petalinux_cfg.sh` script. Requires the terminal to be above a certain size to display the PetaLinux config GUI.
 - `petalinux_rootfs_cfg`: Generate or update the PetaLinux root filesystem configuration files for the project, under `projects/[project]/cfg/[board]/[board_ver]/petalinux/[petalinux_ver]/`. Uses the `scripts/petalinux/petalinux_rootfs_cfg.sh` script. Requires the terminal to be above a certain size to display the PetaLinux config GUI.
 - `clean_sd`: Clean the SD card files from a mounted SD card. The default mount point is `/media/[username]/`, but can be overridden with the `MOUNT_DIR` variable. Uses the `scripts/make/clean_sd.sh` script.
 - `clean_project`: Remove a single project's intermediate and temporary files, including Vivado-packaged cores from `tmp/`.
 - `clean_build`: Remove all the intermediate and temporary files, including Vivado-packaged cores from `tmp/`, as well as reports in `tmp_reports`.
-- `clean_tests`: Remove the `results` directory from all core test folders (under `example_cores/[vendor]/cores/[core]/tests/`), but leave the `test_status` file.
+- `clean_tests`: Remove the `results` directory from all core test folders, but leave the `test_status` file.
 - `clean_test_results`: Remove the `test_status` file from all core test folders, as well as the `core_tests_summary` file from all project test folders (under `projects/[project]/tests/`). Runs `clean_tests` first.
 - `clean_all`: Run all the clean targets above and additionally remove any output files in `out/`.
 
@@ -238,16 +238,18 @@ TODO
 
 Testing is done using [cocotb](https://www.cocotb.org/), a Python-based testbench framework for digital design verification. It allows you to write tests in Python and run them in a simulator, such as Verilator. To install the tools needed for testing, see [Optional: Running tests](#optional-running-tests) above (covers both the VM and Docker paths).
 
-To run tests for a specific core, you can use the `test_core.sh` script in the `scripts/make/` directory with the `vendor` and `core` arguments. For example, to test the `fifo_sync` core from `base`, you can run:
+To run tests for a specific core in a project, you can use the `test_core.sh` script in the `scripts/make/` directory with the `project`, `vendor`, and `core` arguments. For example, to test the `fifo_sync` core from `base`, you can run:
 
 ```
-./scripts/make/test_core.sh base fifo_sync
+./scripts/make/test_core.sh ex02_axi_interface base fifo_sync
 ```
 
-This will run the tests for the `fifo_sync` core under `example_cores/base/cores/fifo_sync/tests/src` and output a test status report at `example_cores/base/cores/fifo_sync/tests/test_status`.
+This will run the tests for the `fifo_sync` core under `projects/ex02_axi_interface/cores/base/fifo_sync/tests/src` and output a test status report at `projects/ex02_axi_interface/cores/base/fifo_sync/tests/test_status`.
 
 To run tests for all cores in a project, you can use the make target `tests`. For example, to run tests for the `rev_d_shim` project, you can run:
 
 ```
 make tests PROJECT=rev_d_shim
 ```
+
+In addition to the individual test files, this will also give a summary of all core tests for the project at `projects/[PROJECT]/tests/core_tests_summary`.

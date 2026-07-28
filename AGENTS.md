@@ -27,12 +27,14 @@ make help                     # List all targets
 ```
 
 ### Tests
-cocotb + Verilator, under `example_cores/[vendor]/cores/[core]/tests/src/testbench.py`.
+cocotb + Verilator, example available under `examples/cores/[vendor]/[core]/tests/src/testbench.py` (which some projects symlink to, replacing `examples` with the project path).
+
+To run tests, examples:
 ```bash
-./scripts/make/test_core.sh base fifo_sync     # single core
-make tests PROJECT=rev_d_shim                  # all tests for a project
+./scripts/make/test_core.sh ex02_axi_interface base fifo_sync # single core
+make tests PROJECT=rev_d_shim                                 # all tests for "rev_d_shim"
 ```
-Output: `example_cores/[vendor]/cores/[core]/tests/test_status`, `projects/[project]/tests/core_tests_summary`.
+Output: `projects/[project]/cores/[vendor]/[core]/tests/test_status`, `projects/[project]/tests/core_tests_summary`. 
 
 ---
 
@@ -53,7 +55,7 @@ Output: `example_cores/[vendor]/cores/[core]/tests/test_status`, `projects/[proj
 | `rootfs_include/` | Files copied verbatim into rootfs `~` *(optional)* |
 | `cores/` | Project-specific IP cores *(optional)* |
 
-**Custom cores** — `projects/[project]/cores/[vendor]/[core]/` (some examples available in `example_cores/[vendor]/cores/[core]/`):
+**Custom cores** — `projects/[project]/cores/[vendor]/[core]/` (some examples available in `examples/cores/[vendor]/[core]/`):
 - `[core].v` — top module (name must match dir)
 - `submodules/`, `tests/src/testbench.py`, `tests/src/parameters.json` *(all optional)*
 - Vendor metadata in `[vendor]/vendor_info.json`
