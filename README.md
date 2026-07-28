@@ -230,10 +230,6 @@ This example project demonstrates some configuration options for the PS's interf
 
 This example project covers interrupts from the PL to the PS and software to handle that, allowing the PL to signal the PS when it needs attention. This is necessary for the safety features of the Rev D Shim firmware.
 
-## EX05 -- DMA
-
-This example project covers the Direct Memory Access (DMA) interface, which allows the PS to transfer data to and from the PL through the off-chip DDR memory.
-
 # Testing
 
 Testing is done using [cocotb](https://www.cocotb.org/), a Python-based testbench framework for digital design verification. It allows you to write tests in Python and run them in a simulator, such as Verilator. To install the tools needed for testing, see [Optional: Running tests](#optional-running-tests) above (covers both the VM and Docker paths).
