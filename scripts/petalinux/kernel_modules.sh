@@ -63,6 +63,29 @@ for MOD_DIR in ${KMOD_PATH}/*; do
   # Copy any additional source files, excluding those two
   find -L "${SRC_DIR}" -type f ! -name "Makefile" ! -name "${MOD}.c" -exec cp -f {} "${KMOD_DIR}/" \;
 
+  # The generated recipe lists its sources explicitly in SRC_URI, and only the
+  # files named there are unpacked into the build directory. petalinux-create
+  # already lists Makefile and ${MOD}.c, so any additional files copied above
+  # must be added to SRC_URI or they will never reach the compile.
+  EXTRA_FILES=$(find -L "${SRC_DIR}" -type f ! -name "Makefile" ! -name "${MOD}.c" -exec basename {} \;)
+  if [ -n "${EXTRA_FILES}" ]; then
+    SRC_URI_ADD=""
+    for f in ${EXTRA_FILES}; do
+      SRC_URI_ADD+="file://${f} "
+    done
+    BBFILE="project-spec/meta-user/recipes-modules/${MOD}/${MOD}.bb"
+    echo "[PTLNX KMODS] Adding to SRC_URI: ${EXTRA_FILES}"
+    sed -i "s|^SRC_URI *= *\"|SRC_URI = \"${SRC_URI_ADD}|" "${BBFILE}"
+  fi
+
+  # Autoload the module at boot. This writes /etc/modules-load.d/${MOD}.conf
+  # into the rootfs so the module comes up automatically -- userspace never has
+  # to modprobe it by hand. KERNEL_MODULE_AUTOLOAD is idempotent per name, so
+  # appending it once per module is safe.
+  BBFILE="project-spec/meta-user/recipes-modules/${MOD}/${MOD}.bb"
+  echo "[PTLNX KMODS] Enabling autoload for: ${MOD}"
+  echo "KERNEL_MODULE_AUTOLOAD += \"${MOD}\"" >> "${BBFILE}"
+
 done
 
 if [ ${ANY_MOD} -eq 0 ]; then

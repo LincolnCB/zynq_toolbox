@@ -5,9 +5,8 @@
 /* PetaLinux's device tree generator already emits a node for every IP in the
  * Vivado address map. Those nodes get an auto-derived `compatible` that no
  * kernel driver matches, so nothing probes them and nothing claims their
- * memory. We declare our own nodes alongside them -- one per block, owning
- * both reg ranges, so each driver sees a single device instead of two it
- * would have to correlate.
+ * memory. We declare our own node alongside them, owning both reg ranges, so
+ * the simple-reg driver sees a single device with two named windows.
  *
  * `&amba_pl` is a stable label from the PS device tree, not something the
  * generator invents, so nothing here is guessed.
@@ -15,25 +14,13 @@
 
 &amba_pl {
 
-  /* Block A -- claimed by the simple-reg-uio kernel module.
-   * The two reg ranges become UIO memory regions 0 and 1, which userspace
-   * reaches by mmap()ing /dev/uioN at offsets 0 and one page respectively.
-   */
-  simple_reg_uio: simple-reg-uio@40000000 {
-    compatible = "zynq-toolbox,simple-reg-uio";
+  /* Claimed by the simple-reg kernel module. The two reg ranges become mmap
+   * regions 0 ("cfg") and 1 ("sts"), which userspace reaches by mmap()ing
+   * /dev/simple-reg at offsets 0 and one page respectively. */
+  simple_reg: simple-reg@40000000 {
+    compatible = "zynq-toolbox,simple-reg";
     reg = <0x40000000 0x1000>,
           <0x40100000 0x1000>;
-    reg-names = "cfg", "sts";
-  };
-
-  /* Block B -- claimed by the simple-reg-cdev kernel module.
-   * Same hardware. Userspace never sees these addresses: the driver ioremaps
-   * them and exposes a misc device instead.
-   */
-  simple_reg_cdev: simple-reg-cdev@40200000 {
-    compatible = "zynq-toolbox,simple-reg-cdev";
-    reg = <0x40200000 0x1000>,
-          <0x40300000 0x1000>;
     reg-names = "cfg", "sts";
   };
 };

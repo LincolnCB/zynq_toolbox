@@ -15,7 +15,6 @@
  *      still match. Move a peripheral in the block design and this file keeps
  *      compiling, keeps running, and quietly reads the wrong memory.
  *
- * Both problems are the reason the other two programs in this project exist.
  *
  * Run with:  sudo reg-mem-test
  */
@@ -35,10 +34,8 @@
 
 /* Addresses are defined in the hardware design Tcl file. Keeping them in sync
  * is entirely manual -- see the note at the top of this file. */
-#define CFG_UIO_BASE   0x40000000UL
-#define STS_UIO_BASE   0x40100000UL
-#define CFG_CDEV_BASE  0x40200000UL
-#define STS_CDEV_BASE  0x40300000UL
+#define CFG_BASE       0x40000000UL
+#define STS_BASE       0x40100000UL
 
 #define MAP_SIZE       0x1000UL   /* one page per register block */
 
@@ -125,16 +122,14 @@ int main(void)
     return EXIT_FAILURE;
   }
 
-  /* Both blocks are identical hardware, so both should behave the same here.
-   * Later, once the drivers are loaded, block B stops being reachable this way
-   * -- the cdev driver claims the region and /dev/mem loses the race. */
+  /* This is the same block the simple-reg driver binds to. Before the driver
+   * is loaded, /dev/mem can reach it as shown here (as root). */
   struct {
     const char *label;
     unsigned long cfg_base;
     unsigned long sts_base;
   } blocks[] = {
-    { "block A (uio)",  CFG_UIO_BASE,  STS_UIO_BASE  },
-    { "block B (cdev)", CFG_CDEV_BASE, STS_CDEV_BASE },
+    { "simple-reg block", CFG_BASE, STS_BASE },
   };
 
   int failures = 0;
