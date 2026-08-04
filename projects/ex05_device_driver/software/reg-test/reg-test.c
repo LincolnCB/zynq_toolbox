@@ -13,7 +13,7 @@
  *
  * What you gain by moving to the driver:
  *
- *   1. No root. /dev/simple-reg comes up mode 0660 (set by the driver itself,
+ *   1. No root. /dev/simple-reg comes up mode 0666 (set by the driver itself,
  *      no udev rule), so a normal user can open it. /dev/mem never can, because
  *      it is a window onto all of physical memory.
  *

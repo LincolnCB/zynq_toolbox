@@ -17,9 +17,16 @@
  * That is the exact same open/mmap/deref pattern as a /dev/mem program. Two
  * things change, and only two:
  *
- *   1. You open a named device, not /dev/mem. The node is created 0660 (see
+ *   1. You open a named device, not /dev/mem. The node is created 0666 (see
  *      DEV_MODE below), so an ordinary user can open it. /dev/mem can never be
  *      handed out this way because it exposes all of physical memory.
+ *
+ *      Why 0666 and not 0660: the misc core creates the node owned root:root and
+ *      can only set its *mode*, not its *group*. Assigning a friendlier group is
+ *      a udev job, and this rootfs has no udev. With 0660 the node stays
+ *      root:root and a non-root user (who is not in the root group) is denied.
+ *      0666 makes it world-accessible, which is the only udev-free way to reach
+ *      it without root. Scope is still limited to just these registers.
  *
  *   2. The mmap offset is a small driver-defined *region selector*, not a raw
  *      physical address. Region 0 is "cfg", region 1 is "sts" (offset N*PAGE).
@@ -54,7 +61,7 @@
 
 #define DRIVER_NAME "simple-reg"
 #define DEV_NAME    "simple-reg"       /* -> /dev/simple-reg */
-#define DEV_MODE    0660               /* group-accessible: no root, no udev */
+#define DEV_MODE    0666               /* world-accessible: no root, no udev */
 
 /* The device tree names the register windows. We bind to them by name (not by
  * index) so a reordering in the DT can never silently swap them. The order
@@ -149,7 +156,7 @@ static int simple_reg_probe(struct platform_device *pdev)
 	sr->misc.minor = MISC_DYNAMIC_MINOR;
 	sr->misc.name  = DEV_NAME;
 	sr->misc.fops  = &simple_reg_fops;
-	sr->misc.mode  = DEV_MODE;   /* the node comes up non-root, no udev rule */
+	sr->misc.mode  = DEV_MODE;   /* world-rw node: non-root access, no udev rule */
 
 	ret = misc_register(&sr->misc);
 	if (ret) {

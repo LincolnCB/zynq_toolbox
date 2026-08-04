@@ -1,0 +1,26 @@
+/include/ "system-conf.dtsi"
+/ {
+};
+
+/* PetaLinux's device tree generator already emits a node for every IP in the
+ * Vivado address map. Those nodes get an auto-derived `compatible` that no
+ * kernel driver matches, so nothing probes them and nothing claims their
+ * memory. We declare our own node alongside them, owning both reg ranges, so
+ * the simple-reg driver sees a single device with two named windows.
+ *
+ * `&amba_pl` is a stable label from the PS device tree, not something the
+ * generator invents, so nothing here is guessed.
+ */
+
+&amba_pl {
+
+  /* Claimed by the simple-reg kernel module. The two reg ranges become mmap
+   * regions 0 ("cfg") and 1 ("sts"), which userspace reaches by mmap()ing
+   * /dev/simple-reg at offsets 0 and one page respectively. */
+  simple_reg: simple-reg@40000000 {
+    compatible = "zynq-toolbox,simple-reg";
+    reg = <0x40000000 0x1000>,
+          <0x40100000 0x1000>;
+    reg-names = "cfg", "sts";
+  };
+};

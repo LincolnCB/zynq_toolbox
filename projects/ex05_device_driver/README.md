@@ -122,14 +122,21 @@ It then registers a **misc device**:
 sr->misc.minor = MISC_DYNAMIC_MINOR;
 sr->misc.name  = "simple-reg";     /* -> /dev/simple-reg */
 sr->misc.fops  = &simple_reg_fops;
-sr->misc.mode  = 0660;             /* group-accessible: no root, no udev rule */
+sr->misc.mode  = 0666;             /* world-accessible: no root, no udev rule */
 misc_register(&sr->misc);
 ```
 
-`misc.mode = 0660` is the whole reason this works without root. The misc core
+`misc.mode = 0666` is the whole reason this works without root. The misc core
 creates `/dev/simple-reg` with that mode directly -- **no udev rule required**,
-which matters here because this rootfs has no udev to install rules into. Any
-user in the node's group can `open` it.
+which matters here because this rootfs has no udev to install rules into.
+
+Why `0666` and not `0660`? The misc core creates the node owned `root:root` and
+can only set its *mode*, not its *group* -- assigning a friendlier group is a
+udev job, and this rootfs has no udev. With `0660` the node stays `root:root`
+and a login user who is **not** in the `root` group is denied (`Permission
+denied` on `open`). `0666` makes the node world-readable/writable, which is the
+only udev-free way to reach it without root. Access is still scoped to *only*
+these two register windows, never all of physical memory the way `/dev/mem` is.
 
 ### 3. It maps registers to userspace with `mmap` (and only `mmap`)
 
@@ -195,7 +202,7 @@ the standard build scripts:
    generated automatically.
 
 So a normal `make` produces an SD image where `simple-reg` is already loaded,
-`/dev/simple-reg` already exists at mode `0660`, and both test programs are on
+`/dev/simple-reg` already exists at mode `0666`, and both test programs are on
 the `PATH`.
 
 > Autoload note: enabling autoload-by-default in `kernel_modules.sh` applies to
@@ -215,13 +222,13 @@ run for you):
    ```
 
    You should see one line per region (`region 0 "cfg"...`, `region 1 "sts"...`)
-   and a final `/dev/simple-reg ready (mode 0660), 2 regions`.
+   and a final `/dev/simple-reg ready (mode 0666), 2 regions`.
 
 2. **Confirm the node is non-root:**
 
    ```sh
    ls -l /dev/simple-reg
-   # crw-rw---- 1 root <group> ... /dev/simple-reg
+   # crw-rw-rw- 1 root root ... /dev/simple-reg
    ```
 
 3. **Run the driver test as an ordinary user (no sudo):**
