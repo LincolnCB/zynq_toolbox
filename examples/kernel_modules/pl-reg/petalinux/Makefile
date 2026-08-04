@@ -1,4 +1,4 @@
-obj-m := simple-reg.o
+obj-m := pl-reg.o
 
 MY_CFLAGS += -g -DDEBUG
 ccflags-y += ${MY_CFLAGS}

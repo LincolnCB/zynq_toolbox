@@ -1,8 +1,10 @@
-/* reg-mem-test -- baseline register access through /dev/mem
+/* reg-mem -- baseline register access through /dev/mem
  *
  * This is the "before" case for ex05. It reaches the PL exactly the way the
  * Rev D Shim software does today: open /dev/mem, mmap the physical address of
- * each AXI register, and dereference the result.
+ * each AXI register, and dereference the result. Compare it with reg-driver.c,
+ * which reaches the SAME registers through the pl-reg driver -- by name, no
+ * root, no hardcoded addresses.
  *
  * Two things are worth noticing while running it:
  *
@@ -16,7 +18,7 @@
  *      compiling, keeps running, and quietly reads the wrong memory.
  *
  *
- * Run with:  sudo reg-mem-test
+ * Run with:  sudo reg-mem
  */
 
 #define _POSIX_C_SOURCE 199309L  /* clock_gettime, CLOCK_MONOTONIC */
@@ -112,24 +114,25 @@ static void benchmark(volatile uint32_t *cfg)
 
 int main(void)
 {
-  printf("reg-mem-test: register access via /dev/mem\n\n");
+  printf("reg-mem: register access via /dev/mem\n\n");
 
   int fd = open("/dev/mem", O_RDWR | O_SYNC);
   if (fd < 0) {
     fprintf(stderr, "Failed to open /dev/mem: %s\n", strerror(errno));
     if (errno == EACCES)
-      fprintf(stderr, "This program needs root. Try: sudo reg-mem-test\n");
+      fprintf(stderr, "This program needs root. Try: sudo reg-mem\n");
     return EXIT_FAILURE;
   }
 
-  /* This is the same block the simple-reg driver binds to. Before the driver
-   * is loaded, /dev/mem can reach it as shown here (as root). */
+  /* This is the same block the pl-reg driver binds to (as /dev/cfg + /dev/sts).
+   * Before the driver is loaded, /dev/mem can reach it as shown here (as
+   * root). */
   struct {
     const char *label;
     unsigned long cfg_base;
     unsigned long sts_base;
   } blocks[] = {
-    { "simple-reg block", CFG_BASE, STS_BASE },
+    { "cfg/sts block", CFG_BASE, STS_BASE },
   };
 
   int failures = 0;

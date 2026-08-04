@@ -1,10 +1,15 @@
 # No external FPGA ports are used in this project.
 #
 # This project builds ONE register block in the PL and drives it from a custom
-# kernel device driver (simple-reg), so userspace can reach the registers
-# directly (mmap, full speed) but WITHOUT root -- the thing /dev/mem cannot do.
+# kernel device driver (pl-reg), so userspace can reach the registers directly
+# (mmap, full speed) but WITHOUT root -- the thing /dev/mem cannot do.
 #
-#   CFG 0x40000000  /  STS 0x40100000   -> simple-reg kernel module -> /dev/simple-reg
+#   CFG 0x40000000  ->  /dev/cfg  |  STS 0x40100000  ->  /dev/sts   (via pl-reg)
+#
+# pl-reg binds to the nodes PetaLinux auto-generates for these two cores (no
+# hand-written device tree), and names each /dev entry after the core's Vivado
+# instance -- so the "cfg" and "sts" instance names below become /dev/cfg and
+# /dev/sts. Renaming an instance here renames its /dev node.
 #
 # The block is the same CFG -> NAND -> STS arrangement used in ex02:
 # write two 32-bit words into the 64-bit CFG register, and read their bitwise

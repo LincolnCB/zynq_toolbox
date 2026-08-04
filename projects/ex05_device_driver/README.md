@@ -1,134 +1,121 @@
 # Example 05: Device Driver
 
-Example 05 shows how to reach the same PL registers as the earlier examples, at
-the same speed, but through a proper Linux **device driver** instead of
-`/dev/mem` -- so the userspace program **does not need root**.
+Example 05 shows how to reach the same PL registers as the earlier examples, at the same speed, but through a proper Linux device driver instead of `/dev/mem` -- so the userspace program doesn't need root/`sudo` permissions, and *without writing any device tree by hand*.
 
 The project introduces the following tools and concepts:
-- Why `/dev/mem` register access is fast but requires root
-- Writing a small platform driver that binds to a device-tree node
-- Exposing registers to userspace with a **misc device** and `mmap`
+- `/dev/mem` register access is fast and simple but requires root
+- Binding a platform driver to the device-tree nodes **PetaLinux auto-generates** for every PL IP (no hand-written `.dtsi`)
+- Naming a `/dev` entry after a core's Vivado instance, via the auto-generated `/__symbols__`
+- Exposing registers to userspace with a "misc device" and `mmap`
 - Getting a non-root device node with no udev rule (`miscdevice.mode`)
-- How the build automation wires the block design, device tree, kernel module,
-  and software together
+- How the build automation wires the block design, kernel module, and software together
 
 ## Overview
 
-Examples 02-04 talk to the PL registers by opening `/dev/mem` and `mmap`-ing a
-physical address (`0x40000000`, ...). That works and it is fast, but it has two
-problems:
+Examples 02-04 talk to the PL registers by opening `/dev/mem` and `mmap`-ing a physical address (`0x40000000`, ...) defined in the block design. That works and it is fast, but `/dev/mem` is a window onto *all* of physical memory, so the kernel only hands it to `root`. Any program that touches a register has to run as root.
 
-1. **It requires root.** `/dev/mem` is a window onto *all* of physical memory,
-   so the kernel only hands it to `root`. Any program that touches a register
-   has to run as root (or be given `CAP_SYS_RAWIO`).
-2. **It hardcodes addresses.** The physical address lives in the C source, so
-   if the block moves in the hardware design, the software has to change too.
+This example keeps the exact same hardware as ex02 -- one `CFG -> NAND -> STS` block -- and reaches it through a driver instead.
 
-This example keeps the *exact same hardware* -- one `CFG -> NAND -> STS` block,
-the same round-trip test as ex02 -- and swaps out *how userspace reaches it*.
-A tiny kernel module, `simple-reg`, binds to the block via the device tree and
-publishes it as `/dev/simple-reg`. Userspace opens that node (no root) and
-`mmap`s it, and from then on the access is a plain pointer load/store, exactly
-as fast as the `/dev/mem` version.
+A small kernel module, `pl-reg`, binds to the nodes PetaLinux already generates for the two cores and publishes each as its own `/dev` entry named after the core's Vivado instance: **`/dev/cfg`** and **`/dev/sts`**. Userspace opens those (no root) and `mmap`s from there, and from then on the access is a plain pointer load/store, just like the `/dev/mem` version -- but with no root, no hardcoded addresses, and no device-tree file in the project.
 
-The key insight: **`mmap` is what makes `/dev/mem` fast, and `mmap` is
-available through a normal driver too.** The speed never came from `/dev/mem`
-specifically -- it came from mapping the registers into the process's page
-tables so there is no syscall per access. A driver can do the same mapping
-while scoping access to *only these registers* and setting a permissive mode on
-its own device node.
+## The driver: `pl-reg`
 
-## The software change: before and after
+Source: `examples/kernel_modules/pl-reg/petalinux/pl-reg.c` (symlinked into
+`kernel_modules/pl-reg`). It is intentionally small and does three things.
 
-Both programs live in `software/`. They are written to be as close to
-line-for-line identical as possible.
+### 1. It binds to PetaLinux's auto-generated nodes (no `.dtsi`)
 
-| | `reg-mem-test` (before) | `reg-test` (after) |
-|---|---|---|
-| Device opened | `/dev/mem` | `/dev/simple-reg` |
-| Needs root? | **Yes** | **No** |
-| CFG mapping | `mmap(..., fd, 0x40000000)` | `mmap(..., fd, 0)` (region 0) |
-| STS mapping | `mmap(..., fd, 0x40100000)` | `mmap(..., fd, PAGE_SIZE)` (region 1) |
-| Physical address in source? | Yes (`0x40000000`) | No |
-| Register access | `cfg[0] = a; sts[0]` | `cfg[0] = a; sts[0]` (identical) |
-| Speed | full (no per-access syscall) | full (identical) |
-
-Everything after the `mmap` calls -- writing the two CFG words, reading the STS
-NAND result, the benchmark loop -- is byte-for-byte the same. Only the device
-you open and the `mmap` *offset* change.
-
-### The mmap offset is a region selector, not an address
-
-In the `/dev/mem` version the `mmap` offset is the real physical address. In the
-driver version it is a small **region selector** defined by the driver:
-
-- offset `0` -> region 0 -> `"cfg"` (`0x40000000` in the PL)
-- offset `PAGE_SIZE` -> region 1 -> `"sts"` (`0x40100000` in the PL)
-
-The driver looks at `vma->vm_pgoff` (the offset in pages), picks the matching
-region, and maps *its* real physical pages. Userspace never names `0x40000000`
-anywhere. If the block moves in `block_design.tcl`, only the device tree
-changes; `reg-test.c` is untouched.
-
-## The driver: `simple-reg`
-
-Source: `examples/kernel_modules/simple-reg/petalinux/simple-reg.c` (symlinked
-into `kernel_modules/simple-reg`). It is intentionally small -- about 200 lines
-including its teaching comments -- and does three things.
-
-### 1. It binds to the hardware via the device tree
-
-`simple-reg` is a **platform driver** with
-
-```c
-.compatible = "zynq-toolbox,simple-reg"
-```
-
-The device tree overlay (`cfg/.../petalinux/2024.2/device_tree.dtsi`) declares a
-node with that `compatible` string and two named register windows:
+PetaLinux's device-tree generator (DTG) already emits one node per PL IP, with a
+`compatible` derived from the core's VLNV (`vendor:library:name:version`). For
+ex05's two cores it produces, with no input from us:
 
 ```dts
-&amba_pl {
-  simple_reg: simple-reg@40000000 {
-    compatible = "zynq-toolbox,simple-reg";
-    reg = <0x40000000 0x1000>,   /* cfg */
-          <0x40100000 0x1000>;   /* sts */
-    reg-names = "cfg", "sts";
-  };
+axi_cfg_register@40000000 { compatible = "xlnx,axi-cfg-register-1.0"; reg = <0x40000000 0x1000>; };
+axi_sts_register@40100000 { compatible = "xlnx,axi-sts-register-1.0"; reg = <0x40100000 0x1000>; };
+```
+
+`pl-reg` is a **platform driver** whose match table lists exactly those
+auto-generated compatibles:
+
+```c
+static const struct of_device_id pl_reg_of_match[] = {
+    { .compatible = "xlnx,axi-cfg-register-1.0" },
+    { .compatible = "xlnx,axi-sts-register-1.0" },
+    { }
 };
 ```
 
-When the kernel sees a device-tree node whose `compatible` matches a driver, it
-calls that driver's `probe`. This is the binding: the *device tree* says where
-the registers are, the *driver* says what to do with them. Neither one hardcodes
-the other.
+Because each core is a **separate node**, the kernel calls `probe` once per
+node, so the driver produces **one device (and one `/dev` entry) per register
+window**. There is no `device_tree.dtsi` anywhere in this project -- the
+addresses, the `compatible`, and the names all come from the auto-generated
+tree.
 
-> Note: PetaLinux's device-tree generator already emits an auto-node for every
-> PL IP, but with a `compatible` no driver matches -- so those stay unbound and
-> claim nothing. Our node with the private `zynq-toolbox,simple-reg` compatible
-> is the only one that gets a driver, and the two coexist harmlessly.
+> The DTG rewrites the VLNV vendor to `xlnx` and turns underscores into dashes,
+> so `pavel-demin:user:axi_cfg_register:1.0` becomes
+> `xlnx,axi-cfg-register-1.0`. The `compatible` therefore tracks core **name +
+> version**, not vendor. (The full mangling rules, observed from a real build,
+> are in the appendix.)
 
-### 2. It claims the registers and publishes a non-root node
+### 2. It names each `/dev` entry from the core's instance name
 
-In `probe`, for each named region the driver calls
-`platform_get_resource_byname(pdev, IORESOURCE_MEM, "cfg" / "sts")` to learn the
-physical address from the device tree, then `devm_request_mem_region(...)` to
-**take ownership** of it. This is the thing `/dev/mem` never does: two drivers
-can no longer fight over the same registers.
+A `compatible` identifies a core *type*, not a specific instance, so it cannot
+by itself say which node is `cfg` and which is `sts` -- and the node *name* is
+the shared core name (`axi_cfg_register`), not the instance name either. The
+instance identity survives as the **DTS label** the DTG puts on each node
+(`cfg: axi_cfg_register@...`), which the device-tree compiler records in the
+**`/__symbols__`** node as a label -> path map:
 
-It then registers a **misc device**:
+```dts
+__symbols__ {
+  cfg = "/pl-bus/axi_cfg_register@40000000";
+  sts = "/pl-bus/axi_sts_register@40100000";
+};
+```
+
+> Note: PetaLinux does **not** put PL cores in `/aliases` (that node only holds
+> the standard `serial0`/`spi0`/... entries). The Vivado instance name lives in
+> `/__symbols__` instead, so that is where the driver looks (falling back to
+> `/aliases` first in case a core is ever given a real alias).
+
+In `probe`, the driver reverse-looks-up its own node in `/__symbols__` and names
+the misc device after that label -- so the `cfg` and `sts` instances in
+`block_design.tcl` become **`/dev/cfg`** and **`/dev/sts`**. No physical address
+appears in userspace, and even inside the driver the address only comes from the
+node's own `reg` (single-sourced from the block design):
 
 ```c
-sr->misc.minor = MISC_DYNAMIC_MINOR;
-sr->misc.name  = "simple-reg";     /* -> /dev/simple-reg */
-sr->misc.fops  = &simple_reg_fops;
-sr->misc.mode  = 0666;             /* world-accessible: no root, no udev rule */
-misc_register(&sr->misc);
+inst = pl_reg_instance_name(dev->of_node);   /* -> "cfg" or "sts" */
+strscpy(pr->name, inst ? inst : dev->of_node->name, sizeof(pr->name));
+pr->misc.name = pr->name;                     /* -> /dev/cfg, /dev/sts */
+```
+
+**Fail-loud property:** if a core's VLNV name or version changes, its
+auto-`compatible` changes too, `pl-reg` stops matching, `probe` never runs, and
+`/dev/cfg` (or `/dev/sts`) is never created -- so the userspace `open()` fails
+with `ENOENT` instead of silently reaching the wrong register. Rename the
+instance in the block design and the `/dev` node's name changes with it.
+
+### 3. It claims the registers and maps them to userspace with `mmap`
+
+In `probe` the driver fetches the node's single `reg` window by **index**
+(auto-nodes have no `reg-names`), then `devm_request_mem_region(...)` to **take
+ownership** of it -- the thing `/dev/mem` never does, so two drivers can no
+longer fight over the same registers. It then registers a **misc device**:
+
+```c
+res = platform_get_resource(pdev, IORESOURCE_MEM, 0);   /* by index, not name */
+devm_request_mem_region(dev, res->start, resource_size(res), "pl-reg");
+...
+pr->misc.minor = MISC_DYNAMIC_MINOR;
+pr->misc.name  = pr->name;      /* -> /dev/cfg or /dev/sts */
+pr->misc.mode  = 0666;          /* world-accessible: no root, no udev rule */
+misc_register(&pr->misc);
 ```
 
 `misc.mode = 0666` is the whole reason this works without root. The misc core
-creates `/dev/simple-reg` with that mode directly -- **no udev rule required**,
-which matters here because this rootfs has no udev to install rules into.
+creates the node with that mode directly -- **no udev rule required**, which
+matters here because this rootfs has no udev to install rules into.
 
 Why `0666` and not `0660`? The misc core creates the node owned `root:root` and
 can only set its *mode*, not its *group* -- assigning a friendlier group is a
@@ -136,22 +123,19 @@ udev job, and this rootfs has no udev. With `0660` the node stays `root:root`
 and a login user who is **not** in the `root` group is denied (`Permission
 denied` on `open`). `0666` makes the node world-readable/writable, which is the
 only udev-free way to reach it without root. Access is still scoped to *only*
-these two register windows, never all of physical memory the way `/dev/mem` is.
+this one register window, never all of physical memory the way `/dev/mem` is.
 
-### 3. It maps registers to userspace with `mmap` (and only `mmap`)
-
-The driver implements exactly one file operation, `mmap`:
+The driver implements exactly one file operation, `mmap`, mapping the single
+window at offset 0:
 
 ```c
-static int simple_reg_mmap(struct file *file, struct vm_area_struct *vma)
+static int pl_reg_mmap(struct file *file, struct vm_area_struct *vma)
 {
-    struct miscdevice *misc = file->private_data;
-    struct simple_reg_dev *sr = container_of(misc, struct simple_reg_dev, misc);
-    unsigned long index = vma->vm_pgoff;              /* region selector */
-    ...
-    vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);   /* MMIO: uncached */
+    struct pl_reg_dev *pr = container_of(..., struct pl_reg_dev, misc);
+    if (vma->vm_pgoff != 0) return -EINVAL;                     /* one window */
+    vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);    /* MMIO: uncached */
     return io_remap_pfn_range(vma, vma->vm_start,
-                              r->phys >> PAGE_SHIFT, len, vma->vm_page_prot);
+                              pr->phys >> PAGE_SHIFT, len, vma->vm_page_prot);
 }
 ```
 
@@ -174,39 +158,42 @@ is the simpler fit for the goal of this example.
 
 ## How the build automation ties it together
 
-Nothing in this example is wired up by hand at boot. Each piece is picked up by
-the standard build scripts:
+Nothing in this example is wired up by hand at boot -- and, unlike a typical
+driver, there is **no device-tree step at all**. Each piece is picked up by the
+standard build scripts:
 
 1. **Block design** (`block_design.tcl`) builds the single `CFG -> NAND -> STS`
    block at `0x40000000` / `0x40100000`. This ends up in the bitstream and the
-   `.xsa` hardware definition.
+   `.xsa` hardware definition, and the DTG turns each core into a node
+   automatically.
 
-2. **Device tree** (`cfg/.../petalinux/2024.2/device_tree.dtsi`) adds the
-   `simple-reg` node with the private `compatible` and `reg-names`. The
-   `compatible` string is what *binds the driver to the hardware*; the
-   `reg-names` are what the driver looks up by name.
+2. **Device tree: none.** There is no `cfg/.../petalinux/.../device_tree.dtsi`
+   in this project. `pl-reg` binds to the nodes PetaLinux generates from the
+   `.xsa`, and takes the `/dev` names from the auto-generated `/__symbols__`
+   (the Vivado instance labels). (The build script treats a missing
+   device-tree file as "nothing to add".)
 
-3. **Kernel module** (`kernel_modules/simple-reg`, a symlink to
-   `examples/kernel_modules/simple-reg`) is discovered automatically by
+3. **Kernel module** (`kernel_modules/pl-reg`, a symlink to
+   `examples/kernel_modules/pl-reg`) is discovered automatically by
    `scripts/petalinux/kernel_modules.sh`, which:
-   - runs `petalinux-create modules --name simple-reg`,
+   - runs `petalinux-create modules --name pl-reg`,
    - copies the module's source into the generated recipe,
    - adds any extra source files to the recipe's `SRC_URI` (so multi-file
-     modules build -- `simple-reg` is single-file, but the mechanism is there),
-   - appends `KERNEL_MODULE_AUTOLOAD += "simple-reg"` so the module is loaded
-     **automatically at boot** (writes `/etc/modules-load.d/simple-reg.conf`).
+     modules build -- `pl-reg` is single-file, but the mechanism is there),
+   - appends `KERNEL_MODULE_AUTOLOAD += "pl-reg"` so the module is loaded
+     **automatically at boot** (writes `/etc/modules-load.d/pl-reg.conf`).
 
-4. **Software** (`software/reg-test`, `software/reg-mem-test`) is cross-compiled
+4. **Software** (`software/reg-driver`, `software/reg-mem`) is cross-compiled
    and dropped into the rootfs by the software build script. Each directory has
    a top `.c` file matching the directory name; the per-directory `Makefile` is
    generated automatically.
 
-So a normal `make` produces an SD image where `simple-reg` is already loaded,
-`/dev/simple-reg` already exists at mode `0666`, and both test programs are on
-the `PATH`.
+So a normal `make` produces an SD image where `pl-reg` is already loaded,
+`/dev/cfg` and `/dev/sts` already exist at mode `0666`, and both test programs
+are on the `PATH`.
 
 > Autoload note: enabling autoload-by-default in `kernel_modules.sh` applies to
-> *every* module a project ships, not just `simple-reg`. For the example modules
+> *every* module a project ships, not just `pl-reg`. For the example modules
 > (`dummy-kmod`, `u-dma-buf`) this is harmless, but be aware of it if you add a
 > module you do *not* want loaded at boot.
 
@@ -215,26 +202,28 @@ the `PATH`.
 After building and booting (do this yourself when you're ready -- builds are not
 run for you):
 
-1. **Confirm the driver bound and claimed its regions:**
+1. **Confirm the driver bound to both nodes:**
 
    ```sh
-   dmesg | grep simple-reg
+   dmesg | grep pl-reg
    ```
 
-   You should see one line per region (`region 0 "cfg"...`, `region 1 "sts"...`)
-   and a final `/dev/simple-reg ready (mode 0666), 2 regions`.
+   You should see one line per bound node, e.g. `/dev/cfg ready (mode 0666):
+   0x40000000 size 0x1000, compatible "xlnx,axi-cfg-register-1.0"` and the same
+   for `/dev/sts`.
 
-2. **Confirm the node is non-root:**
+2. **Confirm the nodes exist and are non-root:**
 
    ```sh
-   ls -l /dev/simple-reg
-   # crw-rw-rw- 1 root root ... /dev/simple-reg
+   ls -l /dev/cfg /dev/sts
+   # crw-rw-rw- 1 root root ... /dev/cfg
+   # crw-rw-rw- 1 root root ... /dev/sts
    ```
 
 3. **Run the driver test as an ordinary user (no sudo):**
 
    ```sh
-   reg-test
+   reg-driver
    ```
 
    It should print the six NAND round-trip vectors as `ok`, a benchmark line,
@@ -243,14 +232,180 @@ run for you):
 4. **Compare against the `/dev/mem` baseline (this one needs root):**
 
    ```sh
-   sudo reg-mem-test
+   sudo reg-mem
    ```
 
-   Same NAND results, and a benchmark within noise of `reg-test` -- proving the
-   driver path is not slower, just root-free.
+   Same NAND results, and a benchmark within noise of `reg-driver` -- proving
+   the driver path is not slower, just root-free and address-free. The two
+   programs (`software/reg-driver` vs `software/reg-mem`) are written to be read
+   side by side: identical open/mmap/deref structure, differing only in *what*
+   they open and whether they need root.
 
 ## PetaLinux
 
 The default configuration is changed to make the packaged image EXT4 format to
-load from an SD card, and the `simple-reg` kernel module is built out-of-tree
-and set to autoload at boot (see the build-automation section above).
+load from an SD card, and the `pl-reg` kernel module is built out-of-tree and
+set to autoload at boot (see the build-automation section above).
+
+## Appendix: what PetaLinux auto-generates for PL IP (and how `pl-reg` binds to it)
+
+This example's driver (`pl-reg`, above) binds directly to the nodes PetaLinux's
+device-tree generator (DTG) emits for each PL IP, with no hand-written device
+tree. This appendix records exactly what that auto-generated tree looks like,
+based on a real build (`tmp/snickerdoodle_black/1.0/rev_d_shim`, PetaLinux
+2024.2), so the binding rules `pl-reg` relies on are grounded in observed
+output. It closes with the **alternative** design -- an explicit hand-written
+node -- which is what earlier revisions of this example shipped.
+
+### Where it lives
+
+- Auto-generated source: `.../petalinux/components/plnx_workspace/device-tree/device-tree/pl.dtsi`
+- Final runtime tree: `.../images/linux/system.dtb` (inspect with `dtc -I dtb -O dts system.dtb`)
+
+### How each PL IP is mangled into a node
+
+For every entry in the Vivado address map the DTG emits one node under the
+`pl-bus` node (labelled `amba_pl`, `compatible = "simple-bus"`). For example the
+rev_d_shim system control, status, and per-channel FIFO cores came out as:
+
+```dts
+axi_sys_ctrl@40000000 {
+    compatible = "xlnx,axi-sys-ctrl-1.0";
+    reg = <0x40000000 0x80>;
+    clock-names = "aclk";
+    clocks = <&clkc 15>;          /* FCLK0 */
+};
+axi_sts_register@40100000 {
+    compatible = "xlnx,axi-sts-register-1.0";
+    reg = <0x40100000 0x200>;
+    ...
+};
+axi_fifo_bridge@80030000 {        /* one of nine identical-type bridges */
+    compatible = "xlnx,axi-fifo-bridge-1.0";
+    reg = <0x80030000 0x80>;
+    ...
+};
+```
+
+Three rules, all observed directly in the build:
+
+1. **Node name = `<core-name>@<hex-base-address>`.** The `<core-name>` is the
+   *name* field of the IP's VLNV (`vendor:library:`**`name`**`:version`), with
+   underscores kept. Every instance of the *same* core shares this name stem and
+   is distinguished only by its `@address`. So all nine FIFO bridges are named
+   `axi_fifo_bridge@...`.
+
+2. **`compatible = "xlnx,<core-name-with-dashes>-<version>"`.** Two surprises
+   here: the vendor is **always rewritten to `xlnx`** (the real vendors `shim`,
+   `base`, `pavel-demin` all disappear), and underscores in the name become
+   dashes. So `base:user:axi_fifo_bridge:1.0` becomes
+   `xlnx,axi-fifo-bridge-1.0`. The `compatible` therefore encodes **core name +
+   version only**, not vendor.
+
+3. **`reg = <base size>`** comes straight from the `addr` assignment in
+   `block_design.tcl` (`0x40000000 128` -> `reg = <0x40000000 0x80>`). Each node
+   also gets `clocks`/`clock-names` for the AXI clock. The DTG does **not** emit
+   `reg-names`, so a driver binding to an auto-node must look up regions by
+   index, not by name.
+
+### The identity problem, and how `/__symbols__` solves it
+
+A `compatible` identifies a core *type*, not a specific instance, so it cannot
+tell `dac_fifo_3` from `adc_fifo_0` -- both are `xlnx,axi-fifo-bridge-1.0`. The
+node name (`axi_fifo_bridge`) is shared too; only the `@address` differs.
+
+The instance identity is preserved elsewhere, but **not** in `/aliases` -- that
+node only carries the standard `serial0`/`spi0`/... entries, none of the PL
+cores. Instead the DTG emits each core's **Vivado instance name** (hierarchical,
+flattened with underscores) as the **DTS label** on its node:
+
+```dts
+status_reg:                              axi_sts_register@40100000 { ... };
+axi_spi_interface_dac_fifo_3_axi_bridge: axi_fifo_bridge@80030000 { ... };
+```
+
+The device-tree compiler is run with `-@`, so it preserves every label in a
+**`/__symbols__`** node as a label -> path map, which is what survives to
+runtime (observed in the built `system.dtb`):
+
+```dts
+__symbols__ {
+    status_reg                              = "/pl-bus/axi_sts_register@40100000";
+    axi_sys_ctrl                            = "/pl-bus/axi_sys_ctrl@40000000";
+    spi_clk_snoop                           = "/pl-bus/axi_clock_timing_snoop@40200000";
+    axi_spi_interface_dac_fifo_3_axi_bridge = "/pl-bus/axi_fifo_bridge@80030000";
+    /* ...one per labelled node, including non-PL labels like clkc... */
+};
+```
+
+This is the key result: the friendly instance name **survives to runtime**. It
+is readable both from the kernel (walk the `/__symbols__` node) and from
+userspace at `/proc/device-tree/__symbols__/<name>` or
+`/sys/firmware/devicetree/base/__symbols__/<name>`. So PL cores *can* be
+addressed by instance name, with the base address only ever used as an internal
+tiebreaker (and even that is read from the DT's own `reg`, still single-sourced
+from the block design).
+
+### Binding a driver straight to the auto-nodes (no project dtsi)
+
+Combining the above is exactly what `pl-reg` does:
+
+- list the auto-generated compatibles (for ex05,
+  `xlnx,axi-cfg-register-1.0` and `xlnx,axi-sts-register-1.0`; for a project
+  like rev_d_shim also `xlnx,axi-fifo-bridge-1.0`, ...) in its `of_match_table`;
+- in `probe`, recover its node's instance name (reverse-lookup in
+  `/__symbols__`, with `/aliases` tried first) and name its misc device after it;
+- expose `mmap` at offset 0.
+
+Userspace then does `open("/dev/cfg")` + `mmap(..., 0)` -- **no base address
+anywhere in userspace, and nothing added to the block design or a dtsi**,
+because the `reg`, `compatible`, and instance label are all auto-emitted. For a
+single-instance core the name is short and clean (`/dev/cfg`, `/dev/status_reg`);
+for a repeated core it is the long path-style name
+(`/dev/axi_spi_interface_dac_fifo_3_axi_bridge`) unless the driver shortens it or
+a one-line `label` override is added.
+
+**Fail-loud behavior:** if a core's VLNV name or version changes, its
+auto-`compatible` changes, the driver no longer matches, the node stays unbound,
+and the `/dev/<name>` node is never created -- so the userspace `open()` fails
+with `ENOENT` instead of silently touching the wrong register. Two caveats: the
+`compatible` ignores vendor (a different-vendor core of the same name+version
+would still match), and interrupt/UIO nodes are **not** auto-emitted this way --
+in rev_d_shim the `hw_manager_irq` `generic-uio` node is hand-written in its
+`device_tree.dtsi`, so dropping the dtsi applies to register windows, not to
+that interrupt.
+
+### Alternative: the explicit hand-written node
+
+Earlier revisions of this example took the opposite approach: instead of binding
+to the auto-nodes, the driver declared a *private* `compatible` and the project
+shipped a `cfg/.../petalinux/2024.2/device_tree.dtsi` that hand-wrote a single
+node grouping both windows under named `reg` regions:
+
+```dts
+&amba_pl {
+  simple_reg: simple-reg@40000000 {
+    compatible = "zynq-toolbox,simple-reg";   /* private: only our driver matches */
+    reg = <0x40000000 0x1000>,                /* "cfg" */
+          <0x40100000 0x1000>;                /* "sts" */
+    reg-names = "cfg", "sts";
+  };
+};
+```
+
+The driver then matched `zynq-toolbox,simple-reg`, looked the windows up **by
+name** (`platform_get_resource_byname(..., "cfg"/"sts")`), and exposed both from
+one device (`/dev/simple-reg`) using the `mmap` offset as a region selector
+(region 0 = cfg, region 1 = sts). The auto-generated nodes still existed, but
+since no driver matched *their* `compatible` they stayed unbound and harmless.
+
+**Trade-off.** The explicit node is more robust and self-documenting: a private
+`compatible` that can't be broken by a core version bump, named `reg` windows,
+and one logical device that can group several scattered windows -- at the cost of
+restating every address in a dtsi and keeping it in sync with the block design.
+The auto-node approach this example now uses removes that dtsi entirely and
+auto-scales to repeated cores (every FIFO bridge binds with no per-instance
+markup), at the cost of coupling the driver to the DTG's `xlnx,<name>-<version>`
+strings and losing `reg-names` and multi-window grouping. Which is preferable
+depends on whether you value the explicit contract or the zero-boilerplate
+auto-enumeration.
