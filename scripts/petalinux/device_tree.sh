@@ -24,7 +24,7 @@ set -e
 REL_DEVICE_TREE_PATH="projects/${PRJ}/cfg/${BRD}/${VER}/petalinux/${PETALINUX_VERSION}/device_tree.dtsi"
 
 # Check for the device tree file, end if it does not exist
-if [ ! -d "${REL_DEVICE_TREE_PATH}" ]; then
+if [ ! -f "${REL_DEVICE_TREE_PATH}" ]; then
   echo "[PTLNX DEVICE TREE] No device tree to include for PetaLinux version ${PETALINUX_VERSION} of ${PBV}"
   echo " Path: ${REL_DEVICE_TREE_PATH}"
   exit 0

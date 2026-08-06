@@ -450,7 +450,7 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa: tmp/$(BOARD)/$(BOARD_VER)/$(PRO
 # The PetaLinux project specification directory
 # Requires the hardware definition file
 # Built using the scripts/petalinux/project.sh script
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa $(shell find projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION) -type f) $(shell find projects/$(PROJECT)/software -type f) $(shell find scripts/petalinux -type f)
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux/project-spec: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/hw_def.xsa $(shell find projects/$(PROJECT)/cfg/$(BOARD)/$(BOARD_VER)/petalinux/$(PETALINUX_VERSION) -type f) $(shell find -L projects/$(PROJECT)/software -type f 2>/dev/null) $(shell find scripts/petalinux -type f) $(shell find -L projects/$(PROJECT)/kernel_modules -type f 2>/dev/null)
 	@./scripts/make/status.sh "MAKING CONFIGURED PETALINUX PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)/petalinux"
 	$(call run_petalinux,scripts/petalinux/project.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(OFFLINE))
 	$(call run_petalinux,scripts/petalinux/software.sh $(BOARD) $(BOARD_VER) $(PROJECT))

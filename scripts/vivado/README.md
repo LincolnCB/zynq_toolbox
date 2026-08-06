@@ -1,4 +1,4 @@
-***Update 2025-06-27***
+***Update 2026-07-28***
 # `vivado` scripts
 
 These scripts are for managing the Vivado build process. Vivado uses Tcl commands for all of its tasks and steps, which can be scripted and loaded, allowing for a fully automated build process. These scripts are used to create the Vivado project, build the block design, and package the bitstream and hardware definition into output files for PetaLinux to load. They are run by Vivado itself, passed in via the command line by the Makefile.
@@ -31,7 +31,7 @@ Arguments:
 - `core_name`: The name of the IP core.
 - `part_name`: The target FPGA part name.
 
-This script packages a custom IP core for Vivado. It creates a new Vivado project for the specified core, adds the main source file and any submodules, and sets the top module. Vendor information is loaded from a JSON file to set display properties. The packaged core is saved under `tmp/custom_cores/<vendor_name>/<core_name>`, ready for use in Vivado projects.
+This script packages a custom IP core for Vivado. It creates a new Vivado project for the specified core, adds the main source file and any submodules, and sets the top module. Vendor information is loaded from a JSON file to set display properties. The packaged core is saved under `tmp/[board]/[ver]/[project]/cores/`, ready for use in Vivado projects.
 
 ---
 

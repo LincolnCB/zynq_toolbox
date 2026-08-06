@@ -1,19 +1,19 @@
-***Updated 2025-07-01***
+***Updated 2026-07-28***
 # Custom cores
 
-This directory contains the Verilog source code for custom IP cores for use in projects' Vivado block design flow. Vivado uses packaged IP as cells in the block design, which need to be created from code in this directory as part of the build process (see the `cores` target in the top level Makefile and README).
+This directory contains some examples of the Verilog source code for custom IP cores for use in projects' Vivado block design flow. Vivado uses packaged IP as cells in the block design, which need to be created from code in this directory as part of the build process (see the `cores` target in the top level Makefile and README). The cores in this folder are not directly used for builds at their current path, but some example projects symlink to them. To write your own core for a project, put it under `projects/[project]/cores`.
 
 ## Vendors
 
 Cores are separated into directories by "vendor", which is the name of the person or organization that created the core (this is partially to handle licensing differences between cores, if some come with a GNU or MIT license).
 
-Each vendor directory contains a `info/vendor_info.json` file that contains information about the vendor that Vivado uses when packaging the cores (vendor display name and vendor URL).
+Each vendor directory contains a `vendor_info.json` file that contains information about the vendor that Vivado uses when packaging the cores (vendor display name and vendor URL).
 
-Each vendor directory contains a [`cores`](#cores) directory that contains the actual cores, as well as an optional `shared_submodules` directory that contains submodules symlinked between multiple cores (mainly to avoid file renaming issues with symlinks).
+Each vendor directory also contains a directory for each core, which holds the Verilog source code and any submodules for that core.
 
 ## Cores
 
-Within a vendor directory (e.g. `base`), cores are stored under the `cores` directory. Each core has its own top Verilog file. The core directory, top verilog `.v` file, and module name should all match. Cores can also include any additional Verilog files in the `cores/[core_name]/submodules` directory, which will be packaged with the top module.
+Within a vendor directory (e.g. `base`), cores are organized by one core per directory (`examples/cores/[vendor]/[core_name]`). Each core has its own top Verilog file. The core directory, top verilog `.v` file, and module name should all match. Cores can also include any additional Verilog files in the `[core_name]/submodules` directory, which will be packaged with the top module.
 
 ### Interface ports
 

@@ -100,7 +100,7 @@ module axi_cfg_register #
                             : (int_wvalid_wire) ? 1'b1
                             : int_bvalid_reg;
 
-  assign int_rvalid_next =  (s_axi_rready & int_rvalid_reg) ? 1'b0 :
+  assign int_rvalid_next =  (s_axi_rready & int_rvalid_reg) ? 1'b0
                             : (s_axi_arvalid) ? 1'b1
                             : int_rvalid_reg;
 
