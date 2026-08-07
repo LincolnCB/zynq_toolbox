@@ -1,67 +1,91 @@
-***TODO OUT OF DATE -- IN PROGRESS***
-
----
+***Updated 2026-08-06***
 
 # Example 02: AXI Interface
 
-Example 02 is a demonstration of some basic AXI interfaces.
+Example 02 is where the PL starts doing real work. It builds four AXI-mapped blocks the PS can read and write over `/dev/mem`: a config (CFG) register, a status (STS) register, a synchronous FIFO, and a block of BRAM. On top of those it wires a trivial vector-NAND so you can check the CFG->PL->STS round trip.
+
+It is the first example to use Tcl scripting in earnest -- custom cores, reusable sub-modules, explicit AXI address assignment -- so most of what later projects do in the block design is introduced here.
 
 The project introduces the following tools and concepts:
-- Tcl scripting for block design creation
-- Tcl scripting for submodules
-- Custom block design cores
-- AXI memory interfaces and mapping
-- BRAM block sizes and usage
-- Utilization reports
+- Tcl scripting for the block design
+- Reusable block-design sub-modules (`modules/`)
+- Instantiating custom (non-Xilinx) cores
+- AXI4-Lite register access and explicit address mapping
+- A synchronous FIFO behind AXI
+- BRAM sizing and how block usage rounds
+- Reading the Vivado utilization reports
 
 ## Overview
 
+The PS talks to four things through a single `M_AXI_GP0` port fanned out by an AXI SmartConnect:
+
+| Port | Core | Address | Purpose |
+|------|------|---------|---------|
+| M00 | `pavel-demin:user:axi_cfg_register` (96-bit) | `0x40000000` | PS -> PL config word |
+| M01 | `pavel-demin:user:axi_sts_register` (64-bit) | `0x41000000` | PL -> PS status word |
+| M02 | `fifo` module (`cores/base` FIFO) | `0x42000000` | PS<->PL FIFO loopback |
+| M03 | `axi_bram_ctrl` + `blk_mem_gen` | `0x43000000` | PS<->PL BRAM |
+
+The low bits of the CFG/STS words drive a vector-NAND (`modules/nand.tcl`): CFG bits `63:0` are two 32-bit operands, and their bitwise NAND appears in STS bits `31:0`. CFG bits `95:64` are sliced off to control the FIFO (reset plus flags), and the FIFO status is concatenated into the upper STS bits. Nothing leaves the chip -- there are no external FPGA ports -- so this runs on any supported board without pin constraints.
 
 ## Software
 
+Two programs live in `software/`, both reaching the registers through `/dev/mem` (so both need `sudo`).
+
+### `reg-test`
+
+A self-checking demonstration of the CFG/STS path. It writes operand pairs into the CFG register in 32- and 64-bit chunks, reads the NAND result back from STS, and compares against the expected value. Note that the hub's data register is 32 bits wide, so writes should be done in 32-bit (or wider) units.
+
+### `mem-test`
+
+An interactive playground for the FIFO and BRAM ports. It `mmap`s each port's base address (`0x42000000` FIFO, `0x43000000` BRAM) and parses read/write/reset commands so you can push and pop the FIFO and read/write BRAM by hand. Run it and type `help` for the command list.
 
 ## Tools and Concepts
 
-### Tcl Scripting for Block Design Creation
+### Tcl scripting for the block design
 
-### Tcl Scripting for Submodules
+`block_design.tcl` builds the whole design with the helper procedures from `scripts/vivado/project.tcl` (`init_ps`, `cell`, `wire`, `addr`, `module`). A good way to learn these is to do something in the Vivado GUI, copy the Tcl it echoes to the console, and fold it back into the script. `make xpr` builds just the project so you can open it and explore.
 
-### Custom Block Design Cores
+### Reusable sub-modules
 
-### AXI Memory Interfaces and Mapping
+`modules/fifo.tcl` and `modules/nand.tcl` are self-contained block-design fragments instantiated with the `module` procedure. A module can declare its own internal pins (`create_bd_pin`) and even instantiate several cores, which keeps `block_design.tcl` readable and lets a block be reused across projects. The FIFO module bundles the FIFO core with the slicing/concatenation glue for its control and status words.
 
-### BRAM Block Sizes and Usage
+### Custom cores
 
-### Utilization Reports
+Much of the structure of this repo is heavily inspired by and directly forked from [Pavel Demin](https://github.com/pavel-demin)'s [Red Pitaya Notes](http://pavel-demin.github.io/red-pitaya-notes/) repo. In particular, I use a lot of his tools for scripting the packaging and inclusion of custom cores in the Vivado build process.
 
+The CFG and STS registers are Pavel's cores under `cores/pavel-demin/`, instantiated by VLNV (Vendor, Library, Name, Version, e.g. `pavel-demin:user:axi_cfg_register:1.0`, etc. -- you can omit version usually) just like a Xilinx IP. Every project pulls in non-Xilinx logic this way. You can have multiple user folders under `cores/` and add your own IP there. In this example, I've symlinked the `pavel-demin` folder from the `examples/cores` directory just as a way to reduce duplication across example projects, but you should feel free to make your own cores in your own projects.
 
+Vendor cores are structured in a particular way, which it would be good to read about in the [`examples/cores/README.md`](../../examples/cores/README.md) file. The short version is that each vendor folder contains a `vendor_info.json` with required `display_name` and `url` fields for Vivado core packaging. Then, each core is one folder named after the core, with a top-level verilog file that matches the folder name. These can contain submodules and unit tests, which you should read about in the README above.
 
+### AXI mapping with `addr`
 
-## TODO: Previous text (to be removed)
+Each subordinate is given an explicit address with the `addr` procedure rather than Vivado auto-assignment, for clarity and repeatability. Offsets are spaced generously (`0x40000000`, `0x41000000`, ...) so each window clears both the 128-byte Vivado minimum and the 4 KiB memory page size, which matters when userspace `mmap`s a page at a time.
 
-The project also supports simple code demonstrating the use of just the AXI hub's config and status registers. The project implements a NAND gate that takes two 32-bit inputs from the AXI hub's config register and outputs the result to the status register. This is a useful project to demonstrate how to interface with the AXI hub's registers from both the programmable logic (PL) and the processing system (PS) of the Zynq.
+### FIFO and BRAM sizing
 
-## Block Design
+Both the FIFO and the BRAM consume Zynq block-RAM primitives (140 available on the 7020). Usage rounds up to whole 36 Kib blocks: a FIFO up to 1024 deep uses one block, and BRAM uses roughly one block per 1024 words of 32-bit depth -- crossing a boundary by a single word bumps the count. The BRAM here is `32 x 16384` (512 Kib -> 16 blocks). If you resize it, update the `addr` range to match.
 
-The project's block design (`block_design.tcl`) goes as follows:
-- Initialize the processing system, externalizing the fixed IO and RAM connections (`DDR`). The PS is initialized based off of the default value for the given board, with the AXI ACP disabled. The PS's Manager AXI port 0 clock is sourced from the PS's FPGA interface clock `FCLK_CLK0`.
-- Instantiate the AXI hub. The hub takes the clock from `FCLK_CLK0` and reset from a reset hub. The hub's address is assigned to cover 128M starting from `0x40000000` (needs to go to `0x47FFFFFF` to cover all ports). The port is chosen by setting the bits here: `0x4*000000` to 0 for CFG, 1, for STS, and 2-7 for ports 0-5. Each port has more memory range than it could feasibly use (BRAM is capped at 140 blocks of 36Kib, which comes out to a max of 4.5KiB).
-- Instantiate a FIFO loopback module using the separate `fifo.tcl` script. This module has an `axis_fifo_sync` from `cores/base` alongside some port management to get a reset from a 32-bit cfg port and concatenate status signals into a 32-bit port. This makes for the simplest access. This module is connected to the AXI hub port 0. The FIFO requires BRAM blocks (140 available). Any size up to 1024 will use 1 block, while anything above will use 2 blocks.
-- Instantiate a BRAM interface module that allows for read and write access to the BRAM on port 1. This module is also managed by the AXI hub on port 1. The BRAM also requires 1 BRAM block (of the 140 available) for each 1024 write depth if the width is 32 bits.
-- Finally the code uses the first 64 CFG register bits to implement a simple NAND gate. The inputs are the first two 32-bit CFG registers, and the output is the first 32 bits of the STS register. The NAND operation is done in the `nand.tcl` module, and the STS result is concatenated with the other status signals from the FIFO loopback module.
+### Utilization reports
 
-## C Code
+After a build, the utilization reports land under `tmp_reports/[board]/[board_ver]/...`. They are the authoritative way to confirm how many BRAM blocks (and other resources) the design actually used, e.g. after changing the FIFO or BRAM depth.
 
-There are two C code examples in the `software` folder. The first is a simple test of the AXI hub's config and status registers (`reg_test.c`). The second is a more complex example that uses the FIFO and BRAM interfaces (`hub_test.c`).
+## PetaLinux configuration
 
-### Reg Test
+The only change from the PetaLinux defaults is switching the rootfs to EXT4 on SD so the image boots from the card. No custom device tree or kernel module is needed -- everything is reached through `/dev/mem`.
 
-The C code demonstrates writes and reads to the CFG and STS registers. It first does example writes of different sizes to the CFG register, reading back the full register to demonstrate. Then, it performs write operations to the CFG register in 32-bit and 64-bit chunks, comparing the result read fromt the STS register to the expected value.
+## Trying it on hardware
 
-### Hub Test
+After building and booting:
 
-The C code alows for writes and reads to the FIFO and BRAM. It opens `/dev/mem` to access the memory interfaces for each port. The base address for each port/register is `0x4*000000`, with `*` equal to 0 for CFG, 1 for STS, and 2-7 for ports 0-5. From there, the code works as a playground, just handling inputs and parsing commands, and will run read/write/reset commands as needed. Use `help` as a command after running the script to see the commands.
+```sh
+sudo reg-test      # self-checking NAND round trip through CFG/STS
+sudo mem-test      # interactive FIFO/BRAM playground; type "help"
+```
 
-## PetaLinux
+`reg-test` should report matching NAND results. In `mem-test`, push a few words into the FIFO and pop them back, and write/read BRAM addresses, to confirm both AXI ports. Both need root because they use `/dev/mem`; ex05 revisits this same hardware without that requirement.
 
-The default configuration is changed to make the packaged image EXT4 format to load from an SD card.
+---
+
+Previous: [Example 01: Basics](../ex01_basics/README.md) | Next: [Example 03: UART](../ex03_uart/README.md)
+

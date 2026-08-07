@@ -1,3 +1,5 @@
+***Updated 2026-08-06***
+
 # Example 05: Device Driver
 
 Example 05 shows how to reach the same PL registers as the earlier examples using a proper Linux device driver instead of `/dev/mem` -- so the userspace program doesn't need root/`sudo` permissions. Additionally, it performs this without any manually written device trees.
@@ -264,3 +266,7 @@ Instead of binding to the auto-nodes, the driver could declare a private `compat
 The driver would then match `zynq-toolbox,simple-reg`, looked the windows up by name (`platform_get_resource_byname(..., "cfg"/"sts")`), and exposed both from one device (`/dev/simple-reg`) using the `mmap` offset as a region selector (region 0 = cfg, region 1 = sts). The auto-generated nodes would exist, but since no driver matched their* `compatible` they would stay unbound and harmless.
 
 This explicit node approach is possibly more robust and self-documenting: a private `compatible` that can't be broken by a core version bump, named `reg` windows, and one logical device that can group several scattered windows -- at the cost of restating every address in a dtsi and keeping it in sync with the block design. The auto-node approach this example now uses removes that dtsi entirely and auto-scales to repeated cores (every FIFO bridge binds with no per-instance markup), at the cost of coupling the driver to the DTG's `xlnx,<name>-<version>` strings and losing `reg-names` and multi-window grouping. Which is preferable depends on whether you value the explicit contract or the zero-boilerplate auto-enumeration.
+
+---
+
+Previous: [Example 04: Interrupts](../ex04_interrupts/README.md)

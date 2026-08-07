@@ -1,4 +1,4 @@
-***Updated 2026-07-28***
+***Updated 2026-08-06***
 
 [![DOI](https://zenodo.org/badge/846674502.svg)](https://doi.org/10.5281/zenodo.20802348)
 
@@ -232,7 +232,7 @@ This example project covers interrupts from the PL to the PS and software to han
 
 ## EX05 -- Device Driver
 
-TODO
+This example project revisits the same PL registers as the earlier examples, but reaches them through a small Linux device driver instead of `/dev/mem`, so userspace programs no longer need root. It also does this without any hand-written device tree, binding a kernel module to the nodes PetaLinux auto-generates for each AXI-mapped core and naming each `/dev` entry after the core's Vivado instance. This is the approach the Rev D Shim firmware uses to expose its control and status registers to userspace safely and without hardcoded addresses.
 
 # Testing
 
