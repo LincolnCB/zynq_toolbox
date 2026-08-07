@@ -10,8 +10,8 @@
 [submodule "boards/zybo_z7_10"]
 	path = boards/zybo_z7_10
 	url = https://github.com/LincolnCB/zybo_z7_10.git
-[submodule "kernel_modules/u-dma-buf"]
-	path = kernel_modules/u-dma-buf
+[submodule "examples/kernel_modules/u-dma-buf"]
+	path = examples/kernel_modules/u-dma-buf
 	url = https://github.com/LincolnCB/u-dma-buf.git
 [submodule "projects/rev_d_shim"]
 	path = projects/rev_d_shim

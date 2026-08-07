@@ -1,4 +1,4 @@
-***Updated 2025-06-27***
+***Updated 2026-07-28***
 # `make` scripts
 
 These scripts are mainly used by the Makefile to perform various tasks related to the larger build process. The scripts are primarily shell scripts for processing and managing files safely, utlizing the `check/` scripts to give good error messages if something is missing or misconfigured. Some also extract some information from the source code to be used in the Makefile or other scripts, adding flexibility.
@@ -18,7 +18,7 @@ Clean the BOOT and RootFS directories on the mounted SD card. If no mount direct
 
 ### `cocotb.mk`
 
-This is a Makefile used to build the cocotb testbench for custom verilog cores. It's used with [`test_core.sh`](#test_coresh) to build the testbench and run the tests, interfacing with the `cocotb` Python library and its respective Makefiles. You can read more about running tests in the top level and `custom_cores/` README files.
+This is a Makefile used to build the cocotb testbench for custom verilog cores. It's used with [`test_core.sh`](#test_coresh) to build the testbench and run the tests, interfacing with the `cocotb` Python library and its respective Makefiles. You can read more about running tests in the [top level](../../README.md#testing) and [`examples/cores/`](../../examples/cores/README.md) README files.
 
 ---
 
@@ -84,10 +84,10 @@ Formats and prints a status string with separators for improved readability in M
 
 Usage:
 ```bash
-./scripts/make/test_core.sh <vendor> <core>
+./scripts/make/test_core.sh <project> <vendor> <core>
 ```
 
-Runs cocotb-based tests for a custom core located in `custom_cores/<vendor>/cores/<core>/tests`. Uses the shared `cocotb.mk` Makefile to build and run the testbench. Writes test results and status to the appropriate files in the core's test directory. Exits with a nonzero code if the tests fail or if required directories are missing.
+Runs cocotb-based tests for a custom core located in `projects/<project>/cores/<vendor>/<core>/tests`. Uses the shared `cocotb.mk` Makefile to build and run the testbench. Writes test results and status to the appropriate files in the core's test directory. Exits with a nonzero code if the tests fail or if required directories are missing.
 
 ---
 

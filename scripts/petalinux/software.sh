@@ -29,7 +29,9 @@ if [ ! -d "projects/${PRJ}/software" ]; then
 fi
 
 # Source the PetaLinux settings script (make sure to clear positional parameters first)
-source ${PETALINUX_PATH}/settings.sh
+if [ -z "$PETALINUX" ]; then
+  source ${PETALINUX_PATH}/settings.sh
+fi
 
 # Enter the project
 cd tmp/${BRD}/${VER}/${PRJ}/petalinux
@@ -75,8 +77,8 @@ for SW_DIR in ${SW_PATH}/*; do
     echo "[PTLNX SOFTWARE] Building ${SAN_SW_NAME}"
 
     # Get a list of .c and .h files that aren't the top file
-    C_FILES=$(find "${SW_DIR}" -type f -name "*.c" ! -name "${SW_NAME}.c")
-    H_FILES=$(find "${SW_DIR}" -type f -name "*.h")
+    C_FILES=$(find -L "${SW_DIR}" -type f -name "*.c" ! -name "${SW_NAME}.c" -exec realpath {} \;)
+    H_FILES=$(find -L "${SW_DIR}" -type f -name "*.h" -exec realpath {} \;)
     SRC_FILES=""
     if [ -n "${C_FILES}" ]; then
       SRC_FILES+=" ${C_FILES}"

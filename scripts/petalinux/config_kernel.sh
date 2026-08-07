@@ -53,7 +53,9 @@ else
 fi
 
 # Source the PetaLinux settings script (make sure to clear positional parameters first)
-source ${PETALINUX_PATH}/settings.sh
+if [ -z "$PETALINUX" ]; then
+  source ${PETALINUX_PATH}/settings.sh
+fi
 
 # Create a new template project and enter it
 cd tmp
@@ -166,4 +168,3 @@ if [ -f "${ZYNQ_TOOLBOX}/${KERNEL_CONFIG}" ]; then
 else
   echo "[PTLNX KERNEL CFG] No changes made to kernel configuration."
 fi
-
