@@ -1,0 +1,56 @@
+/include/ "system-conf.dtsi"
+/ {
+  /* Reserved, physically-contiguous DDR for the MCDMA loopback buffers.
+   *
+   * u-dma-buf carves /dev/udmabuf0 out of this region; the mcdma-loopback
+   * program reads its physical address from sysfs and points the SG descriptors
+   * at it. A fixed reserved-memory region (rather than the shared CMA pool)
+   * cannot fail to allocate from fragmentation -- the model the parent project
+   * wants for an instrument that must not fail at trigger time.
+   *
+   * >>> A `reusable`/`shared-dma-pool` region is CMA-backed, so BOTH its base and
+   *     its size must be aligned to the CMA minimum alignment -- 4 MiB on 32-bit
+   *     ARM. A smaller/misaligned region makes u-dma-buf's probe fail with
+   *     `of_reserved_mem_device_init failed return=-22`. Hence 4 MiB at a
+   *     4 MiB-aligned base (0x30000000 = 768 MiB into the 1 GiB LPDDR2). This is
+   *     far more than REGION_BYTES needs; the minimum is one CMA alignment unit.
+   *     VALIDATE that 0x30000000 does not overlap anything else in this board's
+   *     map. `reusable` lets the kernel reclaim it when u-dma-buf is not holding it.
+   */
+  reserved-memory {
+    #address-cells = <1>;
+    #size-cells = <1>;
+    ranges;
+
+    mcdma_buf: mcdma_buf@30000000 {
+      compatible = "shared-dma-pool";
+      reusable;
+      reg = <0x30000000 0x00400000>;
+    };
+  };
+
+  /* u-dma-buf device backed by the region above. Autoloaded (see the project's
+   * kernel_modules wiring); comes up as /dev/udmabuf0, root-owned by default. */
+  udmabuf0 {
+    compatible = "ikwzm,u-dma-buf";
+    device-name = "udmabuf0";
+    minor-number = <0>;
+    size = <0x00400000>;
+    memory-region = <&mcdma_buf>;
+    sync-mode = <3>;
+  };
+};
+
+/* Claim the MCDMA control window for userspace (pl-reg / option B), deterministically.
+ *
+ * PetaLinux's device-tree generator treats axi_mcdma as an AXI-Ethernet DMA
+ * companion: it tags this node `xlnx,eth-dma` and omits `xlnx,addrwidth`. The
+ * mainline xilinx_dma driver matches the generic `xlnx,axi-mcdma-1.00.a`, then bails
+ * in probe because `xlnx,addrwidth` is missing -- so leaving it to chance means
+ * relying on a probe *failure*. Instead, override the compatible to a private string
+ * that ONLY pl-reg matches, so no in-kernel driver ever attempts to bind and pl-reg
+ * claims the node cleanly every boot. The node keeps its label (`mcdma`), so pl-reg
+ * still names the device /dev/mcdma. */
+&mcdma {
+  compatible = "zynq-toolbox,mcdma-userspace";
+};

@@ -12,6 +12,8 @@ Many folders have README.md files -- look at those for quick summaries of the ma
 ## ⚠️ Do Not Run Builds Unprompted
 Never run `make` targets (`make`, `make sd`, `make bit`, `make xpr`, `make xsa`, `make petalinux`, `make petalinux_build`, `make cores`, `make clean_*`, etc.) unless the user explicitly asks in the current message. Builds are long, resource-intensive, and require large external tool installs — don't suggest or offer to run them.
 
+Also, as a note, the temporary build files are in `tmp/` in this repo, NOT `/tmp/`. The `tmp/` folder is not tracked by git, so it can be messed with if desired.
+
 ## Build Commands
 Setup: copy `make_defaults.mk.example` → `make_defaults.mk`, set `MODE`, `PROJECT`, `BOARD`, `BOARD_VER`.
 

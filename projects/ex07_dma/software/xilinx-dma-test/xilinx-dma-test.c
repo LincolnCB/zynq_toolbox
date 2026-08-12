@@ -25,6 +25,18 @@
  *
  */
 
+/* SUPERSEDED -- kept only as a reference for the plain-axi_dma register model.
+ *
+ * This program drives an AXI DMA in DIRECT REGISTER mode (MM2S_SRC_ADDRESS /
+ * MM2S_TRNSFR_LENGTH / S2MM_DST_ADDRESS ...) over /dev/mem, writing to hardcoded
+ * raw physical addresses (0x0e000000 / 0x0f000000) that were never reserved.
+ * ex07's block design now uses an AXI MCDMA, which is scatter-gather only and has
+ * a different, multichannel register map -- none of the offsets or the direct
+ * programming sequence below apply to it. Use ../mcdma-loopback instead, which
+ * uses u-dma-buf for contiguous, physically-addressed, cache-managed memory and
+ * builds an SG descriptor ring. This file is retained purely for comparison.
+ */
+
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>

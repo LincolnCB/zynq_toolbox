@@ -279,6 +279,13 @@ static int pl_reg_remove(struct platform_device *pdev)
 static const struct of_device_id pl_reg_of_match[] = {
 	{ .compatible = "xlnx,axi-cfg-register-1.0" },
 	{ .compatible = "xlnx,axi-sts-register-1.0" },
+	/* ex07: the AXI MCDMA control window is exposed to userspace (option B). The
+	 * project's device_tree.dtsi overrides that node's compatible to this private
+	 * string, specifically so no in-kernel driver matches it -- PetaLinux tags a
+	 * standalone MCDMA as xlnx,eth-dma and the xilinx_dma probe fails on the missing
+	 * xlnx,addrwidth. pl-reg then binds it deterministically and publishes it as
+	 * /dev/<label> = /dev/mcdma. */
+	{ .compatible = "zynq-toolbox,mcdma-userspace" },
 	{ /* sentinel */ },
 };
 MODULE_DEVICE_TABLE(of, pl_reg_of_match);
