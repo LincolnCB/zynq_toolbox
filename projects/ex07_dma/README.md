@@ -16,10 +16,13 @@ the mechanics, measure the costs, and hit the failure modes somewhere harmless f
 
 > **Status:** the mode-1 (prebuffered) 2+2 loopback works end to end on hardware --
 > the block design builds, `u-dma-buf` and the `pl-reg`-bound MCDMA come up, and
-> `mcdma-loopback` round-trips both channels byte-for-byte. Sections still marked
-> _(planned)_ -- the per-channel datapath, the programmable-rate traffic generator,
-> and the measurements -- are the remaining work. See "Trying it on hardware" to run
-> it.
+> `mcdma-loopback` round-trips both channels byte-for-byte. It now runs **without
+> root**: a boot-time `chmod` (via the project's `boot_script.sh`) relaxes both the
+> `/dev/udmabuf0` node and the `/sys/class/u-dma-buf/*/sync_*` controls, and the MCDMA
+> register window is already non-root via `pl-reg`. Sections still marked _(planned)_
+> -- the per-channel datapath, the programmable-rate traffic generator, the UIO
+> interrupt path, and the measurements -- are the remaining work. See "Trying it on
+> hardware" to run it.
 
 ## What this example is de-risking
 
@@ -186,6 +189,34 @@ justification for building an isolated example. Try A afterward and compare; if 
 works cleanly it may simplify the parent project, and if it does not, B is already a
 demonstrated fallback rather than a panic move.
 
+## Interrupts: polling now, UIO to explore _(planned)_
+
+The mode-1 demo **polls** for completion, which is the right default: the prebuffered
+model keeps software out of the loop, so completion latency is irrelevant on the happy
+path. But two things are worth characterizing with a real interrupt, and the block
+design already fans the MCDMA per-channel IRQs into `IRQ_F2P`:
+
+- **Completion latency** (the measurements table below) -- how long from `TLAST`/last
+  descriptor to the CPU being notified, idle vs. loaded. You cannot measure this by
+  polling.
+- **Error alerts** -- underrun (MM2S starved), S2MM overflow, and descriptor/SG errors.
+  These are the sequence-halting faults the parent project must catch fast.
+
+Deliver these to userspace with **UIO** (`generic-uio` / `uio_pdrv_genirq`), not a
+custom driver: `read()`/`poll()` on `/dev/uioN` blocks until the IRQ, `write()`
+re-arms it. Aggregate the per-channel IRQs into a single line and demux in software by
+reading each channel's status register (stock `uio_pdrv_genirq` is single-IRQ). Note
+that UIO owns the whole node (regs + IRQ), so a node moved to UIO leaves `pl-reg`; the
+boot script can symlink `/dev/uioN` back to a stable name and relax its mode, and a
+software ID-register check recovers the fail-loud property `pl-reg` gets from its
+VLNV-derived compatible.
+
+**Scope split:** explore the standalone MCDMA UIO IRQ *here*, purely to get the latency
+number and to see what underrun/overflow look like. In the **parent project**, do not
+stand up a second parallel IRQ -- route the MCDMA error condition into `hw_manager` as
+one more halt input so it flows through the existing single error-alert IRQ and status
+word (one doorbell, one status read, one monitor thread).
+
 ## Software plan _(planned)_
 
 - **Contiguous buffers via `u-dma-buf`.** The vendored module under
@@ -201,10 +232,16 @@ demonstrated fallback rather than a panic move.
   from fragmentation. Confirm allocations actually succeed -- CMA failures are quiet.
 - **Non-root access.** ex05 gets a non-root `/dev` node by setting `misc.mode = 0666`
   on its misc device, deliberately avoiding udev because this rootfs cannot install
-  udev rules. `u-dma-buf`'s `/dev/udmabufN` nodes come up root-owned, so matching that
-  goal for the buffer nodes is an open item: either `chmod` them from a boot script,
-  or accept root for the allocation step while keeping the MCDMA register `mmap`
-  non-root through the `pl-reg`-style misc driver (option B below).
+  udev rules. `u-dma-buf` exposes *two* interfaces the program touches, and both come
+  up root-owned with no mode knob: the `/dev/udmabufN` node (0600, the mmap target)
+  and the sysfs cache-sync controls under `/sys/class/u-dma-buf/udmabufN/`
+  (`sync_for_device`/`sync_for_cpu` et al., 0664). Both are relaxed with a boot-time
+  `chmod` instead: the project ships a top-level `boot_script.sh` that the framework's
+  `scripts/petalinux/boot_script.sh` installs as an auto-enabled `/etc/init.d` service
+  (still udev-free; a `chmod` on a sysfs attribute persists for the device's lifetime).
+  Miss the sysfs controls and `mmap` still succeeds but the first `sync_for_device`
+  fails `EACCES`. Combined with the `pl-reg`-mapped register window (option B below),
+  the whole demo now runs as an ordinary user.
 - **Cache coherency.** HP ports are not coherent with L1/L2. Because mode 1 is
   prebuffered, a **single sync per buffer before starting** is sufficient; no
   per-chunk synchronization. Use a cached mapping plus `u-dma-buf`'s
@@ -240,7 +277,7 @@ design.
 | LUT/FF/BRAM at 2+2 and 4+4 | Extrapolate to 8+8; decides MCDMA vs. 8x `axi_dma` |
 | Sustained aggregate MB/s, all channels | Confirm the bandwidth margin is real |
 | Max observed gap between FIFO services | The actual underrun margin |
-| Interrupt latency, idle vs. loaded system | Matters only for mode 2, but cheap to take |
+| Interrupt latency, idle vs. loaded system | Matters only for mode 2, but cheap to take (needs the UIO IRQ path) |
 | Descriptor fetch overhead vs. chunk size | Guides chunk sizing at scale |
 
 ## Gotchas worth knowing before you start
@@ -307,14 +344,22 @@ tr '\0' '\n' < /sys/firmware/devicetree/base/pl-bus/axi_mcdma@40400000/compatibl
 
 ### 3. Run the loopback
 
-The MCDMA register window is non-root (via `pl-reg`), but the `u-dma-buf` buffer node
-(`/dev/udmabuf0`) comes up `root`-owned, and this rootfs deliberately avoids udev, so
-there is no rule to relax it. Run under `sudo` for now (a boot-time `chmod` of
-`/dev/udmabuf*` would remove even this -- see TODO):
+Both the MCDMA register window (`/dev/mcdma`, via `pl-reg`) and the `u-dma-buf`
+interfaces are reachable without root: the buffer node (`/dev/udmabuf0`) comes up 0600
+root-owned and the sysfs cache-sync controls (`/sys/class/u-dma-buf/udmabuf0/sync_*`)
+come up 0664 root-owned, and the project's `boot_script.sh` `chmod`s all of them to
+0666 at boot (installed as an `/etc/init.d` service by
+`scripts/petalinux/boot_script.sh` -- udev-free). Run it directly:
 
 ```sh
-sudo mcdma-loopback
+mcdma-loopback
 ```
+
+If you get `Permission denied` (on the node at `mmap`, or on
+`.../sync_for_device` at the first sync), the boot script did not run or is
+incomplete -- check `ls -l /etc/init.d/boot-script` and `cat /etc/init.d/boot-script`,
+confirm `ls -l /dev/udmabuf0 /sys/class/u-dma-buf/udmabuf0/sync_for_device`, and fall
+back to `sudo mcdma-loopback`.
 
 Expected output -- each channel returns its data and the completed byte count:
 
@@ -341,7 +386,9 @@ timeout shows the engine state. Common cases:
 - **Data mismatch but correct byte count.** Data flowed but TDEST routing is wrong
   (channel *i*'s data landed in another S2MM channel). Check the MCDMA channel-group
   registers and that MM2S drives TDEST from the channel index.
-- **`mmap`/`open` errors.** See sections 1-2 (and remember `sudo` for the buffer node).
+- **`mmap`/`open`/`Permission denied` errors.** See sections 1-3: confirm
+  `/dev/udmabuf0` and `/sys/class/u-dma-buf/udmabuf0/sync_for_device` are 0666 (the
+  boot script sets this); otherwise fall back to `sudo mcdma-loopback`.
 
 ### 4. (Optional) prove the cache-coherency handling is real
 
@@ -361,6 +408,10 @@ A normal `make PROJECT=ex07_dma` produces an SD image where:
 - `u-dma-buf` is built out-of-tree via `kernel_modules/` (the build script generates
   its recipe -- no hand-written `meta-user` recipe -- and appends
   `KERNEL_MODULE_AUTOLOAD`, so it loads at boot like every module this repo ships),
+- the project's `boot_script.sh` is installed as an auto-enabled `/etc/init.d` service
+  (by `scripts/petalinux/boot_script.sh`, guarded by `scripts/check/boot_script.sh`)
+  that `chmod`s `/dev/udmabuf*` and the `/sys/class/u-dma-buf/*/sync_*` controls to
+  0666 at boot, giving non-root access without udev,
 - the demonstration program is cross-compiled into the rootfs.
 
 ## Open questions / TODO
@@ -379,9 +430,13 @@ A normal `make PROJECT=ex07_dma` produces an SD image where:
       single-sync coherency path into software. First pass: one `reserved-memory`
       region in `cfg/.../petalinux/<ver>/device_tree.dtsi` -> `/dev/udmabuf0`,
       carved by `software/mcdma-loopback/mcdma-loopback.c`.
-- [ ] Run without `sudo`: `/dev/udmabuf0` comes up `root`-owned and this rootfs
-      avoids udev, so the buffer node needs a boot-time `chmod` (the register window
-      is already non-root via `pl-reg`). Until then the demo runs under `sudo`.
+- [x] Run without `sudo`: `/dev/udmabuf0` (0600) and the `/sys/class/u-dma-buf/*/sync_*`
+      controls (0664) come up `root`-owned and this rootfs avoids udev, so both are
+      `chmod`ed at boot. The project ships a top-level `boot_script.sh` that the
+      framework installs as an auto-enabled `/etc/init.d` service
+      (`scripts/petalinux/boot_script.sh`, guarded by `scripts/check/boot_script.sh`);
+      the register window was already non-root via `pl-reg`. Confirmed on hardware by
+      an in-place `chmod` of the same paths; the rebuilt image applies it at boot.
 - [x] Bind the MCDMA control window to a `pl-reg` node for non-root register access.
       `device_tree.dtsi` overrides the node's compatible to a private
       `zynq-toolbox,mcdma-userspace` string so no in-kernel driver matches it, and
@@ -392,6 +447,11 @@ A normal `make PROJECT=ex07_dma` produces an SD image where:
       against mainline `xilinx_dma.c` (`software/mcdma-loopback/mcdma-loopback.c`).
 - [ ] Add independent-rate and mid-run-pause tests.
 - [ ] Add deliberate underrun and missed-flush fault injection.
+- [ ] Explore MCDMA completion/error interrupts via UIO (`generic-uio`): aggregate the
+      per-channel IRQs, wait with `read()`/`poll()` on `/dev/uioN`, and use it to take
+      the completion-latency number and characterize underrun/overflow. Keep the
+      happy-path completion polled. (Parent project folds DMA errors into `hw_manager`
+      instead of a parallel IRQ -- see "Interrupts: polling now, UIO to explore".)
 - [ ] Collect the measurements table.
 - [ ] Try the dmaengine path (option A) and compare against direct register control.
 - [x] Fill in concrete "Trying it on hardware" steps (see the section above).

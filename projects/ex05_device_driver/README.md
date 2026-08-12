@@ -1,4 +1,4 @@
-***Updated 2026-08-06***
+***Updated 2026-08-12***
 
 # Example 05: Device Driver
 
@@ -87,7 +87,7 @@ misc_register(&pr->misc);
 
 `misc.mode = 0666` is the whole reason this works without root. The misc core creates the node with that mode directly.
 
-Why `0666` and not `0660`? The misc core creates the node owned `root:root` and can only set its *mode*, not its *group* -- assigning a friendlier group is a udev job, which we're currently avoiding messing with. With `0660` the node stays `root:root` and a login user (the default login, determined by the PetaLinux RootFS Configuration) who isn't in the `root` group is denied (`Permission denied` on `open`). While we could allow the user to have root permissions, it's nice to require `sudo` for actual potentially damaging operations.
+Why `0666` and not `0660`? The misc core creates the node owned `root:root` and can only set its *mode*, not its *group* -- assigning a friendlier group is a udev job, and this rootfs runs without udev. With `0660` the node stays `root:root` and a login user (the default login, determined by the PetaLinux RootFS Configuration) who isn't in the `root` group is denied (`Permission denied` on `open`). While we could allow the user to have root permissions, it's nice to require `sudo` for actual potentially damaging operations.
 
 `0666` makes the node world-readable/writable, which is the only udev-free way to reach it without root. Access is still scoped to only this one register window, never all of physical memory the way `/dev/mem` is.
 
@@ -108,7 +108,12 @@ static int pl_reg_mmap(struct file *file, struct vm_area_struct *vma)
 
 ### Why not UIO?
 
-UIO is the usual "userspace driver" answer, and it also gives you `mmap` -- see [ex04](../ex04_interrupts/README.md). It's not used here because its device nodes (`/dev/uioN`) come up `root`-only and the only supported way to relax that is a udev rule -- which this rootfs cannot install. A misc device with `.mode` gets us non-root access with no udev, so it's the simpler fit for the goal of this example.
+UIO is the usual "userspace driver" answer, and it also gives you `mmap` -- see [ex04](../ex04_interrupts/README.md). Two properties make a misc device the better fit for this example:
+
+- **Named, deterministic nodes.** `pl-reg` names each node after its Vivado instance (`/dev/cfg`, `/dev/sts`) and refuses to bind if the core's identity changes (the fail-loud property above). UIO exposes numbered `/dev/uioN` nodes assigned in probe order, so telling one core from another means walking `/sys/class/uio/*/maps/*/name`, and the numbering shifts when the design changes.
+- **No interrupt to deliver.** UIO exists mainly to hand interrupts to userspace (`read`/`poll` on `/dev/uioN`). These register windows have no interrupt, so that capability goes unused. When an interrupt *is* the point, UIO is the right tool -- that is exactly what [ex04](../ex04_interrupts/README.md) uses.
+
+The obvious objection is permissions: `/dev/uioN` nodes come up `root`-owned, while `pl-reg` sets `misc.mode = 0666` and is born non-root. That difference is not decisive on its own. This build framework has a udev-free way to relax any node at boot: a project may ship an executable `boot_script.sh`, which the build installs as an auto-enabled `/etc/init.d` service (see `scripts/petalinux/boot_script.sh` and `projects/README.md`). A one-line `chmod 0666 /dev/uio0` there would give UIO non-root access just as well. The misc device is simply cleaner for a pure register window: the node is correct the instant it is created -- no boot-time step -- and the named, fail-loud behavior comes for free.
 
 ## How the build automation ties it together
 

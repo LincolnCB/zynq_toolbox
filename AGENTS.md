@@ -55,6 +55,7 @@ Output: `projects/[project]/cores/[vendor]/[core]/tests/test_status`, `projects/
 | `software/` | C software for rootfs *(optional)* |
 | `kernel_modules/` | Out-of-tree kernel modules, each subdirectory built automatically *(optional)* |
 | `rootfs_include/` | Files copied verbatim into rootfs `~` *(optional)* |
+| `boot_script.sh` | Executable script installed as an `/etc/init.d` service, run once at boot *(optional)* |
 | `cores/` | Project-specific IP cores *(optional)* |
 
 **Custom cores** — `projects/[project]/cores/[vendor]/[core]/` (some examples available in `examples/cores/[vendor]/[core]/`):

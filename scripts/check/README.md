@@ -18,6 +18,21 @@ Check for the presence of board files of the given board and board version in th
 
 ---
 
+### `boot_script.sh`
+Usage:
+```bash
+./scripts/check/boot_script.sh <board_name> <board_version> <project_name> [--full]
+```
+Validates the project's optional `boot_script.sh`. The file is optional (no-op if absent); if present it must be a regular, executable file, since the boot-script recipe installs it as an `/etc/init.d` service.
+
+#### Minimum checks:
+- None
+
+#### `--full` check:
+- [`project_dir.sh`](#project_dirsh) `--full`
+
+---
+
 ### `project_dir.sh`
 Usage:
 ```bash

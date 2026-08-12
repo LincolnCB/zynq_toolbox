@@ -191,6 +191,10 @@ Any `.tcl` file in this directory will be included in the Vivado project. The `m
 
 This directory simply contains files to be included in the PetaLinux root filesystem when built. The contents of this directory will be copied directly into the PetaLinux root filesystem `~` directory when the PetaLinux project is built.
 
+### `boot_script.sh` (file)
+
+An optional executable shell script that runs once at boot. If present, the build installs it as an auto-enabled `/etc/init.d` service (via `scripts/petalinux/boot_script.sh`), so it runs after the kernel and its autoloaded modules come up. Use it for one-time setup that has no config knob and that this rootfs otherwise has no udev to perform -- e.g. `chmod`-ing a root-owned `/dev` node so a non-root program can open it. Just write a plain script; no init `start`/`stop` boilerplate is required.
+
 ### `software/`
 
 This directory contains C code for software that will be automatically compiled and included in the PetaLinux build. Each folder will be built to a binary of the same name. The top C file should be named `[software_name].c`, where `[software_name]` is the name of the software (same name as the folder). Other `.c` files can be included in the same folder, and will be compiled together with the top-level file. The software binaries will be built as part of the PetaLinux build process, and will be included in the root filesystem.

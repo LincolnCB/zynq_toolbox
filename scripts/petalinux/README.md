@@ -5,6 +5,17 @@ These scripts are for managing the PetaLinux build process. They are used to set
 
 ---
 
+### `boot_script.sh`
+
+Usage:
+```bash
+./scripts/petalinux/boot_script.sh <board_name> <board_version> <project_name>
+```
+
+Installs the project's optional top-level `boot_script.sh` so it runs once at boot. If the file exists, the script wraps it in an auto-enabled sysvinit service (a generated `boot-script` meta-user app recipe with an `/etc/init.d` wrapper registered via `update-rc.d`); no-op otherwise. This is the udev-free hook for actions that must happen after the kernel and its autoloaded modules are up — for example, `chmod`-ing a root-owned `/dev` node so a non-root program can use it. Projects just drop an executable `boot_script.sh` at their root; no init boilerplate needed.
+
+---
+
 ### `config_rootfs.sh`
 
 Usage:
