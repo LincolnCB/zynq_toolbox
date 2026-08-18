@@ -1,461 +1,259 @@
-***Updated 2026-08-12***
+***Updated 2026-08-18***
 
 # Example 07: DDR-Backed FIFO Buffers via MCDMA
 
-Example 07 builds a complete DMA data path between the PS (DDR memory) and the PL,
-and uses it to give a set of shallow PL FIFOs a large backing store in DDR. The PS
-preloads long buffers into DDR ahead of time; the DMA engine feeds them into on-chip
-FIFOs on demand, and drains PL-produced data back out to DDR far faster than the PS
-could read it register-by-register.
+Example 07 builds a complete DMA data path between the PS (DDR) and the PL and uses it
+to give a set of shallow PL FIFOs a large backing store in DDR. The PS preloads long
+buffers into DDR ahead of time, an AXI MCDMA engine feeds them into on-chip FIFOs on
+demand, and drains PL-produced data back to DDR far faster than the PS could move it
+register-by-register. Four MM2S and four S2MM channels run independently, each bound to
+its own FIFO and addressed by `TDEST`.
 
-This is a **deliberately small, isolated testbed** for the DMA approach adopted in the
-parent project (see `PROJECT_BRIEF.md`). That system needs 8 MM2S + 8 S2MM channels
-feeding sixteen per-board FIFOs. Getting that wrong on real hardware means a
-sequence-halting fault and a manual recovery, so the point of this example is to learn
-the mechanics, measure the costs, and hit the failure modes somewhere harmless first.
+The project introduces the following tools and concepts:
+- Driving an AXI MCDMA with independent per-channel scatter-gather rings
+- Using DDR as a large FIFO backing store (the "prebuffered" playback/capture model)
+- Physically contiguous DMA buffers with `u-dma-buf` plus explicit cache sync
+- Non-root MCDMA register access via a `pl-reg` node
+- `TDEST` routing and `TLAST` packet semantics across a demux -> FIFO -> mux datapath
+- A custom AXI4-Stream packet round-robin mux core
 
-> **Status:** the mode-1 (prebuffered) 2+2 loopback works end to end on hardware --
-> the block design builds, `u-dma-buf` and the `pl-reg`-bound MCDMA come up, and
-> `mcdma-loopback` round-trips both channels byte-for-byte. It now runs **without
-> root**: a boot-time `chmod` (via the project's `boot_script.sh`) relaxes both the
-> `/dev/udmabuf0` node and the `/sys/class/u-dma-buf/*/sync_*` controls, and the MCDMA
-> register window is already non-root via `pl-reg`. Sections still marked _(planned)_
-> -- the per-channel datapath, the programmable-rate traffic generator, the UIO
-> interrupt path, and the measurements -- are the remaining work. See "Trying it on
-> hardware" to run it.
+> Status (working): the `per_channel` datapath round-trips all four channels
+> byte-for-byte on hardware, without root -- `mcdma-loopback` passes for every channel
+> and any subset. What remains is downstream work built on this foundation: a
+> programmable-rate PL traffic generator, the UIO interrupt path, and the measurements
+> table (see [What's left](#whats-left)).
 
-## What this example is de-risking
+## Why this example exists
 
-Each item here is an open question in the parent project that this example is meant to
-close out. Keep them in view; they are the reason the example exists.
+Each item below is an open question in the parent project that this example closes out:
 
-1. **Is the Linux MCDMA path usable?** The dmaengine driver
-   (`xlnx,axi-mcdma-1.00.a` in `drivers/dma/xilinx/xilinx_dma.c`) implements only
-   `device_prep_slave_sg` -- no cyclic mode -- and is far less exercised than the plain
-   `axi_dma` driver. Determine whether to use it or to drive the MCDMA registers
-   directly from userspace. See "Two ways to drive it" below.
-   **Resolved:** userspace register control works -- `mcdma-loopback` drives the MCDMA
-   over a `pl-reg`-mapped register window and round-trips data, so the parent project
-   can proceed with option B without depending on the dmaengine MCDMA driver.
-2. **What does MCDMA actually cost in LUTs?** Build at 2+2 channels, then rebuild at
-   4+4, and extrapolate to 8+8. The parent design is at roughly 60% LUT utilization
-   and this number decides whether MCDMA or eight separate `axi_dma` instances is
-   viable there.
-3. **What is the real worst-case service latency?** Measure how long a FIFO can be
-   left unserviced under load. The parent system's margin calculation assumes DMA
-   latency is microseconds against a millisecond-scale FIFO drain time; confirm that
-   with numbers rather than arithmetic.
-4. **Does the coherency handling actually work?** Silent data corruption from a missed
-   cache flush is the classic failure here, and it will not show up in a short test.
-5. **What does underrun/overflow look like from software?** In the parent system this
-   is a hard shutdown. Here it is free to provoke deliberately and characterize.
+1. Is the Linux MCDMA path usable? Resolved: userspace register control works.
+   `mcdma-loopback` drives the MCDMA over a `pl-reg`-mapped window and round-trips data,
+   so the parent project can proceed without depending on the lightly-used dmaengine
+   MCDMA driver (`drivers/dma/xilinx/xilinx_dma.c`, `device_prep_slave_sg` only).
+2. What does MCDMA cost in LUTs? Build at 4+4 and extrapolate to 8+8; the parent
+   design is ~60% LUT-utilized and this decides MCDMA vs. eight separate `axi_dma`.
+   (pending measurement)
+3. What is the worst-case service latency? Measure how long a FIFO can go
+   unserviced under load. (pending the traffic-gen core + UIO path)
+4. Does the coherency handling work? Resolved: a single `sync_for_device` before
+   each run is load-bearing; skipping it reproduces silent corruption (see hardware
+   step 3).
+5. What does underrun/overflow look like from software? (pending fault injection)
 
-## Goals
+Goal-wise, the point is independent channels -- several DMA regions in flight at once,
+each bound to its own FIFO, independently startable and running at unrelated rates --
+not raw throughput. The channel count is one Tcl parameter (`num_ch`), so scaling for
+the LUT-cost measurement is a one-line change.
 
-1. **Stand up a full DMA data path.** Move data between PS DDR and the PL over AXI in
-   both directions, using an AXI MCDMA engine and the PS high-performance (HP) AXI
-   slave port.
+## Block design
 
-2. **Demonstrate multiple genuinely independent channels.** Several DMA regions in
-   flight at once, each bound to its own PL FIFO, each independently startable and
-   stoppable, running at unrelated rates. This -- not raw throughput -- is the core
-   skill the example teaches.
+`block_design.tcl` stands up the MCDMA and a selectable AXI4-Stream datapath, all
+clocked at 100 MHz off `FCLK_CLK0`. The channel count is the Tcl parameter `num_ch`
+(default 4).
 
-3. **Use DDR as a FIFO extension.** On-chip BRAM FIFOs are small. Backing each with a
-   DDR region makes the effective depth as large as the DDR allocation, letting the PS
-   preload an entire run ahead of time and stay out of the loop while it plays.
+- PS7 with HP0 enabled (the 64-bit path to DDR, carrying both payload and SG
+  descriptor fetches) and GP0 for the MCDMA `S_AXI_LITE` control window.
+- `axi_mcdma` with `num_ch` MM2S + `num_ch` S2MM channels, scatter-gather enabled
+  (mandatory), 64-bit memory-map width (matches HP0 -- do not run HP0 in 32-bit mode),
+  and the buffer-length register widened to 23 bits so a multi-MB transfer is one
+  descriptor, not a 16 KB-capped chain. The AXIS stream width is 32 bits (read-only /
+  derived on this IP).
+- Two `smartconnect`s: one for GP0 -> control, one aggregating the MCDMA's three
+  memory masters (MM2S, S2MM, SG) onto `S_AXI_HP0`. Addresses are assigned explicitly
+  with `addr` (preferred over `auto_connect_axi`, per repo convention).
+- `xlconcat` feeding the `2*num_ch` per-channel interrupts into `IRQ_F2P`
+  (`IRQ_F2P[0:7]` = GIC IDs 61-68, device tree `<0 29 4>`..`<0 36 4>`).
 
-4. **Cover the parts that are easy to get wrong.** Cache coherency, physically
-   contiguous allocation, descriptor ring construction, `TDEST` routing, `TLAST`
-   semantics, and address-space mapping.
+The `datapath` parameter selects the stream topology between MM2S and S2MM:
 
-5. **Optimize for clarity.** Small, heavily commented block design and software, so
-   each piece can be lifted into a larger project and scaled up.
+- `loopback` -- a single `TDEST`-preserving elastic FIFO looping MM2S straight back
+  into S2MM. Minimal PL; validates the MCDMA/HP0/interrupt path with the least logic.
+  Kept for regression.
+- `per_channel` (default) -- the structure the parent project needs:
 
-## Scope: why 2+2 (and optionally 4+4)
+  ```
+  M_AXIS_MM2S -> mm2s_demux -> dac_fifo[i] -> (rate-gen core, TODO) -> adc_fifo[i] -> s2mm_mux -> S_AXIS_S2MM
+                 (axis_switch,                                                        (axis_pkt_rr_mux,
+                  1 -> num_ch by TDEST)                                                num_ch -> 1)
+  ```
 
-Two MM2S and two S2MM channels, feeding four AXI-Stream FIFOs.
+  Each channel gets its own DAC and ADC FIFO, mirroring rev_d_shim (where a SPI core
+  sits between them). Today the DAC->ADC gap is a plain wire; the programmable-rate
+  traffic-gen core drops in there later. `TDEST == i` is preserved end to end, so MCDMA
+  S2MM routes each channel's data back to itself.
 
-Two per direction rather than one, because a single channel per direction proves
-nothing about the hard part: `TDEST`/`TID` routing, per-channel descriptor rings, and
-independent start/stop are exactly what breaks at scale, and they are invisible in a
-1+1 loopback. Not eight per direction yet, because the mechanics are identical and the
-resource cost extrapolates -- keep the example readable.
+The `num_ch -> 1` recombine is the custom core
+[`cores/base/axis_pkt_rr_mux`](cores/base/axis_pkt_rr_mux/axis_pkt_rr_mux.v): it grants
+one input, holds it through `TLAST`, then advances round-robin, so packets are never
+interleaved onto the single S2MM stream and no channel starves. It replaced a stock
+`axis_switch`, which could not be forced to arbitrate on packet boundaries (see
+[Design notes](#design-notes)). The core has a cocotb testbench under its `tests/`.
 
-Make the channel count a Tcl parameter in `block_design.tcl` so a 4+4 build is a
-one-line change. That is what makes goal 2 above (LUT scaling) cheap to measure.
+## Software
 
-## Block design plan _(planned)_
+`software/mcdma-loopback/mcdma-loopback.c` implements the prebuffered model, which
+is the parent project's actual usage and the easy one: software is not in the loop
+during a transfer, so scheduling jitter cannot cause an underrun. It:
 
-- `processing_system7` with **HP0** enabled (the DMA's path to DDR, carrying both
-  payload and scatter-gather descriptor fetches) and **GP0** for the MCDMA
-  `S_AXI_LITE` control window.
-- `axi_mcdma` with `CONFIG.c_num_mm2s_channels {2}` and
-  `CONFIG.c_num_s2mm_channels {2}`. Scatter-gather is mandatory on MCDMA; the
-  descriptor rings live in DDR and are reached over the same HP path.
-- **Memory-map data width 64 bits, stream data width 32 bits.** The 64-bit memory
-  side matches the HP port; do not configure HP0 in 32-bit mode. The 32-bit stream
-  matches the parent project's FIFO width.
-- **Widen the buffer-length register.** Check this value -- if it is left at the
-  14-bit default, a single descriptor caps out at 16 KB, which quietly turns a
-  one-descriptor transfer into a thousand-descriptor chain. Set it to 23 bits (8 MB)
-  or wider.
-- Two AXI **smartconnect** instances: one for PS-to-peripheral control, one
-  aggregating the MCDMA's memory-mapped masters (MM2S, S2MM, and SG) into `S_AXI_HP0`.
-- Explicit `addr` assignments for the MCDMA control window and the HP0 memory window
-  (preferred over `auto_connect_axi`, per repo convention).
-- `xlconcat` feeding MCDMA per-channel interrupts into `IRQ_F2P`. Note the mapping:
-  `IRQ_F2P[0:7]` are GIC IDs 61-68, which appear in the device tree as `<0 29 4>`
-  through `<0 36 4>`.
-- Four AXIS FIFOs plus the `TDEST` fan-out (MM2S side) and combine (S2MM side). An
-  `axis_switch` works; for a fixed map, a small hand-written demux is cheaper and
-  easier to read.
-- A PL-side traffic generator/checker per read FIFO, with a **programmable rate**, so
-  channels can be run at deliberately unrelated rates and paused independently. This
-  is what makes goal 2 testable.
+1. maps the MCDMA control window (`/dev/mcdma` via `pl-reg`, else `/dev/mem`),
+2. allocates one `u-dma-buf` region and carves it into an SG descriptor area plus a
+   src/dst payload pair per channel,
+3. fills each src with a distinct pattern (`(ch<<24)|word`) and builds one MM2S and one
+   S2MM descriptor per channel,
+4. `sync_for_device` once (flush to DDR), starts every channel, polls each S2MM
+   descriptor for completion, `sync_for_cpu`, and verifies the byte-exact round trip.
 
-**Clock the datapath at 100 MHz.** 64 bits at 100 MHz is 800 MB/s, orders of magnitude
-beyond what this example moves, and it keeps timing closure uneventful.
+Pass channel indices to run a subset (`mcdma-loopback 1`, `mcdma-loopback 0 2`); no args
+runs all. The MCDMA register map and SG descriptor layout follow mainline
+`xilinx_dma.c` -- note that MCDMA's descriptor `control` word is at `0x14` (not the
+AXI-DMA `0x18`) and Run/Stop must be set in both the per-channel and the common
+control register. With the widened length register and a contiguous allocation a whole
+channel is one descriptor; the code handles a chain anyway since the parent project
+will need one.
 
-## The DMA-as-FIFO model _(planned)_
+Non-root access: the register window is non-root via `pl-reg`. `u-dma-buf` exposes
+two root-owned interfaces the program touches -- the `/dev/udmabuf0` mmap node (0600)
+and the sysfs cache-sync controls `/sys/class/u-dma-buf/udmabuf0/sync_*` (0664) -- with
+no mode knob; miss the sysfs controls and `mmap` still succeeds but the first
+`sync_for_device` fails `EACCES`. The project's top-level `boot_script.sh` `chmod`s both
+to 0666 at boot (installed as an `/etc/init.d` service by
+`scripts/petalinux/boot_script.sh`; this rootfs has no udev), so the whole demo runs as
+an ordinary user.
 
-There are two operating modes worth building, and they have very different difficulty.
-Build the first one; treat the second as an extension.
+Cache coherency: HP ports are not coherent with L1/L2. Prebuffered mode needs only
+one `sync_for_device` per buffer before the run and one `sync_for_cpu` after -- no
+per-chunk sync -- using a cached mapping so filling multi-MB patterns stays fast.
 
-### Mode 1: prebuffered playback and capture (primary)
+Flow control is handled entirely by `TREADY` backpressure: a full downstream FIFO
+stalls the MCDMA channel mid-descriptor, so DMA overrun of a PL FIFO is not possible and
+no `almost_full`/fill-count signalling is needed. `software/xilinx-dma-test/` is
+superseded (it drove a plain `axi_dma` in direct-register mode) and kept only as a
+register-model reference.
 
-The PS allocates a DDR buffer per channel, fills the MM2S buffers with the entire
-pattern, builds a descriptor chain covering the whole thing, flushes caches once,
-starts all channels, and then does nothing until completion interrupts arrive.
+## Device tree
 
-This is the parent project's actual model, and it is much easier than a streaming ring:
-**software is not in the loop during the run at all**, so scheduling jitter cannot
-cause an underrun. The only failure mode left is running out of aggregate bandwidth,
-where the margin is enormous.
+`cfg/.../petalinux/<ver>/device_tree.dtsi` declares two things:
 
-With a widened length register and a contiguous allocation, a whole channel's transfer
-may be a *single descriptor*. Build the code to handle a chain anyway -- the parent
-system will need one -- but expect chains of one to a handful of entries.
+- a `reserved-memory` region (4 MiB at `0x30000000`) that `u-dma-buf` claims as
+  `/dev/udmabuf0`. The base and size must both be 4 MiB-aligned or
+  `of_reserved_mem_device_init` fails `-22` on 32-bit ARM.
+- a `compatible` override on the MCDMA node to a private
+  `zynq-toolbox,mcdma-userspace` string, so no in-kernel driver matches it and `pl-reg`
+  claims it deterministically as `/dev/mcdma` (rather than relying on the `xilinx_dma`
+  probe failing -- PetaLinux otherwise tags a standalone MCDMA as `xlnx,eth-dma`).
 
-### Mode 2: continuous streaming (extension, optional)
+## Build integration
 
-Keep appending descriptors ahead of the ring's tail pointer while the transfer runs.
-The deadline is not the FIFO drain time but the time to drain everything already
-queued, which with a few MB queued is seconds. This works with MCDMA as-is and does
-not need cyclic mode.
-
-Only attempt this after mode 1 works end to end.
-
-### Flow control: mostly not your problem
-
-The original plan for this example proposed using FIFO `almost_full` / fill-count
-signals as the DMA flow-control mechanism. **This is unnecessary and should not be
-built.** AXI-Stream `TREADY` backpressure already does it: when a downstream FIFO is
-full, it deasserts `TREADY`, the MCDMA channel stalls mid-descriptor, and it resumes
-when space appears. Overrun of a PL FIFO by the DMA is not possible through this path.
-
-What you *do* have to get right:
-
-- **`TLAST` on the S2MM side.** MCDMA closes a descriptor on `TLAST` or when the
-  buffer fills. Without `TLAST`, a partial final buffer sits in the engine and never
-  completes, and you cannot tell how many bytes actually arrived. Assert `TLAST` at
-  the end of a capture. Do *not* assert it per-sample -- that produces tiny packets
-  and one descriptor's worth of overhead each.
-- **Reading the completed-byte count** from the descriptor status field for partial
-  transfers.
-- **DDR-side bookkeeping** -- how far the PS has consumed a capture buffer, and how
-  far it has filled a playback buffer. This is ordinary ring accounting and only
-  matters in mode 2.
-
-## Two ways to drive it _(decided: start with B)_
-
-**A. Linux dmaengine.** Enable `CONFIG_XILINX_DMA`, describe the MCDMA in the device
-tree, write a small consumer driver using `dmaengine_prep_slave_sg()`. Idiomatic, and
-descriptor management is handled for you. Risk: the MCDMA path in this driver is
-comparatively lightly used. Note also that dmaengine wants to own its buffers through
-the kernel DMA API, so this route pairs awkwardly with `u-dma-buf` and probably means
-`dma_alloc_coherent` in the consumer driver instead.
-
-**B. Userspace register control.** Map the MCDMA control registers via the
-`pl-reg`-style misc driver from ex05, allocate buffers with `u-dma-buf`, build
-descriptor rings by hand, and program the channel pointers directly. More code and you
-own the SG bookkeeping, but it sidesteps the driver-maturity question entirely, makes
-every step visible -- which is the point of an example -- and matches how the parent
-system already works (mmap once, no syscalls in the loop).
-
-**Start with B.** It is the parent project's preferred direction, it pairs cleanly
-with `u-dma-buf`, and understanding the hardware on its own terms is the whole
-justification for building an isolated example. Try A afterward and compare; if it
-works cleanly it may simplify the parent project, and if it does not, B is already a
-demonstrated fallback rather than a panic move.
-
-## Interrupts: polling now, UIO to explore _(planned)_
-
-The mode-1 demo **polls** for completion, which is the right default: the prebuffered
-model keeps software out of the loop, so completion latency is irrelevant on the happy
-path. But two things are worth characterizing with a real interrupt, and the block
-design already fans the MCDMA per-channel IRQs into `IRQ_F2P`:
-
-- **Completion latency** (the measurements table below) -- how long from `TLAST`/last
-  descriptor to the CPU being notified, idle vs. loaded. You cannot measure this by
-  polling.
-- **Error alerts** -- underrun (MM2S starved), S2MM overflow, and descriptor/SG errors.
-  These are the sequence-halting faults the parent project must catch fast.
-
-Deliver these to userspace with **UIO** (`generic-uio` / `uio_pdrv_genirq`), not a
-custom driver: `read()`/`poll()` on `/dev/uioN` blocks until the IRQ, `write()`
-re-arms it. Aggregate the per-channel IRQs into a single line and demux in software by
-reading each channel's status register (stock `uio_pdrv_genirq` is single-IRQ). Note
-that UIO owns the whole node (regs + IRQ), so a node moved to UIO leaves `pl-reg`; the
-boot script can symlink `/dev/uioN` back to a stable name and relax its mode, and a
-software ID-register check recovers the fail-loud property `pl-reg` gets from its
-VLNV-derived compatible.
-
-**Scope split:** explore the standalone MCDMA UIO IRQ *here*, purely to get the latency
-number and to see what underrun/overflow look like. In the **parent project**, do not
-stand up a second parallel IRQ -- route the MCDMA error condition into `hw_manager` as
-one more halt input so it flows through the existing single error-alert IRQ and status
-word (one doorbell, one status read, one monitor thread).
-
-## Software plan _(planned)_
-
-- **Contiguous buffers via `u-dma-buf`.** The vendored module under
-  `examples/kernel_modules/u-dma-buf` is already symlinked into `kernel_modules/`, so
-  the standard build auto-discovers and compiles it out-of-tree and autoloads it at
-  boot (`kernel_modules.sh` builds every subdirectory of `kernel_modules/` and appends
-  `KERNEL_MODULE_AUTOLOAD`). A bare autoload loads the module with no regions, though,
-  so the DMA regions still have to be declared -- via `u-dma-buf` device-tree nodes or
-  module parameters (`modprobe.d` options) -- to get one `/dev/udmabufN` per channel
-  plus one small region for the descriptor rings; read each region's physical address
-  from sysfs to program descriptors. `cma=64M` in bootargs is plenty for the example;
-  the parent project should move to a `reserved-memory` node so allocation cannot fail
-  from fragmentation. Confirm allocations actually succeed -- CMA failures are quiet.
-- **Non-root access.** ex05 gets a non-root `/dev` node by setting `misc.mode = 0666`
-  on its misc device, deliberately avoiding udev because this rootfs cannot install
-  udev rules. `u-dma-buf` exposes *two* interfaces the program touches, and both come
-  up root-owned with no mode knob: the `/dev/udmabufN` node (0600, the mmap target)
-  and the sysfs cache-sync controls under `/sys/class/u-dma-buf/udmabufN/`
-  (`sync_for_device`/`sync_for_cpu` et al., 0664). Both are relaxed with a boot-time
-  `chmod` instead: the project ships a top-level `boot_script.sh` that the framework's
-  `scripts/petalinux/boot_script.sh` installs as an auto-enabled `/etc/init.d` service
-  (still udev-free; a `chmod` on a sysfs attribute persists for the device's lifetime).
-  Miss the sysfs controls and `mmap` still succeeds but the first `sync_for_device`
-  fails `EACCES`. Combined with the `pl-reg`-mapped register window (option B below),
-  the whole demo now runs as an ordinary user.
-- **Cache coherency.** HP ports are not coherent with L1/L2. Because mode 1 is
-  prebuffered, a **single sync per buffer before starting** is sufficient; no
-  per-chunk synchronization. Use a cached mapping plus `u-dma-buf`'s
-  `sync_for_device` / `sync_for_cpu` sysfs controls rather than a non-cached mapping,
-  so filling multi-MB patterns from userspace stays fast. Check the exact attribute
-  names and `sync_mode` semantics against the vendored version. Then deliberately
-  break it -- skip the sync -- and confirm you can reproduce the corruption. Knowing
-  what that failure looks like is worth the ten minutes.
-- **Demonstration program.** `software/mcdma-loopback/mcdma-loopback.c` is the
-  starting point: it allocates one `u-dma-buf` region (declared as a
-  `reserved-memory` node in `cfg/.../petalinux/<ver>/device_tree.dtsi`), carves it
-  into a descriptor area plus a src/dst pair per channel, preloads distinct patterns,
-  syncs once, builds an SG descriptor ring, starts all channels, polls for completion,
-  and verifies the byte-exact round trip. The MCDMA register/descriptor specifics are
-  flagged `VALIDATE` in-file. It reaches the MCDMA control window through a pl-reg node
-  (`/dev/mcdma`, non-root) if one is bound, else `/dev/mem` (root). Next steps: run the
-  channels at deliberately different rates and pause one mid-run (needs the
-  `per_channel` datapath + rate-gen core).
-- **Fault injection.** Starve an MM2S channel (start the PL consumer before the DMA)
-  and confirm what the PL sees and what software can detect. This directly informs
-  the parent system's watchdog design.
-- `software/xilinx-dma-test/xilinx-dma-test.c` is **superseded** (it drove a plain
-  `axi_dma` in direct-register mode over `/dev/mem` at hardcoded physical addresses,
-  which does not apply to the SG-only MCDMA); kept only as a register-model reference.
-
-## Measurements to collect
-
-Record these in the README once hardware runs; they feed directly back into the parent
-design.
-
-| Measurement | Why |
-|---|---|
-| LUT/FF/BRAM at 2+2 and 4+4 | Extrapolate to 8+8; decides MCDMA vs. 8x `axi_dma` |
-| Sustained aggregate MB/s, all channels | Confirm the bandwidth margin is real |
-| Max observed gap between FIFO services | The actual underrun margin |
-| Interrupt latency, idle vs. loaded system | Matters only for mode 2, but cheap to take (needs the UIO IRQ path) |
-| Descriptor fetch overhead vs. chunk size | Guides chunk sizing at scale |
-
-## Gotchas worth knowing before you start
-
-- **TrustZone.** PS peripherals default to secure mode, and accesses with
-  `AxPROT[1]=1` return `DECERR`. If transfers fail immediately with no other
-  explanation, check this before debugging anything else.
-- **Command reordering.** The HP interface may reorder both reads and writes, and
-  read data interleaving can occur. MCDMA handles this; custom PL masters must.
-- **Don't use 32-bit HP mode.** Upsizing requires `AxCACHE[1]` to be set, and wait
-  states appear if the write command isn't asserted a cycle ahead of the first data
-  beat. The bandwidth savings are irrelevant here and the failure modes are subtle.
+A normal `make PROJECT=ex07_dma` produces an SD image where the block design (bitstream
++ `.xsa`) contains the MCDMA and the selected `datapath`, `u-dma-buf` is built
+out-of-tree from `kernel_modules/` and autoloaded, the `boot_script.sh` chmod service is
+installed (by `scripts/petalinux/boot_script.sh`, guarded by
+`scripts/check/boot_script.sh`), and `mcdma-loopback` is cross-compiled into the rootfs.
 
 ## Trying it on hardware
 
-After a `make PROJECT=ex07_dma`, write the SD image, boot the board, and log in. The
-steps below verify the pieces bottom-up: first that the buffer and the register
-window came up, then the actual DMA round trip. Everything Xilinx-specific in the
-block design and the program is still flagged `VALIDATE` -- these checks are how you
-confirm those guesses.
+After `make PROJECT=ex07_dma`, write the SD image, boot, and log in.
 
-### 1. Confirm the `u-dma-buf` region allocated
+1. Confirm the `u-dma-buf` region and the `pl-reg` window came up:
 
 ```sh
-dmesg | grep u-dma-buf                 # expect a udmabuf0 line with a phys address
-ls -l /dev/udmabuf0                     # node exists (root-owned by default)
-cat /sys/class/u-dma-buf/udmabuf0/phys_addr
-cat /sys/class/u-dma-buf/udmabuf0/size  # >= REGION_BYTES (~12 KB); the DT reserves 4 MiB
+cat /sys/class/u-dma-buf/udmabuf0/size   # >= REGION_BYTES; the DT reserves 4 MiB
+ls -l /dev/mcdma                         # crw-rw-rw- (non-root, via pl-reg)
 ```
 
-If `/dev/udmabuf0` is missing, the `reserved-memory` / `u-dma-buf` device-tree node
-did not take -- check `dmesg` for allocation failures (CMA/reserved-memory failures
-are quiet) and confirm the base address in `device_tree.dtsi` doesn't overlap
-anything on this board.
+If `/dev/udmabuf0` is missing, the `reserved-memory` node didn't take (CMA failures are
+quiet -- check `dmesg`). If `/dev/mcdma` is missing, the `compatible` override didn't
+apply and the MCDMA bound to a kernel driver; the program still runs via its `/dev/mem`
+fallback under `sudo`.
 
-> **`of_reserved_mem_device_init failed. return=-22`** means the reserved region is
-> not aligned to the CMA minimum alignment (4 MiB on 32-bit ARM). The region's base
-> *and* size must both be 4 MiB-aligned -- `device_tree.dtsi` uses a 4 MiB region at
-> `0x30000000` for this reason. Shrinking it below 4 MiB reintroduces the error.
-
-### 2. Confirm the MCDMA control window bound to `pl-reg` (non-root path)
-
-```sh
-dmesg | grep pl-reg                     # expect "/dev/mcdma ready (mode 0666): 0x40400000 ..."
-ls -l /dev/mcdma                        # crw-rw-rw-  (non-root)
-```
-
-The project's `device_tree.dtsi` overrides this node's `compatible` to a private
-`zynq-toolbox,mcdma-userspace` string, so no in-kernel driver matches it and `pl-reg`
-claims it deterministically (this avoids relying on the `xilinx_dma` probe failing --
-see the dtsi comment for why PetaLinux tags a standalone MCDMA as `xlnx,eth-dma`).
-Confirm the override took:
-
-```sh
-tr '\0' '\n' < /sys/firmware/devicetree/base/pl-bus/axi_mcdma@40400000/compatible
-# expect a single line: zynq-toolbox,mcdma-userspace
-```
-
-- If `/dev/mcdma` exists, the non-root path works.
-- If the compatible still shows the `xlnx,...` strings, the dtsi override didn't
-  apply -- confirm the `&mcdma` label resolves (it comes from the Vivado instance
-  name `mcdma`) and that `device_tree.dtsi` rebuilt into `system-user.dtsi`.
-- The program also runs via its `/dev/mem` fallback under `sudo` regardless.
-
-### 3. Run the loopback
-
-Both the MCDMA register window (`/dev/mcdma`, via `pl-reg`) and the `u-dma-buf`
-interfaces are reachable without root: the buffer node (`/dev/udmabuf0`) comes up 0600
-root-owned and the sysfs cache-sync controls (`/sys/class/u-dma-buf/udmabuf0/sync_*`)
-come up 0664 root-owned, and the project's `boot_script.sh` `chmod`s all of them to
-0666 at boot (installed as an `/etc/init.d` service by
-`scripts/petalinux/boot_script.sh` -- udev-free). Run it directly:
-
-```sh
-mcdma-loopback
-```
-
-If you get `Permission denied` (on the node at `mmap`, or on
-`.../sync_for_device` at the first sync), the boot script did not run or is
-incomplete -- check `ls -l /etc/init.d/boot-script` and `cat /etc/init.d/boot-script`,
-confirm `ls -l /dev/udmabuf0 /sys/class/u-dma-buf/udmabuf0/sync_for_device`, and fall
-back to `sudo mcdma-loopback`.
-
-Expected output -- each channel returns its data and the completed byte count:
+2. Run the loopback (no args runs all channels; pass indices for a subset):
 
 ```
-mcdma-loopback: 2-channel prebuffered MCDMA loopback via u-dma-buf
+petalinux:~$ mcdma-loopback
+mcdma-loopback: 4-channel prebuffered MCDMA loopback via u-dma-buf
+running channels: 0 1 2 3
+
 MCDMA control: /dev/mcdma (pl-reg, no root)
-u-dma-buf udmabuf0: phys 0x30000000, 12288 bytes used of 4194304
+u-dma-buf udmabuf0: phys 0x30000000, 20480 bytes used of 4194304
 
   ch0  ok    received 2048/2048 bytes
   ch1  ok    received 2048/2048 bytes
+  ch2  ok    received 2048/2048 bytes
+  ch3  ok    received 2048/2048 bytes
 
 All channels round-tripped.
 ```
 
-If it fails (on another board, or after a change), the `dump_status` output printed on
-timeout shows the engine state. Common cases:
+On timeout the `dump_status` output shows per-channel `MM2S`/`S2MM` `SR` (bit 0 =
+HALTED), `CH_ERR`, each descriptor's status from DDR, and `src[0..3]` vs `dst[0..3]`: an
+all-zero `dst` is starvation, another channel's high byte is a misroute. If transfers
+fail immediately with no data, suspect the TrustZone `DECERR` gotcha. If you get
+`Permission denied`, the boot script didn't run -- check `/etc/init.d/boot-script` and
+fall back to `sudo mcdma-loopback`.
 
-- **Both channels time out, 0 bytes.** The engine never started or errored. Check the
-  dumped `MM2S SR` / `S2MM SR` (bit 0 = HALTED) and `CH_ERR` registers, and the
-  TrustZone `DECERR` gotcha (PS peripherals default secure; `AxPROT[1]=1` returns
-  `DECERR`). Two subtle bugs already fixed and worth knowing: the MCDMA descriptor
-  `control` word is at offset `0x14` (not the AXI-DMA `0x18`), and Run/Stop must be set
-  in *both* the per-channel and the common control register.
-- **Data mismatch but correct byte count.** Data flowed but TDEST routing is wrong
-  (channel *i*'s data landed in another S2MM channel). Check the MCDMA channel-group
-  registers and that MM2S drives TDEST from the channel index.
-- **`mmap`/`open`/`Permission denied` errors.** See sections 1-3: confirm
-  `/dev/udmabuf0` and `/sys/class/u-dma-buf/udmabuf0/sync_for_device` are 0666 (the
-  boot script sets this); otherwise fall back to `sudo mcdma-loopback`.
+3. (Optional) prove the cache sync is real. Comment out the `sync_for_device` call
+in `mcdma-loopback.c`, rebuild, and re-run: you should get intermittent mismatches as
+data sits in CPU cache instead of DDR. Restore it afterward.
 
-### 4. (Optional) prove the cache-coherency handling is real
+## What's left
 
-The single `sync_for_device` before the run is load-bearing. To see the failure it
-prevents, comment out the `sync_for_device` call in `mcdma-loopback.c`, rebuild, and
-re-run: you should get intermittent data mismatches as the DAC data sits in CPU cache
-instead of DDR. Restore the sync afterward. Knowing what that corruption looks like
-directly informs the parent project.
+The DMA foundation works; the remaining items build the measurement and stress harness
+on top of it.
 
-## Build integration
+- [ ] Programmable-rate traffic generator/checker core between the per-channel DAC
+      and ADC FIFOs (replaces the placeholder wire). This is what lets channels run at
+      deliberately unrelated rates and be paused independently.
+- [ ] Independent-rate and mid-run-pause tests once that core exists.
+- [ ] Fault injection: deliberate underrun (start the PL consumer before the DMA)
+      and missed-flush corruption; characterize what software can detect.
+- [ ] MCDMA completion/error interrupts via UIO (`generic-uio`): aggregate the
+      per-channel IRQs, block with `read()`/`poll()` on `/dev/uioN`, and use it for the
+      completion-latency number and to see underrun/overflow. Keep the happy path
+      polled. In the parent project, fold DMA errors into `hw_manager`'s single
+      error-alert IRQ rather than standing up a parallel UIO.
+- [ ] Measurements table: LUT/FF/BRAM at 2+2 and 4+4 (MCDMA vs. 8x `axi_dma`),
+      sustained aggregate MB/s, max FIFO-service gap, interrupt latency, and descriptor
+      overhead vs. chunk size.
+- [ ] Compare the dmaengine path (option A: `CONFIG_XILINX_DMA` +
+      `dmaengine_prep_slave_sg`) against direct register control; note it pairs
+      awkwardly with `u-dma-buf` (wants `dma_alloc_coherent`).
+- [ ] (stretch) Mode 2 streaming: append descriptors ahead of the ring tail during
+      a run. Works with MCDMA as-is (no cyclic mode); attempt only after mode 1.
 
-A normal `make PROJECT=ex07_dma` produces an SD image where:
+Done so far: the MCDMA block design (`num_ch`-per-direction, GP0 control, HP0 memory +
+SG, per-channel interrupts, `datapath` selector); the `per_channel` demux/FIFO/custom-mux
+datapath; `u-dma-buf` allocation + single-sync coherency; non-root access via `pl-reg` +
+the boot-time chmod; and the prebuffered round-trip demo, validated on hardware at 4+4.
 
-- the block design (bitstream + `.xsa`) contains the MCDMA and, per the `datapath`
-  selector, either the single TDEST-routed loopback FIFO (default) or the per-channel
-  FIFOs,
-- `u-dma-buf` is built out-of-tree via `kernel_modules/` (the build script generates
-  its recipe -- no hand-written `meta-user` recipe -- and appends
-  `KERNEL_MODULE_AUTOLOAD`, so it loads at boot like every module this repo ships),
-- the project's `boot_script.sh` is installed as an auto-enabled `/etc/init.d` service
-  (by `scripts/petalinux/boot_script.sh`, guarded by `scripts/check/boot_script.sh`)
-  that `chmod`s `/dev/udmabuf*` and the `/sys/class/u-dma-buf/*/sync_*` controls to
-  0666 at boot, giving non-root access without udev,
-- the demonstration program is cross-compiled into the rootfs.
+## Design notes
 
-## Open questions / TODO
+Two `s2mm_mux` bugs surfaced while bringing up `per_channel`; both cost real debugging
+time and are easy to hit again:
 
-- [x] Rework `block_design.tcl` from the single-channel `axi_dma` scaffold to a
-      parameterized `axi_mcdma` (first pass: `num_ch`-per-direction MCDMA, GP0
-      control, HP0 memory path incl. SG, per-channel interrupts, and a `datapath`
-      selector for either a single TDEST-routed loopback or the fuller per-channel
-      structure). Xilinx-side `CONFIG.*`/pin names are flagged in-file for validation.
-- [ ] Validate and bring up the `datapath = per_channel` branch (TDEST demux/mux via
-      `axis_switch`), then add the programmable-rate PL traffic generator/checker
-      between the per-channel DAC and ADC FIFOs (needs a new custom core).
-- [ ] Verify the MCDMA buffer-length register width and widen to 23 bits.
-- [ ] Decide `TLAST` policy on the S2MM side and implement it in the generator.
-- [x] Wire `u-dma-buf` allocation (payload + descriptor-ring region) and the
-      single-sync coherency path into software. First pass: one `reserved-memory`
-      region in `cfg/.../petalinux/<ver>/device_tree.dtsi` -> `/dev/udmabuf0`,
-      carved by `software/mcdma-loopback/mcdma-loopback.c`.
-- [x] Run without `sudo`: `/dev/udmabuf0` (0600) and the `/sys/class/u-dma-buf/*/sync_*`
-      controls (0664) come up `root`-owned and this rootfs avoids udev, so both are
-      `chmod`ed at boot. The project ships a top-level `boot_script.sh` that the
-      framework installs as an auto-enabled `/etc/init.d` service
-      (`scripts/petalinux/boot_script.sh`, guarded by `scripts/check/boot_script.sh`);
-      the register window was already non-root via `pl-reg`. Confirmed on hardware by
-      an in-place `chmod` of the same paths; the rebuilt image applies it at boot.
-- [x] Bind the MCDMA control window to a `pl-reg` node for non-root register access.
-      `device_tree.dtsi` overrides the node's compatible to a private
-      `zynq-toolbox,mcdma-userspace` string so no in-kernel driver matches it, and
-      `pl-reg` (symlinked into `kernel_modules/`) claims it deterministically as
-      `/dev/mcdma`. The program falls back to `/dev/mem` if unbound.
-- [x] Build the mode-1 (prebuffered) round-trip demo -- validated on hardware (2+2,
-      both channels byte-exact). MCDMA register/descriptor programming is confirmed
-      against mainline `xilinx_dma.c` (`software/mcdma-loopback/mcdma-loopback.c`).
-- [ ] Add independent-rate and mid-run-pause tests.
-- [ ] Add deliberate underrun and missed-flush fault injection.
-- [ ] Explore MCDMA completion/error interrupts via UIO (`generic-uio`): aggregate the
-      per-channel IRQs, wait with `read()`/`poll()` on `/dev/uioN`, and use it to take
-      the completion-latency number and characterize underrun/overflow. Keep the
-      happy-path completion polled. (Parent project folds DMA errors into `hw_manager`
-      instead of a parallel IRQ -- see "Interrupts: polling now, UIO to explore".)
-- [ ] Collect the measurements table.
-- [ ] Try the dmaengine path (option A) and compare against direct register control.
-- [x] Fill in concrete "Trying it on hardware" steps (see the section above).
-- [ ] _(stretch)_ Mode 2 streaming with descriptor append.
+- `axis_switch` TDEST windows take hex. The demux's per-MI `BASETDEST`/`HIGHTDEST`
+  are `bitString` params: pass `[format 0x%08X $i]`, not a bare integer, or the derived
+  `C_M_AXIS_*TDEST_ARRAY` modelparam rejects any value needing more than one bit (0 and
+  1 slip through, which hid it until `num_ch >= 3`). A single MI also defaults to the
+  TDEST window `[0,0]` and silently drops every higher channel, so a mux MI's window
+  must span `[0, num_ch-1]`.
+- S2MM recombine needs packet-atomic arbitration. A stock `axis_switch`
+  (`ROUTING_MODE 0`) re-arbitrates per beat, interleaving channels onto the single S2MM
+  stream; MCDMA latches `TDEST` at start-of-packet and needs each packet contiguous, so
+  the mix lands on one channel and the rest starve. `ARB_ON_TLAST` does not stick on
+  that IP in `ROUTING_MODE 0` (it reads back 0), so the fix is the custom
+  `axis_pkt_rr_mux` -- grant one input, hold through `TLAST`, advance round-robin.
+  Confirmed on hardware: all four channels round-trip byte-exact.
+
+Other things worth knowing:
+
+- Flow control is `TREADY`, not fill-count. A full downstream FIFO stalls the MCDMA
+  channel mid-descriptor; DMA overrun of a PL FIFO is not possible. Assert `TLAST` only
+  at end-of-capture (per-sample `TLAST` makes tiny one-descriptor packets).
+- TrustZone: PS peripherals default to secure; accesses with `AxPROT[1]=1` return
+  `DECERR`. Check this first if transfers fail immediately.
+- Don't use 32-bit HP mode, and remember the HP interface may reorder reads/writes
+  (MCDMA handles it; a custom PL master must).
 
 ## Reference notes
 
@@ -468,3 +266,7 @@ A normal `make PROJECT=ex07_dma` produces an SD image where:
 - UG585 (Zynq-7000 TRM), AXI_HP Interfaces chapter -- port behavior, FIFO depths,
   reordering, and the performance optimization summary.
 - PG288 -- AXI MCDMA product guide. PG021 -- AXI DMA, for comparison.
+
+---
+
+Previous: [Example 05: Device Driver](../ex05_device_driver/README.md)

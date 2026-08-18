@@ -7,12 +7,14 @@ Toolchain (Vivado + PetaLinux) runs on the host VM or in Docker, selected via `M
 
 Many folders have README.md files -- look at those for quick summaries of the material.
 
+Comments in code should be descripted, not narrative -- do not leave artifacts from the development process (e.g. "Bug fix:", "What changed:" -- "TODO" is fine).
+
 ---
 
 ## ⚠️ Do Not Run Builds Unprompted
 Never run `make` targets (`make`, `make sd`, `make bit`, `make xpr`, `make xsa`, `make petalinux`, `make petalinux_build`, `make cores`, `make clean_*`, etc.) unless the user explicitly asks in the current message. Builds are long, resource-intensive, and require large external tool installs — don't suggest or offer to run them.
 
-Also, as a note, the temporary build files are in `tmp/` in this repo, NOT `/tmp/`. The `tmp/` folder is not tracked by git, so it can be messed with if desired.
+However, build files and built artifacts from the user can sometimes be found within the `tmp/` folder in this repo. Vivado utilization reports (post-synth `report_utilization -hierarchical`) land in `tmp_reports/[board]/[board_ver]/[project]/hierarchical_utilization.txt` — useful for LUT/FF/BRAM/DSP scaling numbers without rebuilding.
 
 ## Build Commands
 Setup: copy `make_defaults.mk.example` → `make_defaults.mk`, set `MODE`, `PROJECT`, `BOARD`, `BOARD_VER`.

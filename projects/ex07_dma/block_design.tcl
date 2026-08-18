@@ -10,13 +10,16 @@
 #   - HP0 as the 64-bit memory path to DDR, shared by the MCDMA data masters and
 #     its scatter-gather descriptor-fetch master,
 #   - a selectable AXI4-Stream datapath (see `datapath` below): either a single
-#     TDEST-routed loopback (default, for validating the MCDMA path first) or the
-#     fuller per-channel-FIFO structure with a TDEST demux/mux.
+#     TDEST-routed loopback (kept for regression, validates the MCDMA path with
+#     the least PL logic) or the fuller per-channel-FIFO structure with a TDEST
+#     demux/mux (now the default -- see below).
 #
-# The two datapaths are mutually exclusive branches of one `if`, so the default
-# build exercises only the simple loopback -- the per-channel branch is inert
-# (parsed but not run) until `datapath` is flipped, which keeps the first
-# bring-up checkable on its own.
+# The two datapaths are mutually exclusive branches of one `if`; only the
+# selected branch is built. `per_channel` is now the default: the loopback
+# datapath is confirmed working on hardware, so the current step is checking
+# that per-channel FIFOs + TDEST demux/mux round-trip correctly before the
+# rate-gen core (see the insertion-point comment below) is added as a
+# follow-up step.
 #
 # VALIDATION NOTES:
 #   - CONFIRMED on hardware (datapath = loopback, 2+2, byte-exact round trip):
@@ -25,17 +28,26 @@
 #     M_AXI_SG master; AXIS stream-width params are read-only (derived); the 64K
 #     control window (pl-reg reports size 0x10000); and MM2S drives TDEST from the
 #     channel index so S2MM routes each channel back to itself.
+#   - CONFIRMED (datapath = per_channel, built): axis_switch:1.1 TDEST routing
+#     (ROUTING_MODE 0, per-MI BASETDEST/HIGHTDEST) drives the mm2s_demux fan-out
+#     correctly, AND the s2mm_mux's single MI must widen its TDEST window to
+#     [0, num_ch-1] or it drops every channel but 0 (fixed below; was the initial
+#     ch>0-never-completes bug). Round-trip on hardware still to reconfirm.
+#   - S2MM RECOMBINE (datapath = per_channel): the num_ch->1 merge is now the
+#     custom packet-atomic round-robin mux base:user:axis_pkt_rr_mux, NOT an
+#     axis_switch. The switch could not be forced to arbitrate on packet
+#     boundaries (ARB_ON_TLAST never stuck in ROUTING_MODE 0), so every channel
+#     but 0 starved (all MM2S complete, only ch0 reached S2MM). Hardware
+#     round-trip of 4+4 still to reconfirm with the new mux.
 #   - STILL TO CONFIRM:
 #   - buffer-length register width (set to 23 bits = 8 MB/descriptor; not yet
-#     stress-tested -- the loopback uses 2 KB transfers),
-#   - axis_switch:1.1 TDEST routing config (ROUTING_MODE, per-MI
-#     BASETDEST/HIGHTDEST) used in the not-yet-built per-channel branch.
+#     stress-tested -- the loopback uses 2 KB transfers).
 
 ############# Parameters #############
 
 # Channels per direction. 2+2 is the first bring-up; bump to 4+4 to measure LUT
 # scaling for the parent project. Everything below loops over this.
-set num_ch 2
+set num_ch 4
 
 # AXI4-Stream datapath topology between MM2S and S2MM:
 #   "loopback"    - single TDEST-routed elastic FIFO. Default: gets the MCDMA,
@@ -45,10 +57,10 @@ set num_ch 2
 #   "per_channel" - TDEST demux -> per-channel "DAC FIFO" -> (traffic-gen
 #                   insertion point) -> per-channel "ADC FIFO" -> TDEST mux. This
 #                   is the structure the parent project needs (independent
-#                   per-channel FIFOs and rates). Needs the axis_switch routing
-#                   config validated, and the rate-gen custom core to exist before
-#                   its commented insertion point is enabled.
-set datapath loopback
+#                   per-channel FIFOs and rates). The DAC->ADC gap is a plain
+#                   wire for now (functionality check only); the rate-gen core
+#                   drops in at that insertion point as a follow-up step.
+set datapath per_channel
 
 ############# General setup #############
 
@@ -203,14 +215,24 @@ if {$datapath eq "loopback"} {
   }
 
   ## TDEST mux: num_ch per-channel streams -> S2MM single stream.
-  # 1 MI just arbitrates; TDEST passes through so S2MM still routes by channel.
-  cell xilinx.com:ip:axis_switch:1.1 s2mm_mux {
-    NUM_SI $num_ch
-    NUM_MI 1
-    ARB_ON_TLAST 1
-    TDEST_WIDTH 8
+  # A stock axis_switch (ROUTING_MODE 0) cannot be forced to arbitrate on packet
+  # boundaries here: ARB_ON_TLAST does not stick on that IP, so after channel 0's
+  # packet the arbiter holds the now-empty S00 and never advances -- channels
+  # 1..n starve (all MM2S complete, but only ch0 reaches S2MM). Replaced with the
+  # custom packet-atomic round-robin mux in cores/base/axis_pkt_rr_mux: it grants
+  # one SI, holds it through TLAST, then advances round-robin, so packets never
+  # interleave and no channel starves. TDATA/TDEST/TLAST pass through unchanged,
+  # so MCDMA S2MM still demuxes each packet by TDEST. TKEEP is tied off on the
+  # MCDMA S_AXIS_S2MM side, exactly as for the direct loopback connection.
+  # NOTE: axis_pkt_rr_mux is fixed at 4 slave interfaces, so num_ch must be 4.
+  if {$num_ch != 4} {
+    error "datapath per_channel: axis_pkt_rr_mux is fixed at NUM_SI=4, num_ch=$num_ch"
+  }
+  cell base:user:axis_pkt_rr_mux s2mm_mux {
+    DATA_WIDTH 32
+    DEST_WIDTH 8
   } {
-    M00_AXIS mcdma/S_AXIS_S2MM
+    M_AXIS mcdma/S_AXIS_S2MM
     aclk ps/FCLK_CLK0
     aresetn ps_rst/peripheral_aresetn
   }
@@ -220,10 +242,14 @@ if {$datapath eq "loopback"} {
     set mi [format M%02d $i]
     set si [format S%02d $i]
 
-    # Route demux MI i to TDEST == i (property names to validate for this IP rev).
+    # Route demux MI i to TDEST == i. Pass the value as a 0x-prefixed 32-bit hex
+    # string -- the IP's native format for these bitString params. A bare integer
+    # is stored as a binary bitString that the C_M_AXIS_*TDEST_ARRAY modelparam
+    # update rejects once the value needs more than one bit (e.g. TDEST 3 ->
+    # "...0011" fails; 0 and 1 happen to slip through, which hid this at 2+2).
     set_property -dict [list \
-      CONFIG.${mi}_AXIS_BASETDEST $i \
-      CONFIG.${mi}_AXIS_HIGHTDEST $i] [get_bd_cells mm2s_demux]
+      CONFIG.${mi}_AXIS_BASETDEST [format 0x%08X $i] \
+      CONFIG.${mi}_AXIS_HIGHTDEST [format 0x%08X $i]] [get_bd_cells mm2s_demux]
 
     # "DAC FIFO": buffers MM2S data for channel i (drained by the SPI core in
     # rev_d_shim; by the traffic gen / loopback here).

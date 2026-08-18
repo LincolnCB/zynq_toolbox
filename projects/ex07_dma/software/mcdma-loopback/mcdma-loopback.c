@@ -15,7 +15,10 @@
  *     channels, then just wait for completion -- software is not in the loop
  *     during the transfer,
  *   - per-channel independence: each MM2S channel i loops back to S2MM channel i
- *     by TDEST (see block_design.tcl, datapath = loopback).
+ *     by TDEST. This program only drives the MCDMA/descriptor side, so it is
+ *     agnostic to which AXI4-Stream datapath is built (see block_design.tcl's
+ *     `datapath` -- "loopback" or "per_channel"): both preserve TDEST end to
+ *     end, so the same round-trip check applies either way.
  *
  * Flow (per the prebuffered model):
  *   1. map the MCDMA control window (pl-reg /dev node preferred, /dev/mem
@@ -43,7 +46,12 @@
  *     The register window is non-root, but the u-dma-buf buffer node is root-owned
  *     (this rootfs has no udev), so run under sudo until a boot-time chmod is added.
  *
- * Run with:  sudo mcdma-loopback
+ * Run with:  mcdma-loopback [ch ...]
+ *   No args runs every channel. Passing channel indices runs only those, e.g.
+ *   `mcdma-loopback 2` runs only channel 2 and `mcdma-loopback 0 2` runs 0 and 2.
+ *   This isolates the S2MM mux: if a single non-zero channel round-trips alone but
+ *   not alongside channel 0, only the first SI the mux grants is being serviced
+ *   (see the project README "Debugging notes").
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -62,7 +70,7 @@
 
 /* ------------------------------------------------------------------ config -- */
 
-#define NUM_CH          2               /* channels per direction (match num_ch) */
+#define NUM_CH          4               /* channels per direction (match num_ch) */
 #define BUF_WORDS       512             /* 32-bit words per channel payload      */
 #define BUF_BYTES       (BUF_WORDS * 4)
 
@@ -299,8 +307,14 @@ static void reset_direction(volatile uint8_t *r, uint32_t ctrl)
   }
 }
 
-/* Dump the engine state, for when a transfer does not complete. */
-static void dump_status(volatile uint8_t *r)
+/* Dump the engine state, for when a transfer does not complete. Also reads each
+ * channel's SG descriptor status straight from DDR: a completed MM2S status shows
+ * the source pushed its whole packet into the datapath, while a zero S2MM status
+ * means no data ever reached that channel's S2MM engine -- i.e. it stalled in the
+ * PL datapath (demux/FIFO/mux), not inside MCDMA. */
+static void dump_status(volatile uint8_t *r,
+                        const struct mcdma_desc *mm2s_desc,
+                        const struct mcdma_desc *s2mm_desc)
 {
   fprintf(stderr, "  MM2S SR=0x%08x CH_ERR=0x%08x   S2MM SR=0x%08x CH_ERR=0x%08x\n",
           reg_r(r, MM2S_SR), reg_r(r, MM2S_CH_ERR),
@@ -311,14 +325,43 @@ static void dump_status(volatile uint8_t *r)
             reg_r(r, MM2S_CH_BASE(ch) + CH_CR), reg_r(r, MM2S_CH_BASE(ch) + CH_SR),
             reg_r(r, S2MM_CH_BASE(ch) + CH_CR), reg_r(r, S2MM_CH_BASE(ch) + CH_SR));
   }
+  /* Descriptor completion/length straight from the ring (invalidate first). */
+  udmabuf_sync("sync_for_cpu", 0, (uint64_t)NUM_CH * 2 * DESC_ALIGN);
+  for (int i = 0; i < NUM_CH; i++)
+    fprintf(stderr, "  ch%d  MM2S desc.status=0x%08x  S2MM desc.status=0x%08x\n",
+            i, mm2s_desc[i].status, s2mm_desc[i].status);
 }
 
 /* --------------------------------------------------------------------- main -- */
 
-int main(void)
+int main(int argc, char **argv)
 {
-  printf("mcdma-loopback: %d-channel prebuffered MCDMA loopback via u-dma-buf\n\n",
+  printf("mcdma-loopback: %d-channel prebuffered MCDMA loopback via u-dma-buf\n",
          NUM_CH);
+
+  /* Optional channel select: args are channel indices to run (default: all).
+   * Isolates the S2MM mux arbiter -- run one channel alone, or a chosen subset,
+   * to tell "this channel's datapath is broken" apart from "only the first SI the
+   * mux grants is ever serviced". */
+  uint32_t run_mask;
+  if (argc > 1) {
+    run_mask = 0;
+    for (int a = 1; a < argc; a++) {
+      int ch = atoi(argv[a]);
+      if (ch < 0 || ch >= NUM_CH) {
+        fprintf(stderr, "channel %d out of range 0..%d\n", ch, NUM_CH - 1);
+        return EXIT_FAILURE;
+      }
+      run_mask |= (1u << ch);
+    }
+  } else {
+    run_mask = (NUM_CH >= 32) ? 0xFFFFFFFFu : ((1u << NUM_CH) - 1);
+  }
+  printf("running channels:");
+  for (int i = 0; i < NUM_CH; i++)
+    if (run_mask & (1u << i))
+      printf(" %d", i);
+  printf("\n\n");
 
   /* 1. Control window ------------------------------------------------------- */
   int reg_fd = -1;
@@ -396,31 +439,35 @@ int main(void)
   reset_direction(r, MM2S_CTRL);
 
   for (int i = 0; i < NUM_CH; i++)
-    arm_channel(r, S2MM_CH_BASE(i + 1), S2MM_CHEN, i + 1, s2mm_desc_phys + i * DESC_ALIGN);
+    if (run_mask & (1u << i))
+      arm_channel(r, S2MM_CH_BASE(i + 1), S2MM_CHEN, i + 1, s2mm_desc_phys + i * DESC_ALIGN);
   run_direction(r, S2MM_CTRL);
   for (int i = 0; i < NUM_CH; i++)
-    trigger_channel(r, S2MM_CH_BASE(i + 1), s2mm_desc_phys + i * DESC_ALIGN);
+    if (run_mask & (1u << i))
+      trigger_channel(r, S2MM_CH_BASE(i + 1), s2mm_desc_phys + i * DESC_ALIGN);
 
   for (int i = 0; i < NUM_CH; i++)
-    arm_channel(r, MM2S_CH_BASE(i + 1), MM2S_CHEN, i + 1, mm2s_desc_phys + i * DESC_ALIGN);
+    if (run_mask & (1u << i))
+      arm_channel(r, MM2S_CH_BASE(i + 1), MM2S_CHEN, i + 1, mm2s_desc_phys + i * DESC_ALIGN);
   run_direction(r, MM2S_CTRL);
   for (int i = 0; i < NUM_CH; i++)
-    trigger_channel(r, MM2S_CH_BASE(i + 1), mm2s_desc_phys + i * DESC_ALIGN);
+    if (run_mask & (1u << i))
+      trigger_channel(r, MM2S_CH_BASE(i + 1), mm2s_desc_phys + i * DESC_ALIGN);
 
-  /* 6. Poll every S2MM descriptor for completion ---------------------------- */
+  /* 6. Poll every selected S2MM descriptor for completion ------------------- */
   int64_t deadline = now_us() + POLL_TIMEOUT_US;
-  int pending = NUM_CH;
+  int pending = 1;
   while (pending > 0 && now_us() < deadline) {
     /* Descriptor status lives in DDR; invalidate before each peek. */
     udmabuf_sync("sync_for_cpu", NUM_CH * DESC_ALIGN, NUM_CH * DESC_ALIGN);
     pending = 0;
     for (int i = 0; i < NUM_CH; i++)
-      if (!(s2mm_desc[i].status & DESC_STAT_CMPLT))
+      if ((run_mask & (1u << i)) && !(s2mm_desc[i].status & DESC_STAT_CMPLT))
         pending++;
   }
   if (pending > 0) {
     fprintf(stderr, "timeout: %d S2MM channel(s) did not complete\n", pending);
-    dump_status(r);
+    dump_status(r, mm2s_desc, s2mm_desc);
   }
 
   /* 7. Invalidate the payloads and verify byte-for-byte --------------------- */
@@ -428,6 +475,8 @@ int main(void)
 
   int failures = 0;
   for (int i = 0; i < NUM_CH; i++) {
+    if (!(run_mask & (1u << i)))
+      continue;
     uint32_t got_len = s2mm_desc[i].status & DESC_STAT_LEN_MASK;
     int mismatch = memcmp(src[i], dst[i], BUF_BYTES) != 0;
     int short_len = got_len != BUF_BYTES;
@@ -437,6 +486,17 @@ int main(void)
            (mismatch || short_len) ? "FAIL" : "ok  ",
            got_len, BUF_BYTES,
            mismatch ? "  (data mismatch)" : "");
+    /* On failure, show the head of each buffer. src word w of channel i is
+     * (i<<24)|w, so an all-zero dst means nothing arrived (mux starvation) while
+     * another channel's high byte in dst means misrouting. */
+    if (mismatch || short_len) {
+      const uint32_t *sp = (const uint32_t *)src[i];
+      const uint32_t *dp = (const uint32_t *)dst[i];
+      fprintf(stderr, "        src[0..3] = %08x %08x %08x %08x\n",
+              sp[0], sp[1], sp[2], sp[3]);
+      fprintf(stderr, "        dst[0..3] = %08x %08x %08x %08x\n",
+              dp[0], dp[1], dp[2], dp[3]);
+    }
   }
   printf("\n");
 
