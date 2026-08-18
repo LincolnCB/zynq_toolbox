@@ -200,7 +200,7 @@ endif
 .PRECIOUS: tmp/cores/% tmp/%.xpr tmp/%.bit
 
 # Targets that aren't real files (GNU Make 4.9)
-.PHONY: all help tests write_sd petalinux_cfg petalinux_rootfs_cfg petalinux_kernel_cfg clean_sd clean_project clean_build clean_tests clean_test_results clean_all bit sd rootfs boot cores xpr xsa petalinux petalinux_build
+.PHONY: all help tests write_sd vivado_gui petalinux_cfg petalinux_rootfs_cfg petalinux_kernel_cfg clean_sd clean_project clean_build clean_tests clean_test_results clean_all bit sd rootfs boot cores xpr xsa petalinux petalinux_build
 
 # Enable secondary expansion (GNU Make 3.9) to allow for more complex pattern matching (see cores target)
 .SECONDEXPANSION:
@@ -242,6 +242,7 @@ help:
 	@echo "  boot                   - Build the compressed boot files to the 'out' directory"
 	@echo "  cores                  - Build all the cores necessary for the project in the 'tmp' directory"
 	@echo "  xpr                    - Build the Xilinx project file (project.xpr) in the 'tmp' directory"
+	@echo "  vivado_gui             - Open the built project in the Vivado GUI (builds xpr first if needed)"
 	@echo "  xsa                    - Build the hardware definition file (hw_def.xsa) in the 'tmp' directory"
 	@echo "  petalinux              - Create the PetaLinux project without building it in the 'tmp' directory"
 	@echo "  petalinux_build        - Build the PetaLinux project in the 'tmp' directory"
@@ -353,6 +354,12 @@ cores: $(addprefix tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/cores/, $(PROJECT_CORES)
 # The Xilinx project file
 # This file can be edited in Vivado to test Tcl commands and changes
 xpr: tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr
+
+# Open the built project in the Vivado GUI for inspection or manual Tcl testing
+# Requires the project file; launches vivado interactively (does not build outputs)
+vivado_gui: xpr
+	@./scripts/make/status.sh "OPENING VIVADO GUI: $(BOARD)/$(BOARD_VER)/$(PROJECT)"
+	./scripts/vivado/open_gui.sh $(BOARD) $(BOARD_VER) $(PROJECT) $(MODE)
 
 # The hardware definition file
 # This file is used by petalinux to build the linux system

@@ -1,4 +1,4 @@
-***Update 2026-07-28***
+***Update 2026-08-18***
 # `vivado` scripts
 
 These scripts are for managing the Vivado build process. Vivado uses Tcl commands for all of its tasks and steps, which can be scripted and loaded, allowing for a fully automated build process. These scripts are used to create the Vivado project, build the block design, and package the bitstream and hardware definition into output files for PetaLinux to load. They are run by Vivado itself, passed in via the command line by the Makefile.
@@ -21,6 +21,18 @@ Arguments:
 - `project_dir`: The temporary Vivado project directory (under `tmp/`) where the Vivado `project.xpr` file is located.
 
 This script creates the Vivado `.xsa` hardware definition file. It checks for the existence of the Vivado project, runs implementation if needed, and generates a hardware definition `.xsa` file (including the bitstream) for use with PetaLinux. The output is written to `tmp/<project_dir>/hw_def.xsa`.
+
+---
+
+### `open_gui.sh`
+
+Arguments:
+- `board_name`: The name of the target board.
+- `board_ver`: The version of the target board.
+- `project_name`: The name of the Vivado project.
+- `mode` (optional): `vm` (default) or `container`, matching the Makefile `MODE`.
+
+This is a shell script (not a Tcl script) that opens the already-built `tmp/<board>/<ver>/<project>/project.xpr` in the interactive Vivado GUI for inspection or manual Tcl testing -- it does not build anything. It is the recipe behind `make vivado_gui`, which lists `xpr` as a prerequisite. In `vm` mode it launches `vivado` directly on the host display. In `container` mode it runs Vivado inside the container against a self-contained X server + VNC (`scripts/docker/vivado-gui-launch.sh`: TigerVNC + fluxbox + noVNC), then prints a URL to view it -- either a web browser (`http://localhost:6080/vnc.html`) or a VNC client (`localhost:5901`). This is host-display-server agnostic (X11, Wayland, macOS, Windows Docker Desktop) since nothing is forwarded from the host's X server. The container runs on the `vivado-isolated` network (outbound NAT disabled), so it still cannot fetch licenses or phone home; only the VNC ports are published, bound to `127.0.0.1`. Override the host ports with `NOVNC_PORT` / `VNC_PORT` if 6080/5901 are taken.
 
 ---
 

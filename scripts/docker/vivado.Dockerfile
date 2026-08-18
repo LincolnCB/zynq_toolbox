@@ -58,6 +58,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
+# GUI-only extras (for `make vivado_gui`; not needed for headless batch builds).
+# The GUI runs against a self-contained X server + VNC inside the container
+# (TigerVNC + fluxbox + noVNC), viewable from any host via a browser or VNC
+# client. Mesa provides software OpenGL (llvmpipe); no host GPU is required.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1-mesa-glx \
+    libgl1-mesa-dri \
+    libglu1-mesa \
+    tigervnc-standalone-server \
+    tigervnc-common \
+    fluxbox \
+    novnc \
+    websockify \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
 
