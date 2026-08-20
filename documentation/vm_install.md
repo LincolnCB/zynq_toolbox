@@ -224,6 +224,17 @@ source $zynq_toolbox/scripts/vivado/repo_paths.tcl
 With this done, your VM install is complete. You can install the optional tools/files below (some highly recommended) or just continue on to [Makefile variable defaults](../README.md#makefile-variable-defaults) and **make sure to set `MODE = vm`**.
 
 
+## Opening the Vivado GUI
+
+With `MODE=vm`, you can open a built project in the interactive Vivado GUI with:
+
+```bash
+make vivado_gui
+```
+
+(as with any target, add `PROJECT=`, `BOARD=`, `BOARD_VER=` to pick a different build). This builds the `xpr` first if needed, then launches Vivado directly on your VM's desktop -- no extra setup beyond the graphical VM session you already used to install the tools.
+
+
 ## Optional (RECOMMENDED): PetaLinux offline build setup
 
 The PetaLinux build process requires downloading a lot of files from the internet, which can be slow and unreliable. Depending on your network connection, this could add upwards of ten minutes to the build time. If you want a more reliable build process, you can download these files once and reuse them.

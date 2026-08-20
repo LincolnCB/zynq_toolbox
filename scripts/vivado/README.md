@@ -58,3 +58,19 @@ Arguments:
 - `project_dir`: The temporary Vivado project directory (under `tmp/`) where the Vivado `project.xpr` file is located.
 
 This script generates a hierarchical utilization report for the specified Vivado project. It checks for the existence of the project, ensures the reports directory exists, removes any previous utilization report, opens the project and synthesis run, and writes the hierarchical utilization report to `tmp_reports/<project_dir>/hierarchical_utilization.txt`.
+
+---
+
+### `open_gui.sh`
+
+Arguments:
+- `board_name`: The name of the target board.
+- `board_ver`: The version of the target board.
+- `project_name`: The name of the Vivado project.
+- `mode`: `vm` (default) or `container`.
+
+Opens the built Vivado project (`project.xpr`) in the interactive Vivado GUI for read-only inspection or manual Tcl testing -- it does not build anything (the Makefile `vivado_gui` target lists `xpr` as a prerequisite). In `vm` mode it launches Vivado directly on the host display. In `container` mode it runs Vivado inside the Docker image and renders its GUI to a host X server over X11 (no VNC), using software OpenGL (Mesa llvmpipe) so no host GPU is required:
+- **Linux:** starts a nested `Xephyr` window, which renders correctly whether the host session is Wayland or X11. Requires the `xorg-x11-server-Xephyr` (Fedora/RHEL) or `xserver-xephyr` (Debian/Ubuntu) package.
+- **macOS:** connects to XQuartz over TCP (`host.docker.internal:0`). Requires XQuartz with "Allow connections from network clients" enabled.
+
+The in-container half of this is `scripts/docker/vivado-gui-launch.sh`, which starts a `fluxbox` window manager and launches Vivado.
