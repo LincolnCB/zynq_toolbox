@@ -58,6 +58,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
+# GUI-only extras (for `make vivado_gui`; not needed for headless batch builds).
+# The GUI renders over X11 to a host X server (a nested Xephyr window on Linux,
+# XQuartz on macOS) -- see scripts/vivado/open_gui.sh. Mesa provides software
+# OpenGL (llvmpipe), so no host GPU is required; fluxbox is a minimal window
+# manager so Vivado's dialogs place correctly.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1-mesa-glx \
+    libgl1-mesa-dri \
+    libglu1-mesa \
+    fluxbox \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN locale-gen en_US.UTF-8
 ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
 

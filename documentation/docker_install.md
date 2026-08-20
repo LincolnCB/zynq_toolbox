@@ -283,6 +283,27 @@ docker run --rm -v petalinux-offline-cache:/cache ubuntu:20.04 ls -la /cache
 ```
 </details><p></p>
 
+## Opening the Vivado GUI
+
+With `MODE=container`, you can open a built project in the interactive Vivado GUI with:
+
+```bash
+make vivado_gui
+```
+
+(as with any target, add `PROJECT=`, `BOARD=`, `BOARD_VER=` to pick a different build). This builds the `xpr` first if needed, then runs Vivado inside the container and renders its GUI to a host X server over X11 -- no VNC, using software OpenGL (Mesa llvmpipe), so no host GPU is required. The one-time host setup depends on your OS:
+
+- **Linux (X11 or Wayland):** install Xephyr, a small nested X server that Vivado renders into. Because it's an ordinary window, it displays the same whether your session is Wayland or X11:
+  ```bash
+  sudo dnf install xorg-x11-server-Xephyr    # Fedora/RHEL
+  sudo apt install xserver-xephyr            # Debian/Ubuntu
+  ```
+  `make vivado_gui` then starts Xephyr for you, and Vivado appears in that window.
+- **Windows (WSL2):** follow the Linux steps above inside your WSL2 Ubuntu shell (recent WSLg already provides the X plumbing; just add `xserver-xephyr`).
+- **macOS:** nothing beyond the XQuartz setup from the [macOS Docker install](#macos) (XQuartz with "Allow connections from network clients" enabled). `make vivado_gui` opens Vivado in an XQuartz window.
+
+Close Vivado (File > Exit) or press Ctrl+C in the terminal to stop it.
+
 <details>
 <summary><i>Opening containers for debugging</i></summary>
 
