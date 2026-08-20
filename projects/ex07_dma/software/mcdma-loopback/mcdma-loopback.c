@@ -70,7 +70,7 @@
 
 /* ------------------------------------------------------------------ config -- */
 
-#define NUM_CH          4               /* channels per direction (match num_ch) */
+#define NUM_CH          8               /* channels per direction (match num_ch) */
 #define BUF_WORDS       512             /* 32-bit words per channel payload      */
 #define BUF_BYTES       (BUF_WORDS * 4)
 

@@ -30,7 +30,7 @@
 
 # Channels per direction; everything below loops over this. Bump to measure LUT
 # scaling (MCDMA vs. separate axi_dma) for the parent project.
-set num_ch 4
+set num_ch 8
 
 ############# General setup #############
 

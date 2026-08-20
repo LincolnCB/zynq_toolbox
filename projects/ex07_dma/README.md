@@ -192,28 +192,64 @@ data sits in CPU cache instead of DDR. Restore it afterward.
 
 ## What's left
 
-The DMA foundation works; the remaining items build the measurement and stress harness
-on top of it.
+The DMA foundation is proven on hardware. What remains turns it into a prototype that
+drops cleanly onto rev_d_shim. The items below are **ordered** -- each builds on the one
+before, and the first four are the load-bearing path. Everything under "Deferred" is
+explicitly *not* needed for the prototype and is recorded only so the design does not
+foreclose it.
 
-- [ ] Programmable-rate traffic generator/checker core between the per-channel DAC
-      and ADC FIFOs (replaces the placeholder wire). This is what lets channels run at
-      deliberately unrelated rates and be paused independently.
-- [ ] Independent-rate and mid-run-pause tests once that core exists.
-- [ ] Fault injection: deliberate underrun (start the PL consumer before the DMA)
-      and missed-flush corruption; characterize what software can detect.
-- [ ] MCDMA completion/error interrupts via UIO (`generic-uio`): aggregate the
-      per-channel IRQs, block with `read()`/`poll()` on `/dev/uioN`, and use it for the
-      completion-latency number and to see underrun/overflow. Keep the happy path
-      polled. In the parent project, fold DMA errors into `hw_manager`'s single
-      error-alert IRQ rather than standing up a parallel UIO.
-- [ ] Measurements table: LUT/FF/BRAM at 2+2 and 4+4 (MCDMA vs. 8x `axi_dma`),
-      sustained aggregate MB/s, max FIFO-service gap, interrupt latency, and descriptor
-      overhead vs. chunk size.
-- [ ] Compare the dmaengine path (option A: `CONFIG_XILINX_DMA` +
-      `dmaengine_prep_slave_sg`) against direct register control; note it pairs
-      awkwardly with `u-dma-buf` (wants `dma_alloc_coherent`).
-- [ ] (stretch) Mode 2 streaming: append descriptors ahead of the ring tail during
-      a run. Works with MCDMA as-is (no cyclic mode); attempt only after mode 1.
+**Prototype path (do in order):**
+
+1. [ ] **Programmable-rate traffic generator/checker core.** Drop it into the marked
+       `dac_fifo_i -> adc_fifo_i` insertion point in `block_design.tcl` (currently a
+       plain wire). Per channel it (a) drains its DAC FIFO at a register-programmed
+       rate with a programmable pause, and (b) fills its ADC FIFO with a checkable
+       pattern at its own rate. This stands in for rev_d_shim's SPI core and is the
+       prerequisite for every test below. Follow the repo core layout
+       (`cores/base/<core>` + a cocotb testbench).
+2. [ ] **Independent-rate and mid-run-pause tests.** With the core in place, run each
+       channel at a different rate and pause channels mid-run; confirm per-channel
+       independence end to end (the parent project's hard constraints 3 and 4).
+3. [ ] **Fault injection + software detection.** Deliberately underrun a DAC FIFO
+       (consume before the DMA fills) and overflow an ADC FIFO (stall S2MM), plus a
+       missed-`sync_for_device` corruption case. Characterize exactly what software can
+       observe -- this de-risks rev_d_shim's must-not-happen constraint (1) and is the
+       last genuinely load-bearing unknown.
+4. [ ] **Completion/error interrupt via UIO.** Aggregate the per-channel IRQs onto a
+       `generic-uio` node, block on `read()`/`poll()` of `/dev/uioN` for completion and
+       error, and keep the happy path polled. Yields the completion-latency number and
+       makes step 3's faults visible. Note for the port: rev_d_shim folds DMA errors
+       into `hw_manager`'s single error-alert IRQ, so this standalone UIO is an ex07
+       measurement vehicle, not a pattern to copy verbatim.
+
+Reaching step 4 makes ex07 a sufficient prototype: it demonstrates independent-rate
+prebuffered DMA, per-channel pause, and detectable fault handling on the exact 8+8
+topology rev_d_shim needs.
+
+**Deferred (not required for the prototype):**
+
+- [ ] Throughput/latency table: sustained aggregate MB/s, max FIFO-service gap, and
+      descriptor overhead vs. chunk size. Low value here -- bandwidth has ~20x margin
+      (`PROJECT_BRIEF` section 6), so these confirm rather than decide anything.
+- [ ] dmaengine path (option A: `CONFIG_XILINX_DMA` + `dmaengine_prep_slave_sg`) vs.
+      direct register control. The decision is already made (direct register, proven),
+      so this is a "for completeness" comparison; note dmaengine pairs awkwardly with
+      `u-dma-buf` (wants `dma_alloc_coherent`).
+- [ ] (stretch) Mode 2 streaming: append descriptors ahead of the ring tail during a
+      run. Works with MCDMA as-is (no cyclic mode); attempt only after the path above.
+
+Done so far: the MCDMA block design (`num_ch`-per-direction, GP0 control, HP0 memory +
+SG, per-channel interrupts) and the per-channel demux/FIFO/mux datapath; `u-dma-buf`
+allocation + single-sync coherency; non-root access via `pl-reg` + the boot-time chmod;
+the prebuffered round-trip demo, validated on hardware at 4+4; and the utilization
+measurement (synth, xc7z020-3, Vivado 2024.2) that settled MCDMA vs. 8x `axi_dma`.
+Whole ex07 at 8+8 (16 streams, the rev_d_shim size) is **15,089 LUT / 15,691 FF /
+19 BRAM36 + 4 BRAM18 / 0 DSP**, of which **~13.9k LUT** is net-new engine (mcdma 8.7k,
+HP0 SmartConnect 4.4k, GP0 control 0.5k, demux+mux 0.4k) plus 3 BRAM36 + 4 BRAM18.
+Extrapolated onto rev_d_shim (22.3k LUT / 86 BRAM36 at 4 boards today), 8 boards +
+MCDMA lands at **~52-54k LUT (~97-102%)** -- LUT, not BRAM, becomes the binding
+constraint, while the FIFOs shrinking to elastic buffers frees most of the BRAM. See
+`PROJECT_BRIEF` sections 4 and 7.
 
 Done so far: the MCDMA block design (`num_ch`-per-direction, GP0 control, HP0 memory +
 SG, per-channel interrupts) and the per-channel demux/FIFO/mux datapath; `u-dma-buf`
