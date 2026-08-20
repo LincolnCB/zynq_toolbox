@@ -22,15 +22,7 @@ services:
         BUILD_UID: ${BUILD_UID:-1000}
         BUILD_GID: ${BUILD_GID:-1000}
     image: zynq-toolbox-vivado:2024.2
-    # vivado-isolated has outbound NAT disabled: Vivado still cannot reach the
-    # internet (no license/WebTalk fetches), but the GUI's VNC ports can be
-    # published. Ports only bind when a command passes `--service-ports`
-    # (open_gui.sh does; batch builds do not), on 127.0.0.1 only.
-    networks:
-      - vivado-isolated
-    ports:
-      - "127.0.0.1:${NOVNC_PORT:-6080}:6080"
-      - "127.0.0.1:${VNC_PORT:-5901}:5901"
+    network_mode: none
     working_dir: /workspace/zynq_toolbox
     volumes:
       - vivado-tools:/tools/Xilinx:ro
@@ -79,13 +71,3 @@ volumes:
     external: true
   petalinux-offline-cache:
     external: true
-
-networks:
-  # Bridge with outbound NAT disabled: the container has no working route to the
-  # internet (blocks Vivado license/WebTalk fetches), but published ports still
-  # work -- unlike `internal: true`, which also blocks port publishing.
-  vivado-isolated:
-    driver: bridge
-    driver_opts:
-      com.docker.network.bridge.enable_ip_masquerade: "false"
-
