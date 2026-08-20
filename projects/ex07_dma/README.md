@@ -1,4 +1,4 @@
-***Updated 2026-08-18***
+***Updated 2026-08-20***
 
 # Example 07: DDR-Backed FIFO Buffers via MCDMA
 
@@ -15,9 +15,9 @@ The project introduces the following tools and concepts:
 - Physically contiguous DMA buffers with `u-dma-buf` plus explicit cache sync
 - Non-root MCDMA register access via a `pl-reg` node
 - `TDEST` routing and `TLAST` packet semantics across a demux -> FIFO -> mux datapath
-- A custom AXI4-Stream packet round-robin mux core
+- Packet-atomic `axis_switch` arbitration (`ARB_ON_TLAST`) to merge streams `num_ch -> 1`
 
-> Status (working): the `per_channel` datapath round-trips all four channels
+> Status (working): the datapath round-trips all four channels
 > byte-for-byte on hardware, without root -- `mcdma-loopback` passes for every channel
 > and any subset. What remains is downstream work built on this foundation: a
 > programmable-rate PL traffic generator, the UIO interrupt path, and the measurements
@@ -48,7 +48,7 @@ the LUT-cost measurement is a one-line change.
 
 ## Block design
 
-`block_design.tcl` stands up the MCDMA and a selectable AXI4-Stream datapath, all
+`block_design.tcl` stands up the MCDMA and a per-channel AXI4-Stream datapath, all
 clocked at 100 MHz off `FCLK_CLK0`. The channel count is the Tcl parameter `num_ch`
 (default 4).
 
@@ -65,30 +65,24 @@ clocked at 100 MHz off `FCLK_CLK0`. The channel count is the Tcl parameter `num_
 - `xlconcat` feeding the `2*num_ch` per-channel interrupts into `IRQ_F2P`
   (`IRQ_F2P[0:7]` = GIC IDs 61-68, device tree `<0 29 4>`..`<0 36 4>`).
 
-The `datapath` parameter selects the stream topology between MM2S and S2MM:
+The AXI4-Stream datapath between MM2S and S2MM gives each channel its own FIFOs:
 
-- `loopback` -- a single `TDEST`-preserving elastic FIFO looping MM2S straight back
-  into S2MM. Minimal PL; validates the MCDMA/HP0/interrupt path with the least logic.
-  Kept for regression.
-- `per_channel` (default) -- the structure the parent project needs:
+```
+M_AXIS_MM2S -> mm2s_demux -> dac_fifo[i] -> (rate-gen core, TODO) -> adc_fifo[i] -> s2mm_mux -> S_AXIS_S2MM
+               (axis_switch,                                                        (axis_switch,
+                1 -> num_ch by TDEST)                                                num_ch -> 1)
+```
 
-  ```
-  M_AXIS_MM2S -> mm2s_demux -> dac_fifo[i] -> (rate-gen core, TODO) -> adc_fifo[i] -> s2mm_mux -> S_AXIS_S2MM
-                 (axis_switch,                                                        (axis_pkt_rr_mux,
-                  1 -> num_ch by TDEST)                                                num_ch -> 1)
-  ```
+Each channel gets its own DAC and ADC FIFO, mirroring rev_d_shim (where a SPI core
+sits between them). Today the DAC->ADC gap is a plain wire; the programmable-rate
+traffic-gen core drops in there later. `TDEST == i` is preserved end to end, so MCDMA
+S2MM routes each channel's data back to itself.
 
-  Each channel gets its own DAC and ADC FIFO, mirroring rev_d_shim (where a SPI core
-  sits between them). Today the DAC->ADC gap is a plain wire; the programmable-rate
-  traffic-gen core drops in there later. `TDEST == i` is preserved end to end, so MCDMA
-  S2MM routes each channel's data back to itself.
-
-The `num_ch -> 1` recombine is the custom core
-[`cores/base/axis_pkt_rr_mux`](cores/base/axis_pkt_rr_mux/axis_pkt_rr_mux.v): it grants
-one input, holds it through `TLAST`, then advances round-robin, so packets are never
-interleaved onto the single S2MM stream and no channel starves. It replaced a stock
-`axis_switch`, which could not be forced to arbitrate on packet boundaries (see
-[Design notes](#design-notes)). The core has a cocotb testbench under its `tests/`.
+The `num_ch -> 1` recombine is a stock `axis_switch` (`ROUTING_MODE 0`) set to arbitrate
+packet-atomically: it grants one input and holds it through `TLAST` before advancing
+round-robin, so packets are never interleaved onto the single S2MM stream and no channel
+starves. This works only with `HAS_TLAST` set explicitly so `ARB_ON_TLAST` takes hold
+(see [Design notes](#design-notes)).
 
 ## Software
 
@@ -146,7 +140,7 @@ register-model reference.
 ## Build integration
 
 A normal `make PROJECT=ex07_dma` produces an SD image where the block design (bitstream
-+ `.xsa`) contains the MCDMA and the selected `datapath`, `u-dma-buf` is built
++ `.xsa`) contains the MCDMA and the AXI4-Stream datapath, `u-dma-buf` is built
 out-of-tree from `kernel_modules/` and autoloaded, the `boot_script.sh` chmod service is
 installed (by `scripts/petalinux/boot_script.sh`, guarded by
 `scripts/check/boot_script.sh`), and `mcdma-loopback` is cross-compiled into the rootfs.
@@ -222,9 +216,9 @@ on top of it.
       a run. Works with MCDMA as-is (no cyclic mode); attempt only after mode 1.
 
 Done so far: the MCDMA block design (`num_ch`-per-direction, GP0 control, HP0 memory +
-SG, per-channel interrupts, `datapath` selector); the `per_channel` demux/FIFO/custom-mux
-datapath; `u-dma-buf` allocation + single-sync coherency; non-root access via `pl-reg` +
-the boot-time chmod; and the prebuffered round-trip demo, validated on hardware at 4+4.
+SG, per-channel interrupts) and the per-channel demux/FIFO/mux datapath; `u-dma-buf`
+allocation + single-sync coherency; non-root access via `pl-reg` + the boot-time chmod;
+and the prebuffered round-trip demo, validated on hardware at 4+4.
 
 ## Design notes
 
@@ -237,13 +231,14 @@ time and are easy to hit again:
   1 slip through, which hid it until `num_ch >= 3`). A single MI also defaults to the
   TDEST window `[0,0]` and silently drops every higher channel, so a mux MI's window
   must span `[0, num_ch-1]`.
-- S2MM recombine needs packet-atomic arbitration. A stock `axis_switch`
+- S2MM recombine needs packet-atomic arbitration. By default a stock `axis_switch`
   (`ROUTING_MODE 0`) re-arbitrates per beat, interleaving channels onto the single S2MM
   stream; MCDMA latches `TDEST` at start-of-packet and needs each packet contiguous, so
-  the mix lands on one channel and the rest starve. `ARB_ON_TLAST` does not stick on
-  that IP in `ROUTING_MODE 0` (it reads back 0), so the fix is the custom
-  `axis_pkt_rr_mux` -- grant one input, hold through `TLAST`, advance round-robin.
-  Confirmed on hardware: all four channels round-trip byte-exact.
+  the mix lands on one channel and the rest starve. The switch will instead arbitrate on
+  packet boundaries (`ARB_ON_TLAST`), but only if `HAS_TLAST` is set explicitly -- left
+  to propagation the tool silently drops `ARB_ON_TLAST` back to 0 (it depends on `TLAST`
+  being present). With both set, the arbiter holds a granted input through `TLAST` and
+  all four channels round-trip byte-exact.
 
 Other things worth knowing:
 

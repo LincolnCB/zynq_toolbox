@@ -19,4 +19,7 @@ fluxbox >/tmp/fluxbox.log 2>&1 &
 # Run from the project's build dir so stray Vivado files (vivado_pid*.str, .Xil)
 # land under tmp/ instead of the repo root.
 cd "$(dirname "$XPR")"
-exec vivado -nolog -nojournal -mode gui "$(basename "$XPR")"
+# Keep the journal (vivado.jou): GUI actions echo their Tcl there, and this dir
+# is bind-mounted, so commands are readable/copyable on the host (the Xephyr
+# window has no shared clipboard). -nolog still suppresses the noisier log.
+exec vivado -nolog -mode gui "$(basename "$XPR")"
