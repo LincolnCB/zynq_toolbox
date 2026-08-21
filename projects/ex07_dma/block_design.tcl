@@ -10,6 +10,9 @@
 #     its scatter-gather descriptor-fetch master,
 #   - a per-channel AXI4-Stream datapath: a TDEST demux fans MM2S out to num_ch
 #     FIFOs, and a packet-atomic TDEST mux merges them back into S2MM.
+#   - a per-channel axi_rate_gen pacer between each DAC and ADC FIFO (the SPI
+#     core's role in rev_d_shim), controlled by a shared cfg/sts register pair
+#     (rate_cfg / rate_sts on GP0, reachable non-root via pl-reg).
 #
 # Design notes:
 #   - AXIS stream width is read-only (derived) on the MCDMA; it is 32-bit here.
@@ -53,10 +56,11 @@ cell xilinx.com:ip:proc_sys_reset:5.0 ps_rst {} {
 }
 
 ### AXI SmartConnect cores
-# PS -> MCDMA control (GP0 to S_AXI_LITE)
+# PS -> control windows on GP0: the MCDMA S_AXI_LITE plus the rate-gen cfg/sts
+# register windows (M00/M01/M02 below).
 cell xilinx.com:ip:smartconnect:1.0 axi_ctrl_intercon {
   NUM_SI 1
-  NUM_MI 1
+  NUM_MI 3
 } {
   aclk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn
@@ -116,6 +120,45 @@ addr 0x00000000 1G ps/S_AXI_HP0 mcdma/M_AXI_MM2S
 addr 0x00000000 1G ps/S_AXI_HP0 mcdma/M_AXI_S2MM
 addr 0x00000000 1G ps/S_AXI_HP0 mcdma/M_AXI_SG
 
+############# Rate-gen control registers #############
+
+# One shared cfg/sts register pair backs the per-channel axi_rate_gen cores:
+# 32 bits per channel, packed into a single wide window each. Reachable non-root
+# via pl-reg as /dev/rate_cfg and /dev/rate_sts (its match table already lists
+# the axi-cfg-register / axi-sts-register compatibles -- see ex05). The per-
+# channel slices are wired up inside the datapath loop below.
+
+# Writable config: channel i's control word is cfg_data[32*i +: 32].
+cell pavel-demin:user:axi_cfg_register rate_cfg {
+  CFG_DATA_WIDTH [expr {32 * $num_ch}]
+  AXI_ADDR_WIDTH 16
+} {
+  aclk ps/FCLK_CLK0
+  aresetn ps_rst/peripheral_aresetn
+  S_AXI axi_ctrl_intercon/M01_AXI
+}
+addr 0x40410000 64K rate_cfg/S_AXI ps/M_AXI_GP0
+
+# Read-only status: channel i's status word is sts_data[32*i +: 32], assembled
+# from the per-channel rate_gen sts outputs by this concat. Each input port is
+# widened to 32 bits up front so dout is 32*num_ch wide before rate_sts binds it.
+cell xilinx.com:ip:xlconcat:2.1 rate_sts_concat {
+  NUM_PORTS $num_ch
+} {}
+for {set i 0} {$i < $num_ch} {incr i} {
+  set_property CONFIG.IN${i}_WIDTH 32 [get_bd_cells rate_sts_concat]
+}
+cell pavel-demin:user:axi_sts_register rate_sts {
+  STS_DATA_WIDTH [expr {32 * $num_ch}]
+  AXI_ADDR_WIDTH 16
+} {
+  aclk ps/FCLK_CLK0
+  aresetn ps_rst/peripheral_aresetn
+  sts_data rate_sts_concat/dout
+  S_AXI axi_ctrl_intercon/M02_AXI
+}
+addr 0x40420000 64K rate_sts/S_AXI ps/M_AXI_GP0
+
 ############# Interrupts #############
 
 # Per-channel interrupts: num_ch MM2S + num_ch S2MM, concatenated into IRQ_F2P.
@@ -140,8 +183,9 @@ for {set i 0} {$i < $num_ch} {incr i} {
 
 # Per-channel FIFOs with a TDEST demux/mux. This mirrors rev_d_shim, where each
 # board has its own DAC and ADC FIFO and a SPI core in between. Here the DAC FIFO
-# buffers MM2S data, the ADC FIFO buffers PL-produced data, and (eventually) a
-# programmable-rate traffic generator sits between them playing the SPI core's role.
+# buffers MM2S data, the ADC FIFO buffers PL-produced data, and a programmable-
+# rate pacer (axi_rate_gen, wired up in the loop below) sits between them playing
+# the SPI core's role.
 
 ## TDEST demux: MM2S single stream -> num_ch per-channel streams.
 # ROUTING_MODE 0 = TDEST-based routing; each MI accepts one TDEST value, set
@@ -200,7 +244,7 @@ for {set i 0} {$i < $num_ch} {incr i} {
     CONFIG.${mi}_AXIS_HIGHTDEST [format 0x%08X $i]] [get_bd_cells mm2s_demux]
 
   # "DAC FIFO": buffers MM2S data for channel i (drained by the SPI core in
-  # rev_d_shim; by the placeholder wire below here).
+  # rev_d_shim; by the rate pacer below here).
   cell xilinx.com:ip:axis_data_fifo:2.0 dac_fifo_${i} {
     TDATA_NUM_BYTES 4
     HAS_TLAST 1
@@ -213,7 +257,7 @@ for {set i 0} {$i < $num_ch} {incr i} {
   }
 
   # "ADC FIFO": buffers PL-produced data for channel i (filled by the SPI core
-  # in rev_d_shim; by the placeholder wire below here).
+  # in rev_d_shim; by the rate pacer below here).
   cell xilinx.com:ip:axis_data_fifo:2.0 adc_fifo_${i} {
     TDATA_NUM_BYTES 4
     HAS_TLAST 1
@@ -225,20 +269,29 @@ for {set i 0} {$i < $num_ch} {incr i} {
     s_axis_aresetn ps_rst/peripheral_aresetn
   }
 
-  # ---- Traffic generator / checker insertion point (custom core, TODO) ----
-  # Until the rate-gen core exists, loop the DAC FIFO straight into the ADC
-  # FIFO so the per-channel path is still exercisable (TDEST == i is preserved,
-  # so S2MM routes it back to channel i):
-  wire dac_fifo_${i}/M_AXIS adc_fifo_${i}/S_AXIS
+  # ---- Programmable-rate traffic pacer (custom core) ----
+  # axi_rate_gen throttles the DAC->ADC stream for channel i to a programmed
+  # rate (and can pause it), standing in for rev_d_shim's SPI core. TDEST == i
+  # is preserved, so S2MM routes each channel back to itself.
   #
-  # When the rate-gen core lands, delete the wire above and instead drop it in
-  # between the two FIFOs, e.g.:
-  #   cell <vendor>:user:axis_rate_gen rate_gen_${i} {
-  #     ...rate/pause params...
-  #   } {
-  #     s_axis dac_fifo_${i}/M_AXIS
-  #     m_axis adc_fifo_${i}/S_AXIS
-  #     aclk ps/FCLK_CLK0
-  #     aresetn ps_rst/peripheral_aresetn
-  #   }
+  # Its control word is slice [32*i +: 32] of rate_cfg; its status word feeds
+  # port i of rate_sts_concat.
+  cell xilinx.com:ip:xlslice:1.0 rate_cfg_slice_${i} {
+    DIN_WIDTH [expr {32 * $num_ch}]
+    DIN_FROM  [expr {32 * $i + 31}]
+    DIN_TO    [expr {32 * $i}]
+  } {
+    din rate_cfg/cfg_data
+  }
+  cell base:user:axi_rate_gen rate_gen_${i} {
+    DATA_WIDTH 32
+    DEST_WIDTH 8
+  } {
+    cfg rate_cfg_slice_${i}/dout
+    S_AXIS dac_fifo_${i}/M_AXIS
+    M_AXIS adc_fifo_${i}/S_AXIS
+    aclk ps/FCLK_CLK0
+    aresetn ps_rst/peripheral_aresetn
+  }
+  wire rate_gen_${i}/sts rate_sts_concat/In${i}
 }

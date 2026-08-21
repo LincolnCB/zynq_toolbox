@@ -1,0 +1,5 @@
+{
+  "DATA_WIDTH": 32,
+  "DEST_WIDTH": 8,
+  "RATE_WIDTH": 16
+}
