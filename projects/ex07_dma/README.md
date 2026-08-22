@@ -1,4 +1,4 @@
-***Updated 2026-08-21***
+***Updated 2026-08-22***
 
 # Example 07: DDR-Backed FIFO Buffers via MCDMA
 
@@ -20,11 +20,12 @@ The project introduces the following tools and concepts:
   shared `cfg`/`sts` register pair (the ex05 `pl-reg` misc-device approach)
 
 > The datapath round-trips every channel byte-for-byte on hardware without root:
-> `mcdma-loopback` passes for all channels and any subset, and the per-channel
-> `axi_rate_gen` pacer throttles and pauses each channel independently under `rate-ctl`.
-> The remaining work (see [What's left](#whats-left)) builds on this foundation:
-> fault-injection characterization, the UIO completion/error interrupt path, and the
-> throughput/latency table.
+> `mcdma-loopback` passes for all channels and any subset, the per-channel
+> `axi_rate_gen` pacer throttles and pauses each channel independently under `rate-ctl`,
+> and `fault-inject` confirms the cache sync is load-bearing (skipping it silently
+> corrupts every channel). The remaining work (see [What's left](#whats-left)) builds on
+> this foundation: coordinated halt/reset, the UIO completion/error interrupt path, and
+> the throughput/latency table.
 
 ## Why this example exists
 
@@ -37,15 +38,20 @@ Each item below is an open question in the parent project that this example clos
 2. What does MCDMA cost in LUTs? Resolved: synthesized at 8+8 (`xc7z020-3`) the
    net-new engine is ~13.9k LUT, which makes MCDMA cheaper than eight separate
    `axi_dma` and lands the 8-board rev_d_shim at ~52-54k LUT -- so LUT, not BRAM, is
-   the binding constraint. Numbers under [What's left](#whats-left).
+   the binding constraint. See [Utilization](#utilization).
 3. What is the worst-case service latency? Open: the `axi_rate_gen` pacer supplies the
    controllable load, but the number itself needs the UIO completion path (below).
 4. Does the coherency handling work? Resolved: a single `sync_for_device` before
-   each run is load-bearing; skipping it reproduces silent corruption (see the optional
-   cache-sync check under [Trying it on hardware](#trying-it-on-hardware)).
-5. What does underrun/overflow look like from software? Open: pausing a channel with
-   `rate-ctl` already shows one shape of it (S2MM starves, software sees a timeout and
-   an all-zero buffer); the full fault-injection characterization is below.
+   each run is load-bearing; skipping it reproduces silent corruption (see
+   `fault-inject nosync` under [Trying it on hardware](#trying-it-on-hardware)).
+5. What does underrun/overflow look like from software? It doesn't -- and it must not.
+   In rev_d_shim, DAC/ADC buffer under/overflow is detected in the PL by the DAC/ADC
+   cores and folded into `hw_manager`'s status word and `ps_interrupt`; the PS/DMA side
+   never watches for it and never times out. A channel waiting arbitrarily long for a
+   trigger is normal, not a fault, and a duplicate PS-side check would conflict with the
+   cores. The DMA's only response to a fault or shutdown is halt/reset (see
+   [What's left](#whats-left)). The one data hazard the PS genuinely owns is cache
+   coherency, which `fault-inject nosync` reproduces.
 
 Goal-wise, the point is independent channels -- several DMA regions in flight at once,
 each bound to its own FIFO, independently startable and running at unrelated rates --
@@ -129,6 +135,26 @@ beat counts back to see each channel advanced. `mcdma-loopback` also reports its
 `elapsed` time, which scales with a throttled channel's rate, so a single-channel run is
 the clearest way to see a rate take effect.
 
+`software/fault-inject/fault-inject.c` exercises the one data hazard the PS/DMA side
+owns: cache coherency. It runs the same prebuffered transfer as `mcdma-loopback`. With no
+argument it does a full-sync baseline and expects every channel `ok`. With `nosync` it
+flushes the SG descriptors and an all-zero payload to DDR, then writes the real
+per-channel pattern into the cached `src` but *skips the payload `sync_for_device`*: the
+MCDMA reads the stale zeros over the non-coherent HP0 port, so every channel *completes*
+with full length and no `CH_ERR` but `dst` comes back all-zero -- silent corruption a
+content check catches. The descriptors are flushed deliberately so the engine runs
+cleanly and the fault is pure data corruption; skipping the descriptor flush as well just
+yields nondeterministic engine errors. It classifies each channel `ok` / `corrupt` /
+`error` and checks the result against what was injected (`PASS`/`FAIL`).
+
+Deliberately, `fault-inject` does *not* check for buffer under/overflow or treat a
+stalled channel as a fault: in rev_d_shim those are detected in the PL by the DAC/ADC
+cores and raised through `hw_manager`, and the PS must tolerate an indefinitely stalled
+channel (a sequence waiting for a trigger) without timing out. Recovering from a stall or
+shutdown is halt/reset, covered by [What's left](#whats-left). To keep the
+coherency test deterministic regardless of any prior `rate-ctl` state, the tool clears all
+pacers to full rate before running and resets both MCDMA directions on exit.
+
 Non-root access: the register window is non-root via `pl-reg`. `u-dma-buf` exposes
 two root-owned interfaces the program touches -- the `/dev/udmabuf0` mmap node (0600)
 and the sysfs cache-sync controls `/sys/class/u-dma-buf/udmabuf0/sync_*` (0664) -- with
@@ -138,15 +164,12 @@ to 0666 at boot (installed as an `/etc/init.d` service by
 `scripts/petalinux/boot_script.sh`; this rootfs has no udev), so the whole demo runs as
 an ordinary user.
 
-Cache coherency: HP ports are not coherent with L1/L2. Prebuffered mode needs only
-one `sync_for_device` per buffer before the run and one `sync_for_cpu` after -- no
-per-chunk sync -- using a cached mapping so filling multi-MB patterns stays fast.
+Cache coherency: the HP ports are not coherent with L1/L2, but prebuffered mode needs
+only one `sync_for_device` before the run and one `sync_for_cpu` after (no per-chunk
+sync), on a cached mapping so filling multi-MB patterns stays fast.
 
-Flow control is handled entirely by `TREADY` backpressure: a full downstream FIFO
-stalls the MCDMA channel mid-descriptor, so DMA overrun of a PL FIFO is not possible and
-no `almost_full`/fill-count signalling is needed. `software/xilinx-dma-test/` is
-superseded (it drove a plain `axi_dma` in direct-register mode) and kept only as a
-register-model reference.
+`software/xilinx-dma-test/` is superseded (it drove a plain `axi_dma` in direct-register
+mode) and kept only as a register-model reference.
 
 ## Device tree
 
@@ -171,8 +194,8 @@ A normal `make PROJECT=ex07_dma` produces an SD image where the block design (bi
 + `.xsa`) contains the MCDMA, the AXI4-Stream datapath, and the per-channel rate
 pacers, `u-dma-buf` is built out-of-tree from `kernel_modules/` and autoloaded, the
 `boot_script.sh` chmod service is installed (by `scripts/petalinux/boot_script.sh`,
-guarded by `scripts/check/boot_script.sh`), and `mcdma-loopback` and `rate-ctl` are
-cross-compiled into the rootfs.
+guarded by `scripts/check/boot_script.sh`), and `mcdma-loopback`, `rate-ctl`, and
+`fault-inject` are cross-compiled into the rootfs.
 
 ## Trying it on hardware
 
@@ -368,11 +391,45 @@ the 512-beat default, because the `s2mm_mux` re-arbitration backstop
 (`ARB_ON_MAX_XFERS 1024`) re-arbitrates a single packet larger than ~1024 beats mid-packet
 and corrupts its framing.
 
-### 7. (Optional) prove the cache sync is load-bearing
+### 7. Prove the cache sync is load-bearing
 
-Comment out the `sync_for_device` call in `mcdma-loopback.c`, rebuild, and re-run: you
-should get intermittent mismatches as data sits in CPU cache instead of DDR. Restore it
-afterward.
+```sh
+fault-inject
+fault-inject nosync
+```
+
+The baseline (`fault-inject` with no argument) does a full-sync run and prints every
+channel `ok` and `PASS`. `fault-inject nosync` stages the real pattern into the cached
+buffer but skips the payload `sync_for_device`, so the MCDMA transfers the stale zeros
+still in DDR: every channel is `corrupt` -- completed with full length
+(`desc.status` `0x8c000800`) and `CH_ERR` still `0`, but `dst` all-zero:
+
+```
+fault-inject: 8-channel MCDMA cache-coherency check
+mode: nosync -- skip payload sync_for_device (expect every channel corrupt)
+
+MCDMA control: /dev/mcdma (pl-reg, no root)
+u-dma-buf udmabuf0: phys 0x30000000, 36864 bytes used of 4194304
+
+(skipping the payload sync_for_device -- the DMA will read stale DDR)
+
+all descriptors completed in 0.1 ms
+
+  ch  outcome     len(bytes)  desc.status  err  detail
+   0  corrupt          2048   0x8c000800   0   completed but dst != src
+   ...
+   7  corrupt          2048   0x8c000800   0   completed but dst != src
+
+  MM2S SR=0x00000002 CH_ERR=0x00000000   S2MM SR=0x00000002 CH_ERR=0x00000000
+
+PASS: every channel produced its expected outcome (corrupt)
+```
+
+That silent corruption, catchable only by a content check, is exactly why the sync is
+load-bearing. It replaces the older manual method of commenting out the
+`sync_for_device` call in `mcdma-loopback.c` -- no rebuild. The run ends `PASS` when the
+outcomes match (all `ok` for baseline, all `corrupt` for `nosync`), and resets the MCDMA
+on exit.
 
 If any transfer fails immediately with no data, suspect the TrustZone `DECERR` gotcha
 (see [Design notes](#design-notes)). If you get `Permission denied`, the boot script
@@ -380,74 +437,47 @@ didn't run -- check `/etc/init.d/boot-script` and fall back to `sudo mcdma-loopb
 
 ## What's left
 
-The DMA foundation is proven on hardware. What remains turns it into a prototype that
-drops cleanly onto rev_d_shim. The items below are **ordered** -- each builds on the one
-before, and all four are the load-bearing path. Everything under "Deferred" is
-explicitly *not* needed for the prototype and is recorded only so the design does not
-foreclose it.
+The DMA foundation is proven on hardware (summarized above). What remains turns it into a
+prototype that drops cleanly onto rev_d_shim, in order:
 
-**Prototype path (do in order):**
-
-1. [x] **Independent-rate test.** Confirmed on hardware: with `ch1/2/3` set to distinct
-       `rate_div` values every channel still round-trips `ok`, and each channel's
-       `elapsed` time (single-channel runs) scales with its programmed rate (the parent
-       project's hard constraints 3 and 4). Mid-run pause is also demonstrated -- pausing
-       one channel starves only its S2MM. See
-       [Trying it on hardware](#trying-it-on-hardware) section 6.
-2. [ ] **Fault injection + software detection.** Deliberately underrun a DAC FIFO
-       (consume before the DMA fills) and overflow an ADC FIFO (stall S2MM), plus a
-       missed-`sync_for_device` corruption case. Characterize exactly what software can
-       observe -- this de-risks rev_d_shim's must-not-happen constraint (1) and is the
-       last genuinely load-bearing unknown. Pausing a channel already shows the
-       S2MM-starvation shape.
-3. [ ] **Coordinated buffer clear / reset.** The datapath FIFOs here reset only with
-       the global peripheral reset, and rev_d_shim's per-FIFO buffer reset
-       (`axi_sys_ctrl` `cmd_buf_reset`/`data_buf_reset`) is *not* safe to pulse while an
-       MCDMA channel is mid-transfer: the MM2S side loses byte-count sync and the S2MM
-       side loses `TLAST` framing (its descriptor stalls -- the same shape as a paused
-       channel), while the MCDMA's own descriptor/run state is left untouched, so the
-       engine and FIFO end up desynced. Add a register-driven reset to the datapath
-       FIFOs and a `halt -> clear -> reinit -> re-run` path in software, then confirm a
-       channel comes back byte-exact after a mid-run clear. This proves the exact
-       off/on behavior rev_d_shim needs (system "off" clears the FIFOs), where
-       `hw_manager` asserts the FIFO reset only after the MCDMA has halted and software
-       reinitializes the descriptor rings before re-enabling.
-4. [ ] **Completion/error interrupt via UIO.** Aggregate the per-channel IRQs onto a
+1. [ ] **Coordinated halt / buffer clear / reset.** Halt/reset is the DMA's *only*
+       response to a fault or shutdown -- the PS never times out on a stalled channel (a
+       sequence can wait arbitrarily long for a trigger), it halts and resets only when
+       the system is turned off. The datapath FIFOs here reset only with the global
+       peripheral reset, and rev_d_shim's per-FIFO buffer reset (`axi_sys_ctrl`
+       `cmd_buf_reset`/`data_buf_reset`) is *not* safe to pulse while an MCDMA channel is
+       mid-transfer: the MM2S side loses byte-count sync and the S2MM side loses `TLAST`
+       framing (its descriptor stalls), while the MCDMA's own descriptor/run state is left
+       untouched, so the engine and FIFO desync. Add a register-driven reset to the
+       datapath FIFOs and a `halt -> clear -> reinit -> re-run` path in software, then
+       confirm a channel comes back byte-exact after a mid-run clear -- the off/on behavior
+       rev_d_shim needs, where `hw_manager` asserts the FIFO reset only after the MCDMA has
+       halted and software reinitializes the descriptor rings before re-enabling.
+2. [ ] **Completion/error interrupt via UIO.** Aggregate the per-channel IRQs onto a
        `generic-uio` node, block on `read()`/`poll()` of `/dev/uioN` for completion and
        error, and keep the happy path polled. Yields the completion-latency number and
-       makes step 2's faults visible. Note for the port: rev_d_shim folds DMA errors
-       into `hw_manager`'s single error-alert IRQ, so this standalone UIO is an ex07
-       measurement vehicle, not a pattern to copy verbatim.
+       surfaces MCDMA-level completion/error events (bus/decode errors, not the silent
+       coherency case). rev_d_shim folds DMA errors into `hw_manager`'s single error-alert
+       IRQ, so this standalone UIO is an ex07 measurement vehicle, not a pattern to copy
+       verbatim.
 
-Reaching step 4 makes ex07 a sufficient prototype: it demonstrates independent-rate
-prebuffered DMA, per-channel pause, coordinated buffer-clear/reset, and detectable fault
-handling on the exact 8+8 topology rev_d_shim needs.
+With both done, ex07 demonstrates independent-rate prebuffered DMA, coherency-safe
+transfers, coordinated halt/clear/reset, and completion/error interrupts on the exact 8+8
+topology rev_d_shim needs. Deferred and not required for the prototype: a
+throughput/latency table (sustained MB/s, max FIFO-service gap, descriptor overhead vs.
+chunk size) -- bandwidth has ~20x margin (`PROJECT_BRIEF` section 6), so it would confirm
+rather than decide anything.
 
-**Deferred (not required for the prototype):**
+## Utilization
 
-- [ ] Throughput/latency table: sustained aggregate MB/s, max FIFO-service gap, and
-      descriptor overhead vs. chunk size. Low value here -- bandwidth has ~20x margin
-      (`PROJECT_BRIEF` section 6), so these confirm rather than decide anything.
-- [ ] dmaengine path (option A: `CONFIG_XILINX_DMA` + `dmaengine_prep_slave_sg`) vs.
-      direct register control. The decision is already made (direct register, proven),
-      so this is a "for completeness" comparison; note dmaengine pairs awkwardly with
-      `u-dma-buf` (wants `dma_alloc_coherent`).
-- [ ] (stretch) Mode 2 streaming: append descriptors ahead of the ring tail during a
-      run. Works with MCDMA as-is (no cyclic mode); attempt only after the path above.
-
-Done: the MCDMA block design (`num_ch` per direction, GP0 control, HP0 memory + SG,
-per-channel interrupts) with the per-channel demux/FIFO/mux datapath and the
-`axi_rate_gen` pacer; `u-dma-buf` allocation with single-sync coherency; non-root access
-to the MCDMA and the pacer registers via `pl-reg`, plus the boot-time chmod for
-`u-dma-buf`; the prebuffered round-trip demo and the pacer's throttle/pause, both
-validated on hardware at 8+8; and the utilization measurement (synth, `xc7z020-3`,
-Vivado 2024.2) that settled MCDMA vs. 8x `axi_dma`. Whole ex07 at 8+8 (16 streams, the
-rev_d_shim size) is **15,089 LUT / 15,691 FF / 19 BRAM36 + 4 BRAM18 / 0 DSP**, of which
-**~13.9k LUT** is net-new engine (mcdma 8.7k, HP0 SmartConnect 4.4k, GP0 control 0.5k,
-demux+mux 0.4k) plus 3 BRAM36 + 4 BRAM18. Extrapolated onto rev_d_shim (22.3k LUT /
-86 BRAM36 at 4 boards today), 8 boards + MCDMA lands at **~52-54k LUT (~97-102%)** --
-LUT, not BRAM, becomes the binding constraint, while the FIFOs shrinking to elastic
-buffers frees most of the BRAM. See `PROJECT_BRIEF` sections 4 and 7.
+Synthesized at 8+8 (16 streams, the rev_d_shim size) for `xc7z020-3` (Vivado 2024.2), the
+whole example is **15,089 LUT / 15,691 FF / 19 BRAM36 + 4 BRAM18 / 0 DSP**, of which
+**~13.9k LUT** is net-new DMA engine (mcdma 8.7k, HP0 SmartConnect 4.4k, GP0 control 0.5k,
+demux+mux 0.4k) plus 3 BRAM36 + 4 BRAM18. Extrapolated onto rev_d_shim (22.3k LUT / 86
+BRAM36 at 4 boards today), 8 boards + MCDMA lands at **~52-54k LUT (~97-102%)** -- LUT, not
+BRAM, is the binding constraint, and this settled MCDMA over eight separate `axi_dma`. The
+FIFOs shrink to elastic buffers there, freeing most of the BRAM. See `PROJECT_BRIEF`
+sections 4 and 7.
 
 ## Design notes
 
