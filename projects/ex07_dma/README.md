@@ -125,7 +125,9 @@ will need one.
 word per channel (`RATE_DIV` + `PAUSE` in cfg, `BEAT_COUNT` in sts) -- the same
 non-root register pattern as ex05's `reg-driver`, no root and no hardcoded addresses.
 Program per-channel rates with it, run `mcdma-loopback` to push traffic, then read the
-beat counts back to watch each channel advance at its own rate.
+beat counts back to see each channel advanced. `mcdma-loopback` also reports its per-run
+`elapsed` time, which scales with a throttled channel's rate, so a single-channel run is
+the clearest way to see a rate take effect.
 
 Non-root access: the register window is non-root via `pl-reg`. `u-dma-buf` exposes
 two root-owned interfaces the program touches -- the `/dev/udmabuf0` mmap node (0600)
@@ -225,6 +227,7 @@ u-dma-buf udmabuf0: phys 0x30000000, 36864 bytes used of 4194304
   ch6  ok    received 2048/2048 bytes
   ch7  ok    received 2048/2048 bytes
 
+elapsed 0.1 ms
 All channels round-tripped.
 ```
 
@@ -304,7 +307,68 @@ rate-ctl run 3
 
 Expect `ch3: running`; a subsequent `mcdma-loopback` passes on all channels again.
 
-### 6. (Optional) prove the cache sync is load-bearing
+### 6. Run channels at independent rates
+
+Throttle a few channels to different rates and confirm each still round-trips -- the
+parent project's independent-channel requirement (hard constraints 3 and 4). The channels
+share one physical S2MM port, so they serialize through the mux packet-by-packet rather
+than truly streaming at once; the clearest per-channel signal is the `elapsed` time of a
+single-channel run, which scales with that channel's rate.
+
+Start from full rate and note the baseline timing:
+
+```sh
+rate-ctl all 0
+mcdma-loopback 0
+```
+
+Expect `ch0 ok` with `elapsed 0.1 ms` -- a single full-rate channel moves its 512 beats in
+well under a millisecond.
+
+Give three channels distinct rates:
+
+```sh
+rate-ctl set 1 999
+rate-ctl set 2 7999
+rate-ctl set 3 15999
+```
+
+Run each of those channels on its own and watch the `elapsed` time track the rate:
+
+```sh
+mcdma-loopback 1
+mcdma-loopback 2
+mcdma-loopback 3
+```
+
+Each round-trips `ok`, and `elapsed` scales linearly with `rate_div`. Measured on hardware
+(about `2 x (rate_div + 1)` clock cycles per beat at 100 MHz over the 512-beat payload):
+
+| channel | rate_div | measured elapsed |
+|---|---|---|
+| 0 | 0 | 0.1 ms (full rate) |
+| 1 | 999 | 10.3 ms |
+| 2 | 7999 | 81.8 ms |
+| 3 | 15999 | 163.5 ms |
+
+Run every channel at once, read the beat counts, then restore full rate:
+
+```sh
+mcdma-loopback
+rate-ctl
+rate-ctl all 0
+```
+
+Expect all eight `ok`; the aggregate `elapsed` is set by the slowest channel (~164 ms
+here) because the channels overlap. `rate-ctl` shows every channel's `beat_count` has
+advanced -- it accumulates since boot, +512 per run -- confirming the pacers ran.
+
+This test throttles the *rate*, not the packet size: keep each channel's single packet at
+the 512-beat default, because the `s2mm_mux` re-arbitration backstop
+(`ARB_ON_MAX_XFERS 1024`) re-arbitrates a single packet larger than ~1024 beats mid-packet
+and corrupts its framing.
+
+### 7. (Optional) prove the cache sync is load-bearing
 
 Comment out the `sync_for_device` call in `mcdma-loopback.c`, rebuild, and re-run: you
 should get intermittent mismatches as data sits in CPU cache instead of DDR. Restore it
@@ -324,10 +388,12 @@ foreclose it.
 
 **Prototype path (do in order):**
 
-1. [ ] **Independent-rate test.** Run several channels at distinct `rate_div` values at
-       once and confirm each round-trips independently at its own rate (the parent
-       project's hard constraints 3 and 4). Mid-run pause is already demonstrated on
-       hardware -- pausing one channel starves only its S2MM.
+1. [x] **Independent-rate test.** Confirmed on hardware: with `ch1/2/3` set to distinct
+       `rate_div` values every channel still round-trips `ok`, and each channel's
+       `elapsed` time (single-channel runs) scales with its programmed rate (the parent
+       project's hard constraints 3 and 4). Mid-run pause is also demonstrated -- pausing
+       one channel starves only its S2MM. See
+       [Trying it on hardware](#trying-it-on-hardware) section 6.
 2. [ ] **Fault injection + software detection.** Deliberately underrun a DAC FIFO
        (consume before the DMA fills) and overflow an ADC FIFO (stall S2MM), plus a
        missed-`sync_for_device` corruption case. Characterize exactly what software can

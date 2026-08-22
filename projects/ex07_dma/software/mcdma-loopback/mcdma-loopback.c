@@ -455,7 +455,8 @@ int main(int argc, char **argv)
       trigger_channel(r, MM2S_CH_BASE(i + 1), mm2s_desc_phys + i * DESC_ALIGN);
 
   /* 6. Poll every selected S2MM descriptor for completion ------------------- */
-  int64_t deadline = now_us() + POLL_TIMEOUT_US;
+  int64_t t_start = now_us();
+  int64_t deadline = t_start + POLL_TIMEOUT_US;
   int pending = 1;
   while (pending > 0 && now_us() < deadline) {
     /* Descriptor status lives in DDR; invalidate before each peek. */
@@ -465,6 +466,7 @@ int main(int argc, char **argv)
       if ((run_mask & (1u << i)) && !(s2mm_desc[i].status & DESC_STAT_CMPLT))
         pending++;
   }
+  double elapsed_ms = (now_us() - t_start) / 1000.0;
   if (pending > 0) {
     fprintf(stderr, "timeout: %d S2MM channel(s) did not complete\n", pending);
     dump_status(r, mm2s_desc, s2mm_desc);
@@ -498,7 +500,7 @@ int main(int argc, char **argv)
               dp[0], dp[1], dp[2], dp[3]);
     }
   }
-  printf("\n");
+  printf("\nelapsed %.1f ms\n", elapsed_ms);
 
   munmap(region, REGION_BYTES);
   close(buf_fd);
