@@ -18,6 +18,8 @@ The project introduces the following tools and concepts:
 - Packet-atomic `axis_switch` arbitration (`ARB_ON_TLAST`) to merge streams `num_ch -> 1`
 - A programmable-rate PL pacer between the FIFOs, controlled non-root through a
   shared `cfg`/`sts` register pair (the ex05 `pl-reg` misc-device approach)
+- Aggregating all per-channel MCDMA completion/error interrupts onto one non-root
+  interrupt node (the `pl-irq` module) and taking completion as a blocking `read()`
 
 > The datapath round-trips every channel byte-for-byte on hardware without root:
 > `mcdma-loopback` passes for all channels and any subset, the per-channel
@@ -25,9 +27,14 @@ The project introduces the following tools and concepts:
 > and `fault-inject` confirms the cache sync is load-bearing (skipping it silently
 > corrupts every channel). A coordinated `halt -> clear -> reinit -> re-run` brings a
 > channel back byte-exact after a mid-run FIFO clear (`halt-reset`), with `noclear`
-> confirming the register-driven FIFO clear is load-bearing. The remaining work (see
-> [What's left](#whats-left)) builds on this foundation: the UIO completion/error
-> interrupt path and the throughput/latency table.
+> confirming the register-driven FIFO clear is load-bearing. The same transfer driven
+> off the aggregated MCDMA interrupt through the `pl-irq` node (`dma-irq`) is a work in
+> progress: the `pl-irq` module loads non-root (`/dev/mcdma_irq`, `0666`) and the transfer
+> completes with correct data, but the aggregated interrupt is not yet delivered to
+> userspace (`dma-irq` sees no interrupt and every channel also flags a spurious error).
+> Finishing `pl-irq` in the ex04 interrupts testbench (where the path is isolated) and an
+> example refactor around it are the remaining work (see [What's left](#whats-left)),
+> along with a deferred throughput/latency table.
 
 ## Why this example exists
 
@@ -41,8 +48,12 @@ Each item below is an open question in the parent project that this example clos
    net-new engine is ~13.9k LUT, which makes MCDMA cheaper than eight separate
    `axi_dma` and lands the 8-board rev_d_shim at ~52-54k LUT -- so LUT, not BRAM, is
    the binding constraint. See [Utilization](#utilization).
-3. What is the worst-case service latency? Open: the `axi_rate_gen` pacer supplies the
-   controllable load, but the number itself needs the UIO completion path (below).
+3. What is the worst-case service latency? In progress: the `axi_rate_gen` pacer supplies
+   the controllable load, but the number needs the interrupt-driven completion path
+   (`dma-irq` + `pl-irq`), which does not yet deliver interrupts to userspace and is being
+   finished in the ex04 testbench (see [What's left](#whats-left)). A full
+   worst-case-under-load throughput/latency table
+   is deferred (see [What's left](#whats-left)).
 4. Does the coherency handling work? Resolved: a single `sync_for_device` before
    each run is load-bearing; skipping it reproduces silent corruption (see
    `fault-inject nosync` under [Trying it on hardware](#trying-it-on-hardware)).
@@ -76,8 +87,12 @@ clocked at 100 MHz off `FCLK_CLK0`. The channel count is the Tcl parameter `num_
 - Two `smartconnect`s: one for GP0 -> control, one aggregating the MCDMA's three
   memory masters (MM2S, S2MM, SG) onto `S_AXI_HP0`. Addresses are assigned explicitly
   with `addr` (preferred over `auto_connect_axi`, per repo convention).
-- `xlconcat` feeding the `2*num_ch` per-channel interrupts into `IRQ_F2P`
-  (`IRQ_F2P[0:7]` = GIC IDs 61-68, device tree `<0 29 4>`..`<0 36 4>`).
+- `xlconcat` gathering the `2*num_ch` per-channel MCDMA completion/error interrupts,
+  then a `util_reduced_logic` OR-reduction onto the single `IRQ_F2P[0]` line (GIC ID
+  61, device tree `<0 29 4>`, level-high). The `pl-irq` module binds it and exposes it
+  to userspace non-root as one aggregated doorbell, `/dev/mcdma_irq` (see
+  [Device tree](#device-tree)) -- the rev_d_shim model of one error-alert IRQ plus a
+  poll of the status word, rather than a GIC line per channel.
 - A shared `axi_cfg_register` (`rate_cfg`) and `axi_sts_register` (`rate_sts`) on
   GP0 -- 32 control/status bits per channel -- backing the per-channel pacers
   (the ex02/ex05 `CFG -> logic -> STS` idiom). `pl-reg` publishes them non-root as
@@ -191,6 +206,27 @@ Cache coherency: the HP ports are not coherent with L1/L2, but prebuffered mode 
 only one `sync_for_device` before the run and one `sync_for_cpu` after (no per-chunk
 sync), on a cached mapping so filling multi-MB patterns stays fast.
 
+`software/dma-irq/dma-irq.c` runs the same prebuffered transfer as `mcdma-loopback` but
+waits for completion on an interrupt instead of polling. It arms every channel with its
+MCDMA completion and error interrupts enabled, then blocks in `poll()`/`read()` on the
+`pl-irq` misc device (`/dev/mcdma_irq`). Because all `2*num_ch` channel interrupts are
+OR-reduced onto one line, the interrupt is only a doorbell: on each wakeup the tool reads
+every channel's MCDMA status register to see which completed or errored, clears those
+write-1-to-clear status bits so the level-triggered line deasserts, and re-arms the
+interrupt (`write()` of `1`, the `pl-irq` re-arm). Completion is taken from the
+authoritative per-channel status register bit, not a re-read of the DDR descriptor (which
+would race the descriptor writeback). It reports the first-completion notification latency
+and verifies the byte-exact round trip. This is the ex07 measurement vehicle for the
+parent project's single aggregated error-alert IRQ; rev_d_shim keeps the happy path polled
+and uses the interrupt for exceptional events. (As of this writing the interrupt path is
+not yet working on hardware -- see [section 9](#9-take-completion-on-an-interrupt) and
+[What's left](#whats-left).)
+
+`pl-irq` is the interrupt sibling of `pl-reg`: an out-of-tree module
+(`kernel_modules/pl-irq`) that binds the interrupt node by a private device-tree
+compatible and publishes it as a world-accessible (`0666`) misc device named from the node
+label. It needs no kernel command line change and no `chmod` -- see [Device tree](#device-tree).
+
 `software/xilinx-dma-test/` is superseded (it drove a plain `axi_dma` in direct-register
 mode) and kept only as a register-model reference.
 
@@ -211,15 +247,25 @@ auto-generates their nodes from the block design and `pl-reg` binds them by thei
 cfg/sts compatibles, naming `/dev/rate_cfg`, `/dev/rate_sts` and `/dev/buf_reset` from
 the Vivado instance labels -- exactly the ex05 mechanism.
 
+The `.dtsi` also adds the interrupt node (`mcdma_irq`, `interrupts = <0 29 4>`,
+level-high) under `&amba_pl` for the OR-reduced MCDMA interrupt on `IRQ_F2P[0]`, with a
+private `compatible = "zynq-toolbox,pl-irq"`. The out-of-tree `pl-irq` module binds it by
+that compatible and publishes it as the world-accessible misc device `/dev/mcdma_irq` --
+no kernel command line change and no `chmod`, the same ergonomics `pl-reg` gives register
+windows. (ex04 instead demonstrates the in-tree `generic-uio` path, which does require
+managing the kernel command line.)
+
 ## Build integration
 
 A normal `make PROJECT=ex07_dma` produces an SD image where the block design (bitstream
 + `.xsa`) contains the MCDMA, the AXI4-Stream datapath, the per-channel rate
-pacers, and the per-channel FIFO reset, `u-dma-buf` is built out-of-tree from
-`kernel_modules/` and autoloaded, the `boot_script.sh` chmod service is installed (by
-`scripts/petalinux/boot_script.sh`, guarded by `scripts/check/boot_script.sh`), and
-`mcdma-loopback`, `rate-ctl`, `fault-inject`, and `halt-reset` are cross-compiled into
-the rootfs.
+pacers, the per-channel FIFO reset, and the OR-reduced MCDMA interrupt, `u-dma-buf` and
+the `pl-reg`/`pl-irq` modules are built out-of-tree from `kernel_modules/` and autoloaded,
+the `boot_script.sh` chmod service is installed (by `scripts/petalinux/boot_script.sh`,
+guarded by `scripts/check/boot_script.sh`), and `mcdma-loopback`, `rate-ctl`,
+`fault-inject`, `halt-reset`, and `dma-irq` are cross-compiled into the rootfs. No kernel
+command line change is needed -- `pl-irq` binds the interrupt node by its device-tree
+compatible.
 
 ## Trying it on hardware
 
@@ -508,25 +554,70 @@ FIFO, so the re-run drains that stale data first and S2MM completes early on its
 restart. The tool restores a clean state (pacers unpaused, FIFOs cleared, MCDMA reset)
 on exit, so a following `mcdma-loopback` round-trips all channels again.
 
+### 9. Take completion on an interrupt
+
+```sh
+dma-irq
+```
+
+Same prebuffered transfer as `mcdma-loopback`, but instead of polling the descriptors it
+blocks on the aggregated MCDMA interrupt through the `pl-irq` node.
+
+**This does not work yet.** The `pl-irq` module loads and the device comes up non-root
+(`/dev/mcdma_irq`, `0666`), and the transfer itself completes with correct data
+(`received 2048/2048`, no mismatch), but the aggregated interrupt is never delivered to
+userspace -- `dma-irq` reports `interrupts: 0`, `poll()` times out, and every channel also
+raises a spurious error interrupt:
+
+```
+dma-irq: 8-channel prebuffered MCDMA transfer, completion via pl-irq
+...
+  ch0  FAIL  received 2048/2048 bytes  (error irq)
+  ...
+interrupts: 0;  first-completion latency 0.000 ms
+FAILED: 8 channel(s) did not complete via interrupt
+```
+
+The `/proc/interrupts` line for `pl-irq` stays at `0` before and after a run
+(`47: ... GIC-0 61 Level pl-irq`), so the interrupt never asserts at the GIC: `pl-irq`'s
+DT binding, IRQ mapping, and misc device are all correct, and its handler simply never
+gets called. The fault is upstream in the PL -- the MCDMA is not driving `introut` even
+though the completion and error status bits read as set. The likely cause of both symptoms
+is that the per-channel MCDMA interrupt enable/status bits are not where this program
+assumes: it uses the AXI-DMA bit layout, and the AXI MCDMA per-channel `CR`/`SR` layout
+must be verified against PG288 / the `xilinx_dma.c` MCDMA path. If the enables that gate
+`introut` are never actually set, the line stays low (count 0) and the "error" bit is a
+misread of a correct transfer. Fixing it is a register/RTL change (needs a rebuild), so it
+is deferred to the ex04 interrupts testbench (see [What's left](#whats-left)), where
+`pl-irq`'s userspace path can first be validated against a known-good, MCDMA-free interrupt
+source.
+
 ## What's left
 
-The DMA foundation is proven on hardware (summarized above). What remains turns it into a
-prototype that drops cleanly onto rev_d_shim:
+The DMA datapath is proven on hardware (summarized above): prebuffered transfers,
+independent per-channel rates, coherency safety, and coordinated halt/clear/reset all
+pass. What remains:
 
-1. [ ] **Completion/error interrupt via UIO.** Aggregate the per-channel IRQs onto a
-       `generic-uio` node, block on `read()`/`poll()` of `/dev/uioN` for completion and
-       error, and keep the happy path polled. Yields the completion-latency number and
-       surfaces MCDMA-level completion/error events (bus/decode errors, not the silent
-       coherency case). rev_d_shim folds DMA errors into `hw_manager`'s single error-alert
-       IRQ, so this standalone UIO is an ex07 measurement vehicle, not a pattern to copy
-       verbatim.
+1. [ ] **Refactor the examples around the `pl-reg`/`pl-irq` kernel-module approach.**
+       Promote the device-driver (`pl-reg`) example earlier so it frames memory-mapping and
+       non-root access as a prerequisite, move the interrupts example onto `pl-irq`
+       (dropping the `generic-uio` command-line dependency from its default path), and make
+       UART independent. Keep a short section documenting the in-tree `generic-uio` +
+       `uio_pdrv_genirq.of_id` bootarg approach as the manual-maintenance alternative --
+       preserving what ex04 does today.
+2. [ ] **Finish `pl-irq` in the ex04 interrupts testbench.** The module and the `dma-irq`
+       tool are in place here (see [section 9](#9-take-completion-on-an-interrupt)), and
+       `/proc/interrupts` confirms `pl-irq` binds and maps the GIC line correctly -- but the
+       MCDMA never asserts the interrupt (count stays 0), so its handler never runs, and
+       enabling the per-channel error interrupt spuriously flags every channel. Both point
+       at the MCDMA per-channel interrupt enable/status bit layout. ex04's simpler,
+       MCDMA-free interrupt source is the place to prove `pl-irq`'s userspace path end to
+       end; the MCDMA `introut`/aggregation fix is then a separate ex07 rebuild, after which
+       ex07 inherits the working module and its completion-latency measurement.
 
-With this done, ex07 demonstrates independent-rate prebuffered DMA, coherency-safe
-transfers, coordinated halt/clear/reset, and completion/error interrupts on the exact 8+8
-topology rev_d_shim needs. Deferred and not required for the prototype: a
-throughput/latency table (sustained MB/s, max FIFO-service gap, descriptor overhead vs.
-chunk size) -- bandwidth has ~20x margin (`PROJECT_BRIEF` section 6), so it would confirm
-rather than decide anything.
+Deferred and not required for the prototype: a throughput/latency table (sustained MB/s,
+max FIFO-service gap, descriptor overhead vs. chunk size) -- bandwidth has ~20x margin
+(`PROJECT_BRIEF` section 6), so it would confirm rather than decide anything.
 
 ## Utilization
 

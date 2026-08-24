@@ -41,6 +41,28 @@
   };
 };
 
+&amba_pl {
+  /* Aggregated MCDMA completion/error interrupt, handed to userspace non-root.
+   *
+   * The block design OR-reduces all 2*num_ch MCDMA channel interrupts onto a
+   * single IRQ_F2P[0] line (GIC SPI 61 == <0 29 4>, level-high). The out-of-tree
+   * pl-irq module binds this node by its private compatible and publishes it as
+   * a world-accessible misc device named from the node label -> /dev/mcdma_irq.
+   * software/dma-irq blocks on poll()/read() of it as a completion/error
+   * doorbell, then reads the MCDMA status registers to see which channel(s)
+   * fired. Level-triggered: the handler masks the line and userspace clears the
+   * MCDMA channel status bits before re-arming, or it refires immediately.
+   *
+   * Unlike the in-tree generic-uio path (ex04), this needs NO kernel command
+   * line change (pl-irq carries its own of_match_table) and NO chmod (the misc
+   * device is created 0666) -- the pl-reg approach, applied to an interrupt. */
+  mcdma_irq: mcdma_irq {
+    compatible = "zynq-toolbox,pl-irq";
+    interrupt-parent = <&intc>;
+    interrupts = <0 29 4>;
+  };
+};
+
 /* Claim the MCDMA control window for userspace (pl-reg / option B), deterministically.
  *
  * PetaLinux's device-tree generator treats axi_mcdma as an AXI-Ethernet DMA

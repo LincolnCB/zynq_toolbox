@@ -17,6 +17,8 @@
 #     pl-reg): bit i clears channel i's DAC and ADC FIFO. This is the coordinated
 #     halt/clear/reset path -- software halts the MCDMA, asserts buf_reset to flush
 #     stranded data, then reinitializes the descriptor rings (see software/halt-reset).
+#   - all 2*num_ch MCDMA completion/error interrupts OR-reduced onto a single
+#     IRQ_F2P line, exposed to userspace non-root by the pl-irq module (see software/dma-irq).
 #
 # Design notes:
 #   - AXIS stream width is read-only (derived) on the MCDMA; it is 32-bit here.
@@ -192,13 +194,17 @@ addr 0x40430000 64K buf_reset/S_AXI ps/M_AXI_GP0
 
 ############# Interrupts #############
 
-# Per-channel interrupts: num_ch MM2S + num_ch S2MM, concatenated into IRQ_F2P.
-# IRQ_F2P[0..7] map to GIC IDs 61-68 (device tree <0 29 4> .. <0 36 4>). MM2S
-# channels take the low ports, S2MM channels the high ports.
+# All 2*num_ch MCDMA channel interrupts (num_ch MM2S completion/error + num_ch
+# S2MM completion/error) are concatenated and then OR-reduced into a single
+# PL->PS interrupt line on IRQ_F2P[0] (GIC ID 61, device tree <0 29 4>). The
+# pl-irq module (see the device tree) binds it and exposes it to userspace as one
+# non-root misc device /dev/mcdma_irq: software blocks on read()/poll() as a
+# doorbell, then reads each channel's MCDMA status register to find which
+# channel(s) completed or errored. This mirrors rev_d_shim, which folds all DMA
+# events into hw_manager's single error-alert IRQ rather than dedicating one GIC
+# line per channel.
 cell xilinx.com:ip:xlconcat:2.1 intr_concat {
   NUM_PORTS [expr {2 * $num_ch}]
-} {
-  dout ps/IRQ_F2P
 }
 for {set i 0} {$i < $num_ch} {incr i} {
   set ch [expr {$i + 1}]
@@ -208,6 +214,14 @@ for {set i 0} {$i < $num_ch} {incr i} {
   set ch [expr {$i + 1}]
   set port [expr {$num_ch + $i}]
   wire mcdma/s2mm_ch${ch}_introut intr_concat/In${port}
+}
+# OR-reduce the concatenated interrupt bus onto the single IRQ_F2P[0] line.
+cell xilinx.com:ip:util_reduced_logic:2.0 intr_or {
+  C_SIZE      [expr {2 * $num_ch}]
+  C_OPERATION or
+} {
+  Op1 intr_concat/dout
+  Res ps/IRQ_F2P
 }
 
 ############# AXI4-Stream datapath #############
