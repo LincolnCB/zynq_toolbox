@@ -13,6 +13,10 @@
 #   - a per-channel axi_rate_gen pacer between each DAC and ADC FIFO (the SPI
 #     core's role in rev_d_shim), controlled by a shared cfg/sts register pair
 #     (rate_cfg / rate_sts on GP0, reachable non-root via pl-reg).
+#   - a per-channel register-driven FIFO reset (buf_reset on GP0, non-root via
+#     pl-reg): bit i clears channel i's DAC and ADC FIFO. This is the coordinated
+#     halt/clear/reset path -- software halts the MCDMA, asserts buf_reset to flush
+#     stranded data, then reinitializes the descriptor rings (see software/halt-reset).
 #
 # Design notes:
 #   - AXIS stream width is read-only (derived) on the MCDMA; it is 32-bit here.
@@ -56,11 +60,11 @@ cell xilinx.com:ip:proc_sys_reset:5.0 ps_rst {} {
 }
 
 ### AXI SmartConnect cores
-# PS -> control windows on GP0: the MCDMA S_AXI_LITE plus the rate-gen cfg/sts
-# register windows (M00/M01/M02 below).
+# PS -> control windows on GP0: the MCDMA S_AXI_LITE, the rate-gen cfg/sts
+# register windows, and the FIFO buf_reset register (M00/M01/M02/M03 below).
 cell xilinx.com:ip:smartconnect:1.0 axi_ctrl_intercon {
   NUM_SI 1
-  NUM_MI 3
+  NUM_MI 4
 } {
   aclk ps/FCLK_CLK0
   aresetn ps_rst/peripheral_aresetn
@@ -159,6 +163,33 @@ cell pavel-demin:user:axi_sts_register rate_sts {
 }
 addr 0x40420000 64K rate_sts/S_AXI ps/M_AXI_GP0
 
+############# FIFO buffer-reset register #############
+
+# One shared cfg register drives the per-channel datapath FIFO reset: bit i
+# clears channel i's DAC and ADC FIFO (num_ch bits used, one write access).
+# Reachable non-root via pl-reg as /dev/buf_reset (same axi-cfg-register
+# compatible the match table already lists). The per-channel reset logic is
+# wired up in the datapath loop below. This backs the coordinated halt -> clear
+# -> reinit path: software halts the MCDMA first, then pulses buf_reset to flush
+# data stranded in a FIFO, mirroring rev_d_shim's axi_sys_ctrl data_buf_reset
+# (which must never be pulsed while an MCDMA channel is mid-transfer -- see the
+# project README).
+#
+# CFG_DATA_WIDTH must be a multiple of AXI_DATA_WIDTH (32): the core sizes its
+# register file as CFG_SIZE = CFG_DATA_WIDTH/32, so any width below 32 rounds to
+# zero storage and cfg_data ties off to 0 (the register silently does nothing).
+# One 32-bit word holds up to 32 channels; round num_ch up to a 32-bit multiple.
+set buf_reset_width [expr {(($num_ch + 31) / 32) * 32}]
+cell pavel-demin:user:axi_cfg_register buf_reset {
+  CFG_DATA_WIDTH $buf_reset_width
+  AXI_ADDR_WIDTH 16
+} {
+  aclk ps/FCLK_CLK0
+  aresetn ps_rst/peripheral_aresetn
+  S_AXI axi_ctrl_intercon/M03_AXI
+}
+addr 0x40430000 64K buf_reset/S_AXI ps/M_AXI_GP0
+
 ############# Interrupts #############
 
 # Per-channel interrupts: num_ch MM2S + num_ch S2MM, concatenated into IRQ_F2P.
@@ -243,6 +274,38 @@ for {set i 0} {$i < $num_ch} {incr i} {
     CONFIG.${mi}_AXIS_BASETDEST [format 0x%08X $i] \
     CONFIG.${mi}_AXIS_HIGHTDEST [format 0x%08X $i]] [get_bd_cells mm2s_demux]
 
+  # ---- Per-channel FIFO reset ----
+  # buf_reset bit i, ANDed with the global peripheral reset, drives a per-channel
+  # proc_sys_reset that clears both this channel's DAC and ADC FIFO. Mirrors the
+  # rev_d_shim per-FIFO reset (slice -> NOT -> proc_sys_reset), so a mid-run FIFO
+  # clear is a clean synchronized reset. The FIFOs reset on global peripheral
+  # reset (buf_reset bit 0) or when software writes buf_reset bit i = 1.
+  cell xilinx.com:ip:xlslice:1.0 buf_reset_slice_${i} {
+    DIN_WIDTH $buf_reset_width
+    DIN_FROM  $i
+    DIN_TO    $i
+  } {
+    din buf_reset/cfg_data
+  }
+  cell xilinx.com:ip:util_vector_logic n_buf_reset_${i} {
+    C_SIZE 1
+    C_OPERATION not
+  } {
+    Op1 buf_reset_slice_${i}/dout
+  }
+  # FIFO reset asserted (active-low 0) on global reset OR this channel's buf_reset.
+  cell xilinx.com:ip:util_vector_logic fifo_aresetn_${i} {
+    C_SIZE 1
+    C_OPERATION and
+  } {
+    Op1 n_buf_reset_${i}/Res
+    Op2 ps_rst/peripheral_aresetn
+  }
+  cell xilinx.com:ip:proc_sys_reset:5.0 fifo_rst_${i} {} {
+    ext_reset_in fifo_aresetn_${i}/Res
+    slowest_sync_clk ps/FCLK_CLK0
+  }
+
   # "DAC FIFO": buffers MM2S data for channel i (drained by the SPI core in
   # rev_d_shim; by the rate pacer below here).
   cell xilinx.com:ip:axis_data_fifo:2.0 dac_fifo_${i} {
@@ -253,7 +316,7 @@ for {set i 0} {$i < $num_ch} {incr i} {
   } {
     S_AXIS mm2s_demux/${mi}_AXIS
     s_axis_aclk ps/FCLK_CLK0
-    s_axis_aresetn ps_rst/peripheral_aresetn
+    s_axis_aresetn fifo_rst_${i}/peripheral_aresetn
   }
 
   # "ADC FIFO": buffers PL-produced data for channel i (filled by the SPI core
@@ -266,7 +329,7 @@ for {set i 0} {$i < $num_ch} {incr i} {
   } {
     M_AXIS s2mm_mux/${si}_AXIS
     s_axis_aclk ps/FCLK_CLK0
-    s_axis_aresetn ps_rst/peripheral_aresetn
+    s_axis_aresetn fifo_rst_${i}/peripheral_aresetn
   }
 
   # ---- Programmable-rate traffic pacer (custom core) ----

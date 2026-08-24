@@ -1,4 +1,4 @@
-***Updated 2026-08-22***
+***Updated 2026-08-24***
 
 # Example 07: DDR-Backed FIFO Buffers via MCDMA
 
@@ -23,9 +23,11 @@ The project introduces the following tools and concepts:
 > `mcdma-loopback` passes for all channels and any subset, the per-channel
 > `axi_rate_gen` pacer throttles and pauses each channel independently under `rate-ctl`,
 > and `fault-inject` confirms the cache sync is load-bearing (skipping it silently
-> corrupts every channel). The remaining work (see [What's left](#whats-left)) builds on
-> this foundation: coordinated halt/reset, the UIO completion/error interrupt path, and
-> the throughput/latency table.
+> corrupts every channel). A coordinated `halt -> clear -> reinit -> re-run` brings a
+> channel back byte-exact after a mid-run FIFO clear (`halt-reset`), with `noclear`
+> confirming the register-driven FIFO clear is load-bearing. The remaining work (see
+> [What's left](#whats-left)) builds on this foundation: the UIO completion/error
+> interrupt path and the throughput/latency table.
 
 ## Why this example exists
 
@@ -49,9 +51,9 @@ Each item below is an open question in the parent project that this example clos
    cores and folded into `hw_manager`'s status word and `ps_interrupt`; the PS/DMA side
    never watches for it and never times out. A channel waiting arbitrarily long for a
    trigger is normal, not a fault, and a duplicate PS-side check would conflict with the
-   cores. The DMA's only response to a fault or shutdown is halt/reset (see
-   [What's left](#whats-left)). The one data hazard the PS genuinely owns is cache
-   coherency, which `fault-inject nosync` reproduces.
+   cores. The DMA's only response to a fault or shutdown is halt/reset (the coordinated
+   `halt-reset`, [section 8](#8-coordinated-halt--clear--reset)). The one data hazard the
+   PS genuinely owns is cache coherency, which `fault-inject nosync` reproduces.
 
 Goal-wise, the point is independent channels -- several DMA regions in flight at once,
 each bound to its own FIFO, independently startable and running at unrelated rates --
@@ -81,6 +83,12 @@ clocked at 100 MHz off `FCLK_CLK0`. The channel count is the Tcl parameter `num_
   (the ex02/ex05 `CFG -> logic -> STS` idiom). `pl-reg` publishes them non-root as
   `/dev/rate_cfg` and `/dev/rate_sts` with no driver change (its match table
   already lists the cfg/sts compatibles).
+- A shared `axi_cfg_register` (`buf_reset`) on GP0 -- one bit per channel --
+  driving a per-channel datapath FIFO reset. Bit `i`, ANDed with the global
+  peripheral reset and fed through a per-channel `proc_sys_reset`, clears channel
+  `i`'s DAC and ADC FIFO (the rev_d_shim `axi_sys_ctrl data_buf_reset` pattern:
+  slice -> `NOT` -> `proc_sys_reset`). `pl-reg` publishes it non-root as
+  `/dev/buf_reset`. This backs the coordinated halt/clear/reset path.
 
 The AXI4-Stream datapath between MM2S and S2MM gives each channel its own FIFOs:
 
@@ -155,6 +163,21 @@ shutdown is halt/reset, covered by [What's left](#whats-left). To keep the
 coherency test deterministic regardless of any prior `rate-ctl` state, the tool clears all
 pacers to full rate before running and resets both MCDMA directions on exit.
 
+`software/halt-reset/halt-reset.c` exercises the coordinated halt/clear/reset path --
+the DMA's only response to a fault or shutdown. A FIFO-only reset is unsafe to pulse
+while an MCDMA channel is mid-transfer (the MM2S side loses byte-count sync and the
+S2MM side loses `TLAST` framing while the MCDMA's descriptor/run state is untouched),
+so the reset is an ordered sequence: halt the MCDMA (soft-reset both directions), clear
+the datapath FIFOs (`buf_reset`), reinitialize the descriptor rings, then re-run. To
+have something real to clear, it first *strands* a short complete packet
+(`STRAND_WORDS`, with `TLAST`) in each DAC FIFO with that channel's pacer paused, so the
+packet lodges in the FIFO and never reaches S2MM. With no argument it runs the full
+sequence and expects every channel `ok` -- byte-exact after the clear. With `noclear` it
+skips the `buf_reset` pulse: the stranded packet stays in the FIFO, so the re-run drains
+that stale data first and every channel comes back short and mismatched (`corrupt`),
+proving the FIFO clear is load-bearing. It classifies each channel and checks the result
+against what was injected (`PASS`/`FAIL`), then leaves the system clean on exit.
+
 Non-root access: the register window is non-root via `pl-reg`. `u-dma-buf` exposes
 two root-owned interfaces the program touches -- the `/dev/udmabuf0` mmap node (0600)
 and the sysfs cache-sync controls `/sys/class/u-dma-buf/udmabuf0/sync_*` (0664) -- with
@@ -183,19 +206,20 @@ mode) and kept only as a register-model reference.
   claims it deterministically as `/dev/mcdma` (rather than relying on the `xilinx_dma`
   probe failing -- PetaLinux otherwise tags a standalone MCDMA as `xlnx,eth-dma`).
 
-The `rate_cfg`/`rate_sts` windows need no device-tree entry: PetaLinux auto-generates
-their nodes from the block design and `pl-reg` binds them by their cfg/sts
-compatibles, naming `/dev/rate_cfg` and `/dev/rate_sts` from the Vivado instance
-labels -- exactly the ex05 mechanism.
+The `rate_cfg`/`rate_sts`/`buf_reset` windows need no device-tree entry: PetaLinux
+auto-generates their nodes from the block design and `pl-reg` binds them by their
+cfg/sts compatibles, naming `/dev/rate_cfg`, `/dev/rate_sts` and `/dev/buf_reset` from
+the Vivado instance labels -- exactly the ex05 mechanism.
 
 ## Build integration
 
 A normal `make PROJECT=ex07_dma` produces an SD image where the block design (bitstream
-+ `.xsa`) contains the MCDMA, the AXI4-Stream datapath, and the per-channel rate
-pacers, `u-dma-buf` is built out-of-tree from `kernel_modules/` and autoloaded, the
-`boot_script.sh` chmod service is installed (by `scripts/petalinux/boot_script.sh`,
-guarded by `scripts/check/boot_script.sh`), and `mcdma-loopback`, `rate-ctl`, and
-`fault-inject` are cross-compiled into the rootfs.
++ `.xsa`) contains the MCDMA, the AXI4-Stream datapath, the per-channel rate
+pacers, and the per-channel FIFO reset, `u-dma-buf` is built out-of-tree from
+`kernel_modules/` and autoloaded, the `boot_script.sh` chmod service is installed (by
+`scripts/petalinux/boot_script.sh`, guarded by `scripts/check/boot_script.sh`), and
+`mcdma-loopback`, `rate-ctl`, `fault-inject`, and `halt-reset` are cross-compiled into
+the rootfs.
 
 ## Trying it on hardware
 
@@ -214,10 +238,11 @@ Expect one line per window, each `mode 0666`:
 pl-reg 40400000.axi_mcdma: /dev/mcdma ready (mode 0666): 0x40400000 size 0x10000, compatible "zynq-toolbox,mcdma-userspace"
 pl-reg 40410000.axi_cfg_register: /dev/rate_cfg ready (mode 0666): 0x40410000 size 0x10000, compatible "xlnx,axi-cfg-register-1.0"
 pl-reg 40420000.axi_sts_register: /dev/rate_sts ready (mode 0666): 0x40420000 size 0x10000, compatible "xlnx,axi-sts-register-1.0"
+pl-reg 40430000.axi_cfg_register: /dev/buf_reset ready (mode 0666): 0x40430000 size 0x10000, compatible "xlnx,axi-cfg-register-1.0"
 ```
 
 ```sh
-ls -l /dev/mcdma /dev/rate_cfg /dev/rate_sts /dev/udmabuf0
+ls -l /dev/mcdma /dev/rate_cfg /dev/rate_sts /dev/buf_reset /dev/udmabuf0
 ```
 
 Expect all four present and world-accessible (`crw-rw-rw-`). If `/dev/udmabuf0` is
@@ -435,25 +460,60 @@ If any transfer fails immediately with no data, suspect the TrustZone `DECERR` g
 (see [Design notes](#design-notes)). If you get `Permission denied`, the boot script
 didn't run -- check `/etc/init.d/boot-script` and fall back to `sudo mcdma-loopback`.
 
+### 8. Coordinated halt / clear / reset
+
+```sh
+halt-reset
+```
+
+The tool strands a short packet in each DAC FIFO (pacer paused), then halts the MCDMA,
+pulses `buf_reset` to flush the FIFOs, reinitializes the descriptor rings, and re-runs a
+full-length transfer. Expect every channel `ok` -- byte-exact after the mid-run clear:
+
+```
+halt-reset: 8-channel coordinated halt / FIFO clear / reinit / re-run
+mode: clear -- full sequence (expect every channel ok)
+
+MCDMA control: /dev/mcdma (pl-reg, no root)
+u-dma-buf udmabuf0: phys 0x30000000, 36864 bytes used of 4194304
+
+stranding a 64-word packet in each DAC FIFO (pacers paused)...
+  MM2S SR=0x00000002 CH_ERR=0x00000000  (data now held in the DAC FIFOs)
+
+halt: soft-resetting both MCDMA directions
+clear: pulsing buf_reset = 0xff to flush the datapath FIFOs
+reinit: rebuilding the descriptor rings with a fresh payload
+re-run: transferring the fresh payload
+
+all descriptors completed in 0.1 ms
+
+  ch  outcome     len(bytes)  desc.status  err  detail
+   0  ok               2048   0x8c000800   0
+   ...
+   7  ok               2048   0x8c000800   0
+
+PASS: every channel produced its expected outcome (ok)
+```
+
+Then prove the FIFO clear is load-bearing by skipping it:
+
+```sh
+halt-reset noclear
+```
+
+With the `buf_reset` pulse skipped, each channel's stranded 64-word packet stays in the
+FIFO, so the re-run drains that stale data first and S2MM completes early on its
+`TLAST` -- every channel comes back short (256 bytes) and mismatched, classified
+`corrupt`. That is exactly why the halt must be paired with a FIFO clear before a
+restart. The tool restores a clean state (pacers unpaused, FIFOs cleared, MCDMA reset)
+on exit, so a following `mcdma-loopback` round-trips all channels again.
+
 ## What's left
 
 The DMA foundation is proven on hardware (summarized above). What remains turns it into a
-prototype that drops cleanly onto rev_d_shim, in order:
+prototype that drops cleanly onto rev_d_shim:
 
-1. [ ] **Coordinated halt / buffer clear / reset.** Halt/reset is the DMA's *only*
-       response to a fault or shutdown -- the PS never times out on a stalled channel (a
-       sequence can wait arbitrarily long for a trigger), it halts and resets only when
-       the system is turned off. The datapath FIFOs here reset only with the global
-       peripheral reset, and rev_d_shim's per-FIFO buffer reset (`axi_sys_ctrl`
-       `cmd_buf_reset`/`data_buf_reset`) is *not* safe to pulse while an MCDMA channel is
-       mid-transfer: the MM2S side loses byte-count sync and the S2MM side loses `TLAST`
-       framing (its descriptor stalls), while the MCDMA's own descriptor/run state is left
-       untouched, so the engine and FIFO desync. Add a register-driven reset to the
-       datapath FIFOs and a `halt -> clear -> reinit -> re-run` path in software, then
-       confirm a channel comes back byte-exact after a mid-run clear -- the off/on behavior
-       rev_d_shim needs, where `hw_manager` asserts the FIFO reset only after the MCDMA has
-       halted and software reinitializes the descriptor rings before re-enabling.
-2. [ ] **Completion/error interrupt via UIO.** Aggregate the per-channel IRQs onto a
+1. [ ] **Completion/error interrupt via UIO.** Aggregate the per-channel IRQs onto a
        `generic-uio` node, block on `read()`/`poll()` of `/dev/uioN` for completion and
        error, and keep the happy path polled. Yields the completion-latency number and
        surfaces MCDMA-level completion/error events (bus/decode errors, not the silent
@@ -461,7 +521,7 @@ prototype that drops cleanly onto rev_d_shim, in order:
        IRQ, so this standalone UIO is an ex07 measurement vehicle, not a pattern to copy
        verbatim.
 
-With both done, ex07 demonstrates independent-rate prebuffered DMA, coherency-safe
+With this done, ex07 demonstrates independent-rate prebuffered DMA, coherency-safe
 transfers, coordinated halt/clear/reset, and completion/error interrupts on the exact 8+8
 topology rev_d_shim needs. Deferred and not required for the prototype: a
 throughput/latency table (sustained MB/s, max FIFO-service gap, descriptor overhead vs.
@@ -500,6 +560,12 @@ Two `s2mm_mux` (`axis_switch`) settings are easy to get wrong and worth calling 
 
 Other things worth knowing:
 
+- `axi_cfg_register` width must be a multiple of 32. The core sizes its register file
+  as `CFG_SIZE = CFG_DATA_WIDTH / AXI_DATA_WIDTH` (32), so a width below 32 integer-
+  divides to zero storage: the generate loop instantiates no flip-flops and `cfg_data`
+  ties off to 0, silently ignoring every write. `buf_reset` therefore uses a full 32-bit
+  word (low `num_ch` bits) rather than a `num_ch`-bit register, and any new narrow cfg
+  register must round its width up to 32.
 - Flow control is `TREADY`, not fill-count. A full downstream FIFO stalls the MCDMA
   channel mid-descriptor; DMA overrun of a PL FIFO is not possible. Assert `TLAST` only
   at end-of-capture (per-sample `TLAST` makes tiny one-descriptor packets).
