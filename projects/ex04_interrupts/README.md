@@ -1,3 +1,5 @@
+***Updated 2026-08-25***
+
 # Example 04: Interrupts
 
 Example 04 wires custom PL logic into the ARM cores' interrupt controller and delivers those interrupts to userspace **without root**. A CFG register in the PL lets software raise any of eight interrupt lines; the PS receives them on the `IRQ_F2P` port; and a userspace program blocks on a `/dev/user_irqN` misc device to catch each one.

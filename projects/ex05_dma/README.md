@@ -1,4 +1,4 @@
-***Updated 2026-08-24***
+***Updated 2026-08-25***
 
 # Example 05: DDR-Backed FIFO Buffers via MCDMA
 
@@ -599,15 +599,27 @@ The DMA datapath is proven on hardware (summarized above): prebuffered transfers
 independent per-channel rates, coherency safety, and coordinated halt/clear/reset all
 pass. What remains:
 
-1. [ ] **Fix MCDMA aggregated interrupt delivery.** The `pl-irq` module and the `dma-irq`
-       tool are in place here (see [section 9](#9-take-completion-on-an-interrupt)), and
-       `pl-irq`'s userspace path is proven on hardware in the ex04 interrupts example. But
-       here the MCDMA never asserts its aggregated interrupt (`/proc/interrupts` count stays
-       0), so the handler never runs, and enabling the per-channel error interrupt spuriously
-       flags every channel. Both point at the MCDMA per-channel interrupt enable/status bit
-       layout (verify against PG288 / the `xilinx_dma.c` MCDMA path). The fix is a
-       register/RTL change and a separate rebuild, after which this example inherits the
-       working module and its completion-latency measurement.
+1. [ ] **Get the MCDMA to assert its aggregated interrupt, reusing what ex04 established.**
+       The userspace half is no longer in question: ex04 now proves `pl-irq`'s full contract
+       end to end -- arm with `write(1)`, block in `poll()`/`read()`, clear the source, re-arm,
+       with level lines masked on each fire -- against a known-good, MCDMA-free interrupt
+       source, and `dma-irq` reuses exactly that handshake with SR-authoritative completion.
+       What remains is entirely PL/MCDMA-side: here `/proc/interrupts` for `pl-irq` stays at 0,
+       so `introut` never asserts at the GIC. The plan:
+       - Trust the `pl-irq` module, its device-tree binding, and the GIC mapping -- ex04
+         exercised all of that end to end; do not re-debug the module or the misc device.
+       - Fix the MCDMA interrupt programming. `dma-irq`'s per-channel `CR` enable bits and `SR`
+         reads currently borrow the AXI-DMA layout, so verify the AXI *MCDMA* per-channel
+         `CR`/`SR` bit positions and the I/O-completion threshold against PG288 and the mainline
+         `xilinx_dma.c` MCDMA path. The spurious per-channel "error" flag is the same misread
+         and should clear once the layout is right.
+       - If the line still stays low, bisect with ex04's own trick: temporarily drive the
+         OR-reduced `IRQ_F2P[0]` from a known-good, software-controllable source (an
+         `axi_cfg_register` bit, exactly as ex04 raises its lines) to confirm the aggregation
+         and device tree actually deliver to `pl-irq` in this design, then swap the real MCDMA
+         `introut` back in -- separating a PL-wiring problem from an MCDMA-register one.
+       This is a register/RTL change and a rebuild; once `introut` asserts, `dma-irq`'s existing
+       completion-latency path reports the number.
 
 Deferred and not required for the prototype: a throughput/latency table (sustained MB/s,
 max FIFO-service gap, descriptor overhead vs. chunk size) -- bandwidth has ~20x margin
