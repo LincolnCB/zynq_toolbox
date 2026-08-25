@@ -5,14 +5,14 @@ Build framework for Zynq-7000 SoC projects (AMD/Xilinx), producing bootable SD c
 
 Toolchain (Vivado + PetaLinux) runs on the host VM or in Docker, selected via `MODE` in `make_defaults.mk`.
 
-Many folders have README.md files -- look at those for quick summaries of the material.
+Many folders have README.md files -- look at those for quick summaries of the material. When writing README files, continue text on a single line instead of repeatedly breaking it across multiple lines.
 
-Comments in code should be descripted, not narrative -- do not leave artifacts from the development process (e.g. "Bug fix:", "What changed:" -- "TODO" is fine).
+Comments in code and documentation should be descripted, not narrative -- do not leave artifacts from the development process (e.g. "Bug fix:", "What changed:", "This used to..."). The exception to this is "TODO"/planned steps or notes about future work, this can and should be included in notes and comments.
 
 ---
 
 ## ⚠️ Do Not Run Builds Unprompted
-Never run `make` targets (`make`, `make sd`, `make bit`, `make xpr`, `make xsa`, `make petalinux`, `make petalinux_build`, `make cores`, `make clean_*`, etc.) unless the user explicitly asks in the current message. Builds are long, resource-intensive, and require large external tool installs — don't suggest or offer to run them.
+NEVER run `make` targets (`make`, `make sd`, `make bit`, `make xpr`, `make xsa`, `make petalinux`, `make petalinux_build`, `make cores`, `make clean_*`, etc.) unless the user explicitly asks in the current message. This includes the component scripts in `scripts/`. Builds are long, resource-intensive, and require large external tool installs — don't suggest or offer to run them.
 
 However, build files and built artifacts from the user can sometimes be found within the `tmp/` folder in this repo. Vivado utilization reports (post-synth `report_utilization -hierarchical`) land in `tmp_reports/[board]/[board_ver]/[project]/hierarchical_utilization.txt` — useful for LUT/FF/BRAM/DSP scaling numbers without rebuilding.
 

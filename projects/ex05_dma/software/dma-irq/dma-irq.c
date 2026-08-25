@@ -110,20 +110,24 @@
 #define CR_RESET        0x00000004      /* soft reset (bit 2)                      */
 #define SR_HALTED       0x00000001
 
-/* Per-channel interrupt controls (same bit positions as AXI-DMA in xilinx_dma.c).
- * The channel CR enables interrupts and sets the completion threshold; the
- * channel SR reports which fired and is write-1-to-clear. The threshold is the
- * number of completed packets before an I/O-completion interrupt asserts, so it
- * must be at least 1. */
-#define CH_CR_IOC_IRQ_EN  0x00001000    /* BIT(12) completion irq enable          */
-#define CH_CR_DLY_IRQ_EN  0x00002000    /* BIT(13) delay irq enable               */
-#define CH_CR_ERR_IRQ_EN  0x00004000    /* BIT(14) error irq enable               */
+/* Per-channel interrupt controls. MCDMA does NOT share the AXI-DMA interrupt bit
+ * layout: its per-channel enables and status live at bits 5/6/7 (see
+ * XILINX_MCDMA_IRQ_IOC/DELAY/ERR_MASK in drivers/dma/xilinx/xilinx_dma.c), not the
+ * AXI-DMA 12/13/14. The channel CR enables interrupts and sets the completion
+ * threshold; the channel SR reports which fired and is write-1-to-clear. The
+ * threshold (bits [23:16], the one field MCDMA and AXI-DMA share) is the number of
+ * completed packets before an I/O-completion interrupt asserts, so it must be at
+ * least 1. Using the AXI-DMA positions leaves the real enables clear, so the MCDMA
+ * introut line never asserts and the aggregate IRQ is never delivered. */
+#define CH_CR_IOC_IRQ_EN  0x00000020    /* BIT(5) completion irq enable           */
+#define CH_CR_DLY_IRQ_EN  0x00000040    /* BIT(6) delay irq enable                */
+#define CH_CR_ERR_IRQ_EN  0x00000080    /* BIT(7) error irq enable                */
 #define CH_CR_IRQ_EN_ALL  (CH_CR_IOC_IRQ_EN | CH_CR_ERR_IRQ_EN)
 #define CH_CR_IRQ_THRESH1 0x00010000    /* threshold = 1 in bits [23:16]          */
 
-#define CH_SR_IOC_IRQ     0x00001000
-#define CH_SR_DLY_IRQ     0x00002000
-#define CH_SR_ERR_IRQ     0x00004000
+#define CH_SR_IOC_IRQ     0x00000020    /* BIT(5)                                  */
+#define CH_SR_DLY_IRQ     0x00000040    /* BIT(6)                                  */
+#define CH_SR_ERR_IRQ     0x00000080    /* BIT(7)                                  */
 #define CH_SR_IRQ_ALL     (CH_SR_IOC_IRQ | CH_SR_DLY_IRQ | CH_SR_ERR_IRQ)
 
 #define DESC_CTRL_SOF   0x80000000      /* start-of-packet (BIT 31)               */
