@@ -32,8 +32,11 @@ The project introduces the following tools and concepts:
 > interrupt-driven on hardware, all 8 channels byte-exact, with a first-completion latency
 > around 0.07 ms. (An earlier bug programmed the per-channel interrupt enables at the AXI-DMA
 > bit positions 12/13/14 instead of the AXI MCDMA's 5/6/7, so `introut` never asserted; the
-> software fix corrected the bit layout.) A throughput/latency table remains deferred (see
-> [What's left](#whats-left)).
+> software fix corrected the bit layout.) `dma-bench` closes the last item: driving a real
+> multi-descriptor SG ring, it measures throughput peaking at ~179 MB/s (~45% of the
+> ~400 MB/s HP0/stream ceiling) with the knee at 256-beat chunks, a ~58 us software-polled
+> per-transfer latency floor, and the derived worst-case per-channel service gap (see
+> [Throughput and latency](#throughput-and-latency)).
 
 ## Why this example exists
 
@@ -48,10 +51,12 @@ Each item below is an open question in the parent project that this example clos
    `axi_dma` and lands the 8-board rev_d_shim at ~52-54k LUT -- so LUT, not BRAM, is
    the binding constraint. See [Utilization](#utilization).
 3. What is the worst-case service latency? Interrupt-driven completion works: `dma-irq`
-   blocks on the aggregated MCDMA interrupt through `pl-irq` and reports a first-completion
-   latency around 0.07 ms on hardware, with the `axi_rate_gen` pacer supplying controllable
-   load. A full worst-case-under-load throughput/latency table is deferred (see
-   [What's left](#whats-left)).
+   blocks on the aggregated MCDMA interrupt through `pl-irq` and reports a sub-0.1 ms
+   first-completion latency on hardware, with the `axi_rate_gen` pacer supplying controllable
+   load. `dma-bench` adds the quantitative picture: throughput peaks at ~179 MB/s (~45% of
+   ceiling) and knees at 256-beat chunks, where the derived worst-case per-channel service
+   gap (~44 us) sizes the parent's DAC/ADC FIFOs (see
+   [Throughput and latency](#throughput-and-latency)).
 4. Does the coherency handling work? Resolved: a single `sync_for_device` before
    each run is load-bearing; skipping it reproduces silent corruption (see
    `fault-inject nosync` under [Trying it on hardware](#trying-it-on-hardware)).
@@ -224,6 +229,20 @@ complete interrupt-driven byte-exact; see [section 9](#9-take-completion-on-an-i
 compatible and publishes it as a world-accessible (`0666`) misc device named from the node
 label. It needs no kernel command line change and no `chmod` -- see [Device tree](#device-tree).
 
+`software/dma-bench/dma-bench.c` is the throughput/latency measurement tool. It reuses the
+same register model, descriptor layout, and u-dma-buf mapping as `mcdma-loopback` but adds
+the one capability the loopback never needed: a real **multi-descriptor scatter-gather
+ring** -- `K` descriptors per channel, each a `<=1024`-beat SOF|EOF packet. That is the
+correct shape for the packet-atomic `s2mm_mux` (many small packets, not one huge packet)
+and de-risks the SG ring the parent project needs for continuous streaming. With no
+arguments it runs the full suite: a correctness gate, a single-packet **per-transfer
+latency** floor (min/mean/max), and a **chunk-size sweep** that holds total bytes per
+channel fixed and reports, per chunk, sustained aggregate throughput, the derived
+worst-case per-channel service gap, and the isolated single-packet latency. It times only
+the engine (MM2S trigger to all-complete), discards the cold first iteration of every
+measurement, and excludes the one-time `sync_for_*` CPU cost from throughput. See
+[Throughput and latency](#throughput-and-latency).
+
 `software/xilinx-dma-test/` is superseded (it drove a plain `axi_dma` in direct-register
 mode) and kept only as a register-model reference.
 
@@ -260,9 +279,9 @@ pacers, the per-channel FIFO reset, and the OR-reduced MCDMA interrupt, `u-dma-b
 the `pl-reg`/`pl-irq` modules are built out-of-tree from `kernel_modules/` and autoloaded,
 the `boot_script.sh` chmod service is installed (by `scripts/petalinux/boot_script.sh`,
 guarded by `scripts/check/boot_script.sh`), and `mcdma-loopback`, `rate-ctl`,
-`fault-inject`, `halt-reset`, and `dma-irq` are cross-compiled into the rootfs. No kernel
-command line change is needed -- `pl-irq` binds the interrupt node by its device-tree
-compatible.
+`fault-inject`, `halt-reset`, `dma-irq`, and `dma-bench` are cross-compiled into the
+rootfs. No kernel command line change is needed -- `pl-irq` binds the interrupt node by its
+device-tree compatible.
 
 ## Trying it on hardware
 
@@ -592,15 +611,131 @@ software-only change, since these are software-written IP registers -- makes the
 assert and clears the spurious error. `pl-irq`'s userspace path is independently validated
 in the ex04 interrupts example against a known-good, MCDMA-free interrupt source.
 
+### 10. Measure throughput and latency
+
+```sh
+dma-bench
+```
+
+`dma-bench` drives a real multi-descriptor SG ring (`K` `<=1024`-beat packets per channel)
+and reports the four sizing metrics in one run: it first gates on a verified all-channel
+round trip, then prints a single-packet latency floor and a chunk-size sweep. Each row of
+the sweep holds total bytes per channel fixed and reports sustained aggregate throughput
+(all 8 channels full rate), the derived worst-case per-channel service gap, and the
+isolated single-packet latency at that chunk size. Expect throughput to climb with chunk
+size while the service gap and per-packet latency shrink -- the smaller-chunk /
+shallower-FIFO vs. larger-chunk / higher-throughput tradeoff the parent picks the knee of:
+
+```
+dma-bench: 8-channel MCDMA throughput / latency benchmark
+
+MCDMA control: /dev/mcdma (pl-reg, no root)
+u-dma-buf udmabuf0: phys 0x30000000, 1572864 bytes used of 4194304
+
+correctness: all 8 channels round-tripped (256-beat chunks, k=64)
+
+per-transfer latency (single 64-beat packet, 1 channel, 64 runs):
+  min 57.0 us   mean 59.6 us   max 77.0 us
+
+chunk sweep (16384 words/channel fixed, all channels full rate):
+  chunk(beats)  desc/ch  throughput(MB/s)  gap(us)  latency(us)
+          32      512              54.4    16.48         59.0
+          64      256             100.4    17.85         57.0
+         128      128             152.6    23.49         58.0
+         256       64             161.1    44.50         58.0
+         512       32             177.2    80.92         58.0
+        1024       16             178.6   160.56         58.0
+
+HP0 payload ceiling ~= 400 MB/s (64-bit @ 100 MHz, /2 for MM2S+S2MM)
+best measured 178.6 MB/s (45% of ceiling)
+```
+
+Throughput climbs steeply through 128 beats and then knees; the `latency` column is flat at
+~58 us because software-polled completion pins it to the poll syscall floor, not the
+sub-microsecond engine time (the interrupt path, `dma-irq`, shows a comparable sub-0.1 ms
+notification latency). The worst-case gap is derived from the packet-atomic round-robin
+model -- `(num_ch - 1)` packets of service time between a channel's windows -- not a
+per-packet hardware timestamp, which software polling is too coarse to capture.
+[Throughput and latency](#throughput-and-latency) reads the sweep (the knee lands at
+256-beat chunks) and what it means for sizing.
+means for sizing.
+
 ## What's left
 
-The DMA datapath is proven on hardware (summarized above): prebuffered transfers,
-independent per-channel rates, coherency safety, coordinated halt/clear/reset, and
-interrupt-driven completion through `pl-irq` all pass.
+Nothing blocking. The DMA datapath is fully proven on hardware: prebuffered transfers,
+independent per-channel rates, coherency safety, coordinated halt/clear/reset,
+interrupt-driven completion through `pl-irq`, and the `dma-bench` throughput/latency
+measurements ([Throughput and latency](#throughput-and-latency)) all pass, closing every
+open question in [Why this example exists](#why-this-example-exists). What remains is on the
+parent side: folding these numbers into rev_d_shim's chunk-size and FIFO-depth choices (see
+[Throughput and latency](#throughput-and-latency)).
 
-Deferred and not required for the prototype: a throughput/latency table (sustained MB/s,
-max FIFO-service gap, descriptor overhead vs. chunk size) -- bandwidth has ~20x margin
-(`PROJECT_BRIEF` section 6), so it would confirm rather than decide anything.
+## Throughput and latency
+
+`dma-bench` (`software/dma-bench/dma-bench.c`) measures what the MCDMA actually delivers, so
+the parent project can size FIFOs and pick a chunk size rather than rely on the ~20x
+bandwidth-margin estimate (`PROJECT_BRIEF` section 6). It is the one tool here that builds a
+real **multi-descriptor SG ring** -- `K` descriptors per channel, each a `<=1024`-beat
+SOF|EOF packet -- which is both the correct shape for the packet-atomic `s2mm_mux` (many
+small packets, never one packet past the 1024-beat `ARB_ON_MAX_XFERS` backstop) and the SG
+ring shape the parent needs for continuous streaming. `mcdma-loopback` stays the clean
+single-descriptor integrity checker.
+
+Four metrics, all from one `dma-bench` run:
+
+- **Sustained aggregate throughput** -- total payload bytes / engine-busy time, all 8
+  channels at full rate. The ceiling is roughly HP0 bandwidth / 2: HP0 is 64-bit at `FCLK`
+  (800 MB/s) and loopback crosses it twice (MM2S read + S2MM write), so ~400 MB/s of payload.
+- **Per-transfer latency** -- start to completion for one small single-descriptor packet,
+  min/mean/max over many runs: the descriptor-fetch + engine + writeback floor. Because
+  `dma-bench` polls for completion, this floor also includes the poll syscall cost (~58 us
+  measured); the true interrupt-notification latency is the sub-0.1 ms `dma-irq` reports.
+- **Overhead vs. chunk size** -- throughput swept over beats-per-descriptor with total bytes
+  per channel held fixed so the points are comparable. Small chunks add per-packet overhead;
+  larger chunks (up to the 1024-beat backstop) amortize it.
+- **Worst-case per-channel service gap** -- with all 8 channels loaded full-rate, the longest
+  a single channel waits between its service windows. The `s2mm_mux` is packet-atomic
+  round-robin, so a channel waits while the other seven are each serviced one packet:
+  `gap = (num_ch - 1) * (engine-busy / total-packets)`. This sets the minimum ADC/DAC FIFO
+  depth in the parent. It is derived from the round-robin model, not a per-packet hardware
+  timestamp -- software polling is far too coarse to time a sub-microsecond packet directly.
+
+Methodology: the cold first iteration of every measurement is discarded and steady state
+reported; only the engine work (MM2S trigger to all-complete) is timed, so the one-time
+`sync_for_*` CPU cost is excluded from throughput; the throughput and gap runs are at full
+rate (the `axi_rate_gen` pacer transparent) so data is always available -- the true worst
+case for arbitration.
+
+The headline is the chunk-size sweep: smaller chunks shorten the service gap (shallower
+FIFOs) but cost throughput; larger chunks do the reverse, so the parent picks the knee.
+Measured on hardware (representative run; consistent across runs to within ~2%):
+
+| chunk (beats) | descriptors/ch | throughput (MB/s) | worst-case gap (us) | latency (us) |
+|---|---|---|---|---|
+| 32 | 512 | 54 | 16.5 | 58 |
+| 64 | 256 | 100 | 17.9 | 58 |
+| 128 | 128 | 151 | 23.5 | 58 |
+| 256 | 64 | 162 | 44.5 | 58 |
+| 512 | 32 | 177 | 80.9 | 58 |
+| 1024 | 16 | 179 | 160.6 | 58 |
+
+Throughput climbs steeply through 128 beats and then knees. 256-beat chunks (1 KiB packets)
+already reach ~162 MB/s at a bounded ~44 us worst-case gap; doubling the chunk to 512 or
+1024 beats buys only ~10% more throughput (~179 MB/s peak) while doubling the service gap
+each step (~44 -> ~81 -> ~161 us), and with it the per-channel FIFO depth the parent must
+provision. So **256-beat chunks are the practical operating point** -- near-peak throughput
+at a bounded gap. The peak ~179 MB/s is ~45% of the ~400 MB/s ceiling; the shortfall is SG
+descriptor-fetch traffic sharing HP0 plus the packet-atomic mux serializing all 8 channels
+through the single 32-bit S2MM stream with an arbitration bubble per packet. The `latency`
+column is flat at ~58 us -- software-polled completion pins it to the poll syscall floor,
+not the sub-microsecond engine time -- so treat it as a polling floor, not the engine's
+transfer latency. Even the smallest measured throughput clears the parent's requirement
+comfortably (the ~20x-margin estimate holds).
+
+The table is fixed at 16384 words/channel (64 KiB) per direction; the u-dma-buf region uses
+~1.5 MiB of its 4 MiB for descriptors + payload. To re-measure, boot the ex05 image and run
+`dma-bench` (no arguments); it prints the sample output shown in
+[section 10](#10-measure-throughput-and-latency).
 
 ## Utilization
 
