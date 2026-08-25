@@ -1,4 +1,4 @@
-***Updated 2026-07-20***
+***Updated 2026-08-25***
 
 # Installing the tools using Docker
 
@@ -188,7 +188,7 @@ This repo uses the AMD/Xilinx FPGA toolchain to build projects for the chips in 
 
 These can be installed together from the AMD unified installer ([2024.2 download page](https://www.xilinx.com/support/download/index.html/content/xilinx/en/downloadNav/vivado-design-tools/2024-2.html) -- select "AMD Unified Installer for FPGAs & Adaptive SoCs 2024.2: Linux Self Extracting Web Installer"). You'll need a free AMD account to download it. The same installer binary is used for both products, once per product, each writing into its own volume.
 
-1. Install Vivado, into the `vivado-tools` volume (**replace the path with the real onesto that file**):
+1. Install Vivado, into the `vivado-tools` volume (**replace the path with the real path to that file**):
 
    ```bash
    ./scripts/docker/install-vivado.sh /path/to/FPGAs_AdaptiveSoCs_Unified_2024.2.bin

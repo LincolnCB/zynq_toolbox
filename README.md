@@ -1,4 +1,4 @@
-***Updated 2026-08-06***
+***Updated 2026-08-25***
 
 [![DOI](https://zenodo.org/badge/846674502.svg)](https://doi.org/10.5281/zenodo.20802348)
 
@@ -99,7 +99,7 @@ The entire build process is scripted by the `Makefile` and various shell and Tcl
 make
 ```
 
-This will output two compressed files in the `out/snickerdoodle_black/1.0/zynq_toolbox/` directory:
+This will output two compressed files in the `out/snickerdoodle_black/1.0/rev_d_shim/` directory:
 
 - `BOOT.tar.gz`: The compressed boot partition, which contains the Linux kernel, device tree, and boot scripts.
 - `rootfs.tar.gz`: The compressed root filesystem, which contains all of the Linux files.
@@ -116,7 +116,7 @@ Either way, partition the SD card as follows:
 - One partition of type `fat32` with a size of 1 GiB, labeled `BOOT`. Make sure this has 4 MiB of unallocated free space before it.
 - One partition of type `ext4` with a size of whatever is left on the SD card, labeled `RootFS`.
 
-Once the SD card is partitioned, you can uncompress the `BOOT.tar.gz` and `rootfs.tar.gz` files into the respective partitions. If you're on Linux (VM or Docker host) and using the default `BOARD`, `BOARD_VER`, and `PROJECT` (`snickerdoodle_black`, `1.0`, `zynq_toolbox`), you can do this with the following [target](#script-targets) (may need to eject and re-insert the SD card after partitioning) -- run this from wherever you did the partitioning (your VM shell for the VM path, your host shell for the Docker path, not inside the container):
+Once the SD card is partitioned, you can uncompress the `BOOT.tar.gz` and `rootfs.tar.gz` files into the respective partitions. If you're on Linux (VM or Docker host) and using the default `BOARD`, `BOARD_VER`, and `PROJECT` (`snickerdoodle_black`, `1.0`, `rev_d_shim`), you can do this with the following [target](#script-targets) (may need to eject and re-insert the SD card after partitioning) -- run this from wherever you did the partitioning (your VM shell for the VM path, your host shell for the Docker path, not inside the container):
 
 ```
 make write_sd
@@ -141,25 +141,25 @@ again with an optional `MOUNT_DIR` argument to specify the mount point of the SD
 If you have some other mounting scheme (or you're on macOS/Windows), you'll need to manually uncompress the files into the appropriate partitions with `tar`:
 
 ```
-tar -xzf out/snickerdoodle_black/1.0/BOOT.tar.gz -C [BOOT_mountpoint]
-tar -xzf out/snickerdoodle_black/1.0/rootfs.tar.gz -C [RootFS_mountpoint]
+tar -xzf out/snickerdoodle_black/1.0/rev_d_shim/BOOT.tar.gz -C [BOOT_mountpoint]
+tar -xzf out/snickerdoodle_black/1.0/rev_d_shim/rootfs.tar.gz -C [RootFS_mountpoint]
 ```
 
 If your board isn't the Snickerdoodle Black, or you want to modify the project or build your own, you should read the [Example projects](#example-projects) section to get a sense of how everything works.
 
 ## Building a different board, board version, or project
 
-The Makefile is set up to read variables for `BOARD`, `BOARD_VER`, and `PROJECT` from the command line. These can be used to build with a different board, board version, or project. For example, to build the `shim_controller_v0` project for version `1.0` of the Red Pitaya `sdrlab_122_16` board, you can run:
+The Makefile is set up to read variables for `BOARD`, `BOARD_VER`, and `PROJECT` from the command line. These can be used to build with a different board, board version, or project. For example, to build the `ex01_basics` project for version `1.0` of the Red Pitaya `sdrlab_122_16` board, you can run:
 
 ```
-make BOARD=sdrlab_122_16 BOARD_VER=1.0 PROJECT=shim_controller_v0
+make BOARD=sdrlab_122_16 BOARD_VER=1.0 PROJECT=ex01_basics
 ```
 
 Boards and board versions are defined in the `boards/` directory, where the board files for a given board are given under `boards/[BOARD]/board_files/[BOARD_VER]/`. Projects are defined based on folders in the `projects/` directory, where each project has its own folder. Note that projects need to be configured to work with a specific board and board version -- this is done under `projects/[PROJECT]/cfg/[BOARD]/[BOARD_VER]/`, and requires configuration files for `petalinux` and the Vivado Xilinx Design Constraint `xdc` files. You can read more about the requirements for this configuration in the `projects/` directory's README file.
 
 ## Building PetaLinux offline
 
-If you set up the PetaLinux offline cache in either [your VM](./documentation/vm_install.md#optional-recommended-petalinux-offline-build-setup), you can include the `OFFLINE=true` variable in the `make` command to use the local files instead of downloading them. For example, to build the Rev D Shim firmware for the Snickerdoodle Black with offline PetaLinux, you can run:
+If you set up the PetaLinux offline cache (in [your VM](./documentation/vm_install.md#optional-recommended-petalinux-offline-build-setup) or [Docker container](./documentation/docker_install.md#optional-recommended-petalinux-offline-build-setup)), you can include the `OFFLINE=true` variable in the `make` command to use the local files instead of downloading them. For example, to build the Rev D Shim firmware for the Snickerdoodle Black with offline PetaLinux, you can run:
 
 ```
 make OFFLINE=true
@@ -241,7 +241,7 @@ This example project demonstrates some configuration options for the PS's interf
 
 # Testing
 
-Testing is done using [cocotb](https://www.cocotb.org/), a Python-based testbench framework for digital design verification. It allows you to write tests in Python and run them in a simulator, such as Verilator. To install the tools needed for testing, see [Optional: Running tests](#optional-running-tests) above (covers both the VM and Docker paths).
+Testing is done using [cocotb](https://www.cocotb.org/), a Python-based testbench framework for digital design verification. It allows you to write tests in Python and run them in a simulator, such as Verilator. To install the tools needed for testing, see the testing setup for [your VM](./documentation/vm_install.md#optional-running-tests) or [Docker container](./documentation/docker_install.md#optional-cocotb-and-verilator).
 
 To run tests for a specific core in a project, you can use the `test_core.sh` script in the `scripts/make/` directory with the `project`, `vendor`, and `core` arguments. For example, to test the `fifo_sync` core from `base`, you can run:
 

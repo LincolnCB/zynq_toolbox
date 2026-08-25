@@ -1,12 +1,12 @@
-***Updated 2025-07-01***
+***Updated 2026-08-25***
 # Kernel modules
 
-This directory contains source code for custom kernel modules that can be added to the Linux kernel built from PetaLinux. These are used with the `scripts/petalinux/kernel_modules.sh` script and can be added to projects by adding the module name to the file
+This directory contains source code for custom kernel modules that can be added to the Linux kernel built from PetaLinux. They're picked up by the `scripts/petalinux/kernel_modules.sh` script, which builds every module directory found under a project's `kernel_modules/` folder. To add one to a project, place (or symlink) the module directory under
 ```
-projects/[project_name]/cfg/[board_name]/[board_version]/petalinux/[petalinux_version]/kernel_modules
+projects/[project_name]/kernel_modules/
 ```
 
-These modules will be built "out-of-tree" and included in the PetaLinux build, but still need to be enabled with `modprobe` or `insmod` after the board is booted.
+These modules are built "out-of-tree" and included in the PetaLinux build. The build also enables `KERNEL_MODULE_AUTOLOAD` for each module, so they load automatically at boot -- you don't need to `modprobe` or `insmod` them by hand.
 
 ## Modules here
 
@@ -23,7 +23,7 @@ Within this directory, the source code is composed of a kernel `Makefile`, a top
 
 ### Example kernel module added
 
-For instance, getting the `u-dma-buf` kernel module from its [GitHub repo]([https://github.com/ikwzm/udmabuf/tree/master]), I directly copied the `Makefile` and `u-dma-buf.c` files into the `petalinux/` directory. The only change needed was that I removed the `Makefile`'s lines for in-tree kernel variables and made sure the `obj-m` variable was properly handled (read up on kernel module Makefiles for more information on this).
+For instance, getting the `u-dma-buf` kernel module from its [GitHub repo](https://github.com/ikwzm/udmabuf/tree/master), I directly copied the `Makefile` and `u-dma-buf.c` files into the `petalinux/` directory. The only change needed was that I removed the `Makefile`'s lines for in-tree kernel variables and made sure the `obj-m` variable was properly handled (read up on kernel module Makefiles for more information on this).
 ```makefile
 obj-m  += u-dma-buf.o
 ```

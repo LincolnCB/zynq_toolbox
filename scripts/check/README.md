@@ -1,10 +1,10 @@
-***Updated 2025-06-27***
+***Updated 2026-08-25***
 
 # `check` scripts
 
-These scripts are used to check required files, directories, and environment variables as part of the build process, giving the user feedback on what is missing or misconfigured.They're typically run by the Makefile or other scripts to ensure that the environment is set up correctly before proceeding with the build.
+These scripts are used to check required files, directories, and environment variables as part of the build process, giving the user feedback on what is missing or misconfigured. They're typically run by the Makefile or other scripts to ensure that the environment is set up correctly before proceeding with the build.
 
-All of thesre scripts check for specific conditions for the step in question. They will also run a minimum set of previous checks required for the step to make sense, and can optionally run ALL previous checks if the `--full` flag is provided. The two exceptions are `board_files.sh` and `petalinux_offline.sh`, which do not have a `--full` option because they are not dependent on any previous checks.
+All of these scripts check for specific conditions for the step in question. They will also run a minimum set of previous checks required for the step to make sense, and can optionally run ALL previous checks if the `--full` flag is provided. The two exceptions are `board_files.sh` and `petalinux_offline.sh`, which do not have a `--full` option because they are not dependent on any previous checks.
 
 ---
 
@@ -165,7 +165,7 @@ Check that the required PetaLinux offline directories (`downloads` and `sstate`)
 - None
 
 #### `--full` check:
-- [`petalinux_project.sh`](#petalinux_projectsh) `--full`
+- None (takes no arguments)
 
 ---
 

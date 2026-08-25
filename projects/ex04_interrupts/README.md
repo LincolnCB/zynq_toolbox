@@ -2,9 +2,9 @@
 
 # Example 04: Interrupts
 
-Example 04 wires custom PL logic into the ARM cores' interrupt controller and delivers those interrupts to userspace **without root**. A CFG register in the PL lets software raise any of eight interrupt lines; the PS receives them on the `IRQ_F2P` port; and a userspace program blocks on a `/dev/user_irqN` misc device to catch each one.
+Example 04 wires custom PL logic into the ARM cores' interrupt controller and delivers those interrupts to userspace without root. A CFG register in the PL lets software raise any of eight interrupt lines; the PS receives them on the `IRQ_F2P` port; and a userspace program blocks on a `/dev/user_irqN` misc device to catch each one.
 
-Delivery uses the repo's own `pl-irq` kernel module -- the interrupt sibling of the `pl-reg` register driver from the device-driver example. `pl-irq` binds to the interrupt node by a private device-tree `compatible`, so (unlike the in-tree generic UIO driver) it needs **no kernel command-line parameter** and **no chmod**: it names each device after its Vivado label and creates it mode `0666`. The older generic-UIO-plus-bootargs approach still works and is documented at the end as an alternative.
+Delivery uses the repo's own `pl-irq` kernel module -- the interrupt sibling of the `pl-reg` register driver from the device-driver example. `pl-irq` binds to the interrupt node by a private device-tree `compatible`, so (unlike the in-tree generic UIO driver) it needs no kernel command-line parameter and no chmod: it names each device after its Vivado label and creates it mode `0666`. The older generic-UIO-plus-bootargs approach still works and is documented at the end as an alternative.
 
 The project introduces the following tools and concepts:
 - Driving the PL-to-PS interrupt lines (`IRQ_F2P`)
@@ -28,9 +28,9 @@ Writing a bit in the CFG register therefore drives the corresponding fabric inte
 
 Two out-of-tree kernel modules do the work, both autoloaded from the project's `kernel_modules/` (symlinks to `examples/kernel_modules/pl-reg` and `.../pl-irq`):
 
-- **pl-reg** claims the CFG register and publishes it as `/dev/axi_irq` (mode `0666`), named from the block's Vivado instance label. Software drives the interrupt bits with a plain `mmap` -- no `/dev/mem`, no `sudo`. This is the same module the device-driver example is built around.
+- `pl-reg` claims the CFG register and publishes it as `/dev/axi_irq` (mode `0666`), named from the block's Vivado instance label. Software drives the interrupt bits with a plain `mmap` -- no `/dev/mem`, no `sudo`. This is the same module the device-driver example is built around.
 
-- **pl-irq** claims each interrupt node and publishes it as `/dev/user_irq0`..`/dev/user_irq7` (mode `0666`), again named from the node label. Its userspace contract mirrors UIO: `open`, `write()` a `1` to arm, `poll()`/`read()` to block until the line fires, then clear the source and `write()` `1` to re-arm. The handler masks the line at the GIC on each fire, so a level line delivers exactly one interrupt per pulse.
+- `pl-irq` claims each interrupt node and publishes it as `/dev/user_irq0`..`/dev/user_irq7` (mode `0666`), again named from the node label. Its userspace contract mirrors UIO: `open`, `write()` a `1` to arm, `poll()`/`read()` to block until the line fires, then clear the source and `write()` `1` to re-arm. The handler masks the line at the GIC on each fire, so a level line delivers exactly one interrupt per pulse.
 
 Because both modules carry their own `of_match_table`, the kernel binds them automatically from the device tree -- there is no kernel command line to maintain and no boot-time `chmod`.
 
@@ -57,8 +57,8 @@ The config patch (`config.patch`) only switches the image to SD/EXT4 -- there is
 
 - it `mmap`s the CFG register through `/dev/axi_irq` (pl-reg) to raise interrupts;
 - it opens the eight `/dev/user_irqN` (pl-irq) devices and arms them;
-- one `poll()` waits on **stdin and all eight interrupt fds at once** -- a command raises a line, and the same `poll()` wakes on the resulting interrupt, prints it, clears the source bit, and re-arms;
-- on startup it runs a **self-test** that pulses each line and confirms the interrupt reaches userspace, printing a per-line pass/fail table.
+- one `poll()` waits on stdin and all eight interrupt fds at once -- a command raises a line, and the same `poll()` wakes on the resulting interrupt, prints it, clears the source bit, and re-arms;
+- on startup it runs a self-test that pulses each line and confirms the interrupt reaches userspace, printing a per-line pass/fail table.
 
 At the prompt you can `set <n>`, `set_all`, `status`, re-run `test`, or `exit` (`help` lists them). Because `pl-irq` masks a line when it fires, each `set` yields exactly one interrupt regardless of trigger type; the counts should track `/proc/interrupts`.
 
@@ -79,11 +79,11 @@ interrupt-test                    # no sudo
 
 Before `pl-irq`, this example used the kernel's in-tree `uio_pdrv_genirq` driver, which publishes an interrupt node as `/dev/uioN`. It still works and is worth knowing, but it costs more manual maintenance:
 
-- The node's `compatible` must be `"generic-uio"`, and the driver only binds nodes whose compatible matches its `of_id` **module parameter**, which defaults to nothing. So the kernel command line must carry `uio_pdrv_genirq.of_id="generic-uio"`. That is set through the PetaLinux config patch by turning off the auto-generated bootargs and giving an explicit `CONFIG_SUBSYSTEM_USER_CMDLINE`. This edit lives apart from the block design and is easy to drop or overwrite when bootargs are regenerated -- the reason `pl-irq` exists.
+- The node's `compatible` must be `"generic-uio"`, and the driver only binds nodes whose compatible matches its `of_id` module parameter, which defaults to nothing. So the kernel command line must carry `uio_pdrv_genirq.of_id="generic-uio"`. That is set through the PetaLinux config patch by turning off the auto-generated bootargs and giving an explicit `CONFIG_SUBSYSTEM_USER_CMDLINE`. This edit lives apart from the block design and is easy to drop or overwrite when bootargs are regenerated -- the reason `pl-irq` exists.
 - `CONFIG_UIO_PDRV_GENIRQ` must be enabled in the kernel (a `kernel_config.cfg` fragment).
 - The `/dev/uioN` node is created root-owned `0600` with no mode knob, so a non-root program needs a boot-time `chmod` (or `sudo`).
 
-> Note from when this example used that path: setting the extra bootarg through the *DTG Settings -> Kernel Bootargs* menu produced malformed quotes in the generated command line and broke the device-tree compile. Setting the full command line explicitly avoided that.
+> Note: setting the extra bootarg through the *DTG Settings -> Kernel Bootargs* menu produces malformed quotes in the generated command line and breaks the device-tree compile. Set the full command line explicitly to avoid that.
 
 Use the generic-UIO route when you specifically need it (for instance, a feature that genuinely requires kernel-command-line control); otherwise `pl-irq` is the lower-maintenance default used here.
 

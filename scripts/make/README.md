@@ -1,7 +1,7 @@
-***Updated 2026-07-28***
+***Updated 2026-08-25***
 # `make` scripts
 
-These scripts are mainly used by the Makefile to perform various tasks related to the larger build process. The scripts are primarily shell scripts for processing and managing files safely, utlizing the `check/` scripts to give good error messages if something is missing or misconfigured. Some also extract some information from the source code to be used in the Makefile or other scripts, adding flexibility.
+These scripts are mainly used by the Makefile to perform various tasks related to the larger build process. The scripts are primarily shell scripts for processing and managing files safely, utilizing the `check/` scripts to give good error messages if something is missing or misconfigured. Some also extract some information from the source code to be used in the Makefile or other scripts, adding flexibility.
 
 ---
 

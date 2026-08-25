@@ -1,67 +1,33 @@
 // SPDX-License-Identifier: GPL-2.0
-/*
- * pl-irq -- non-root, doorbell access to a PL interrupt line, bound AUTOMATICALLY
- *           by device-tree compatible (no kernel command line to maintain).
- *
- * This is the interrupt sibling of pl-reg. Where pl-reg gives userspace non-root
- * mmap access to a PL register window, pl-irq gives userspace a non-root way to
- * *wait* for a PL interrupt: open the device, block in poll()/read() until the
- * interrupt fires, then write() to re-arm it. It exposes exactly the small slice
- * of UIO's behavior a program actually uses.
- *
- * ---------------------------------------------------------------------------
- * Why this exists instead of the in-tree generic-uio
- * ---------------------------------------------------------------------------
- * The kernel already ships uio_pdrv_genirq, which does this generically. But it
- * only binds to a node whose `compatible` matches its `of_id` MODULE PARAMETER,
- * which defaults to nothing -- so using it means adding
- *
- *     uio_pdrv_genirq.of_id="generic-uio"
- *
- * to the kernel command line, then a matching `compatible = "generic-uio"` node.
- * That command-line edit is a maintenance hazard: it lives apart from the block
- * design and the rest of the project config, and is easy to drop or overwrite
- * when the bootargs are regenerated. (ex04 documents that approach as an alternative,
- * for cases that genuinely need command-line control.)
- *
- * pl-irq takes pl-reg's approach instead: it carries its own of_match_table, so
- * the kernel binds it to the node automatically with NO command-line change. The
- * project's device tree just gives the interrupt node
- *
- *     mcdma_irq: mcdma_irq {
- *         compatible = "zynq-toolbox,pl-irq";
- *         interrupt-parent = <&intc>;
- *         interrupts = <0 29 4>;      // GIC SPI 61, level-high
- *     };
- *
- * and pl-irq claims it, names the /dev entry after the node's Vivado label
- * (mcdma_irq -> /dev/mcdma_irq), and creates it world-accessible.
- *
- * ---------------------------------------------------------------------------
- * Non-root, no udev
- * ---------------------------------------------------------------------------
- * Like pl-reg, this uses a miscdevice with .mode = 0666, so an ordinary user can
- * open it with no root and no udev rule. (The in-tree generic-uio creates its
- * /dev/uioN node root-owned 0600 with no mode knob, so it would still need a
- * boot-time chmod; the misc-device route avoids that entirely.)
- *
- * ---------------------------------------------------------------------------
- * How userspace uses it (see software/dma-irq)
- * ---------------------------------------------------------------------------
- *     fd = open("/dev/mcdma_irq", O_RDWR);     // no root needed
- *     uint32_t one = 1; write(fd, &one, 4);    // arm the interrupt
- *     struct pollfd p = { fd, POLLIN, 0 };
- *     poll(&p, 1, timeout);                    // block until it fires
- *     uint32_t count; read(fd, &count, 4);     // consume; count = total so far
- *     ... clear the device's own interrupt source ...
- *     write(fd, &one, 4);                      // re-arm for the next one
- *
- * The semantics match uio_pdrv_genirq: the handler masks the IRQ at the GIC on
- * each fire (so a level line does not re-fire), read() returns the running event
- * count and blocks until it changes, and write() of 1 re-enables the IRQ (0
- * disables it). Because the line is only a doorbell, userspace still has to clear
- * the originating device's own interrupt status before re-arming.
- */
+//
+// pl-irq -- non-root notification when a PL interrupt fires (ex04).
+//
+// The interrupt sibling of pl-reg. It lets userspace wait for a PL interrupt
+// without root: open the device, block in poll()/read() until the interrupt
+// fires, then write() to re-arm it -- the small slice of UIO that programs
+// actually use.
+//
+// Binding: the kernel already ships uio_pdrv_genirq for this, but it only binds
+// to a node matching its `of_id` module parameter, which means adding
+// uio_pdrv_genirq.of_id="generic-uio" to the kernel command line -- a setting
+// that lives apart from the block design and is easy to lose when the bootargs
+// are regenerated. pl-irq instead carries its own of_match_table and binds by a
+// private compatible ("zynq-toolbox,pl-irq") straight from the project's device
+// tree, with no command-line change. ex04 documents the generic-uio route as an
+// alternative. Each /dev entry is named after the node's Vivado label
+// (mcdma_irq -> /dev/mcdma_irq), same as pl-reg.
+//
+// Non-root: the /dev entry is a miscdevice created world-accessible (0666), so
+// an ordinary user can open it with no root and no udev rule -- unlike the
+// in-tree generic-uio, whose /dev/uioN is root-owned 0600 and would need a
+// boot-time chmod.
+//
+// Semantics match uio_pdrv_genirq: the handler masks the IRQ on each fire (so a
+// level line won't re-fire), read() returns the running event count and blocks
+// until it changes, and write(1)/write(0) re-enable/disable the line. The line
+// only signals that an interrupt fired, not what caused it, so userspace still
+// clears the originating device's own interrupt status before re-arming. The
+// userspace side is software/dma-irq.
 
 #include <linux/module.h>
 #include <linux/platform_device.h>
@@ -79,11 +45,11 @@
 #include <linux/wait.h>
 
 #define DRIVER_NAME "pl-irq"
-#define DEV_MODE    0666               /* world-accessible: no root, no udev */
+#define DEV_MODE    0666               // world-accessible: no root, no udev
 
-/* One of these per bound node. `count` is the running interrupt total (the value
- * read() returns); `disabled` tracks whether the IRQ is currently masked so
- * enable/disable stay balanced across the handler and write(). */
+// One of these per bound node. `count` is the running interrupt total (the value
+// read() returns); `disabled` tracks whether the IRQ is currently masked so
+// enable/disable stay balanced across the handler and write().
 struct pl_irq_dev {
 	int                irq;
 	atomic_t           count;
@@ -94,15 +60,15 @@ struct pl_irq_dev {
 	char               name[48];
 };
 
-/* Per-open cursor: remembers the last count this fd saw, so each reader blocks
- * until a NEW interrupt arrives (matching UIO's per-open event tracking). */
+// Per-open cursor: remembers the last count this fd saw, so each reader blocks
+// until a NEW interrupt arrives (matching UIO's per-open event tracking).
 struct pl_irq_listener {
 	struct pl_irq_dev *pi;
 	s32                last;
 };
 
-/* Top-half handler: mask the IRQ so a level line will not re-fire until userspace
- * re-arms, bump the count, and wake any blocked readers. */
+// Top-half handler: mask the IRQ so a level line will not re-fire until userspace
+// re-arms, bump the count, and wake any blocked readers.
 static irqreturn_t pl_irq_handler(int irq, void *data)
 {
 	struct pl_irq_dev *pi = data;
@@ -120,6 +86,7 @@ static irqreturn_t pl_irq_handler(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+// Start each fd's cursor at the current count, so it only sees future interrupts
 static int pl_irq_open(struct inode *inode, struct file *file)
 {
 	struct miscdevice *misc = file->private_data;
@@ -140,8 +107,8 @@ static int pl_irq_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-/* Return the running interrupt count (4 bytes). Blocks until the count changes
- * since this fd last read it, unless O_NONBLOCK. */
+// Return the running interrupt count (4 bytes). Blocks until the count changes
+// since this fd last read it, unless O_NONBLOCK.
 static ssize_t pl_irq_read(struct file *file, char __user *buf, size_t count,
 			   loff_t *ppos)
 {
@@ -171,6 +138,7 @@ static ssize_t pl_irq_read(struct file *file, char __user *buf, size_t count,
 	return sizeof(cur);
 }
 
+// Readable once a new interrupt has arrived since this fd last read
 static __poll_t pl_irq_poll(struct file *file, poll_table *wait)
 {
 	struct pl_irq_listener *l = file->private_data;
@@ -182,7 +150,7 @@ static __poll_t pl_irq_poll(struct file *file, poll_table *wait)
 	return 0;
 }
 
-/* Arm (write 1) or mask (write 0) the IRQ, keeping enable/disable balanced. */
+// Arm (write 1) or mask (write 0) the IRQ, keeping enable/disable balanced
 static ssize_t pl_irq_write(struct file *file, const char __user *buf,
 			    size_t count, loff_t *ppos)
 {
@@ -217,11 +185,8 @@ static const struct file_operations pl_irq_fops = {
 	.write   = pl_irq_write,
 };
 
-/* Recover this node's Vivado instance label (e.g. "mcdma_irq") from the DTB so
- * the /dev entry can be named after it, exactly as pl-reg does. PetaLinux emits
- * the instance name as the DTS label and the compiler (-@) records every label
- * in /__symbols__ as a label -> path map; /aliases is checked first for the rare
- * case a real alias exists. */
+// Same DT-label lookup as pl-reg: in a name -> node-path directory (/aliases or
+// /__symbols__), find the entry pointing back at `np` and return its name.
 static const char *pl_irq_lookup_name(const char *dir_path, struct device_node *np)
 {
 	struct device_node *dir;
@@ -250,6 +215,7 @@ static const char *pl_irq_lookup_name(const char *dir_path, struct device_node *
 	return result;
 }
 
+// Recover this node's Vivado label (e.g. "mcdma_irq") to name /dev after it
 static const char *pl_irq_instance_name(struct device_node *np)
 {
 	const char *name;
@@ -260,6 +226,7 @@ static const char *pl_irq_instance_name(struct device_node *np)
 	return name;
 }
 
+// One bound node -> one /dev/<instance> interrupt line
 static int pl_irq_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -280,8 +247,8 @@ static int pl_irq_probe(struct platform_device *pdev)
 	if (pi->irq < 0)
 		return pi->irq;
 
-	/* request_irq leaves the line enabled; the DT `interrupts` cell selects the
-	 * trigger type (level-high here), so pass 0 for flags. */
+	// request_irq leaves the line enabled; the DT `interrupts` cell selects the
+	// trigger type (level-high here), so pass 0 for flags
 	ret = devm_request_irq(dev, pi->irq, pl_irq_handler, 0, DRIVER_NAME, pi);
 	if (ret) {
 		dev_err(dev, "request_irq %d failed: %d\n", pi->irq, ret);
@@ -318,9 +285,9 @@ static int pl_irq_remove(struct platform_device *pdev)
 	return 0;
 }
 
-/* Bind by a private compatible so no in-kernel driver competes and no kernel
- * command-line parameter is needed. The project's device_tree.dtsi gives the
- * interrupt node this compatible. */
+// Bind by a private compatible so no in-kernel driver competes and no kernel
+// command-line parameter is needed. The project's device_tree.dtsi gives the
+// interrupt node this compatible.
 static const struct of_device_id pl_irq_of_match[] = {
 	{ .compatible = "zynq-toolbox,pl-irq" },
 	{ /* sentinel */ },
@@ -340,4 +307,4 @@ module_platform_driver(pl_irq_driver);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Zynq Toolbox");
-MODULE_DESCRIPTION("Non-root, doorbell access to a PL interrupt line, bound by DT compatible (no bootargs)");
+MODULE_DESCRIPTION("Non-root wait-for-interrupt on a PL line, bound by DT compatible (no bootargs)");

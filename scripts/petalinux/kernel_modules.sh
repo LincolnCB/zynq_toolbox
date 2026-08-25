@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build a PetaLinux project for the given board and project
+# Add out-of-tree kernel modules to the PetaLinux project for the given board and project
 # Arguments: <board_name> <board_version> <project_name>
 if [ $# -ne 3 ]; then
   echo "[PTLNX KMODS] ERROR:"

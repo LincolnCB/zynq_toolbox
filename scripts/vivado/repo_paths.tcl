@@ -1,4 +1,4 @@
-# Initialize the Vivado environment for the Snickerdoodle Rev D, declaring directories
+# Initialize the Vivado environment, declaring the board file directories
 
 # Source this from your Vivado_init.tcl.
 # Make sure to set the ZYNQ_TOOLBOX environment variable to the root of the this repository.
@@ -11,7 +11,7 @@
 
 # Vivado_init.tcl is searched for by Vivado in the following directories (in order, with each overwriting the previous):
 # - Install directory (`/tools/Xilinx/Vivado/<version>/Vivado_init.tcl` by default)
-# - Particular Vivado version (`~/.Xilinx/Vivado/<version>/Vivado_init.tc`)
+# - Particular Vivado version (`~/.Xilinx/Vivado/<version>/Vivado_init.tcl`)
 # - [Developer choice] Overall Vivado (`~/.Xilinx/Vivado/Vivado_init.tcl`)
 
 set zynq_toolbox $::env(ZYNQ_TOOLBOX)

@@ -1,4 +1,4 @@
-***Update 2026-07-28***
+***Updated 2026-08-25***
 # `vivado` scripts
 
 These scripts are for managing the Vivado build process. Vivado uses Tcl commands for all of its tasks and steps, which can be scripted and loaded, allowing for a fully automated build process. These scripts are used to create the Vivado project, build the block design, and package the bitstream and hardware definition into output files for PetaLinux to load. They are run by Vivado itself, passed in via the command line by the Makefile.
@@ -27,6 +27,9 @@ This script creates the Vivado `.xsa` hardware definition file. It checks for th
 ### `package_core.tcl`
 
 Arguments:
+- `board_name`: The name of the target board.
+- `board_ver`: The version of the target board.
+- `project_name`: The name of the Vivado project.
 - `vendor_name`: The name of the IP core vendor.
 - `core_name`: The name of the IP core.
 - `part_name`: The target FPGA part name.
@@ -48,7 +51,7 @@ This script is the bulk of the Vivado project setup and scripting. It creates an
 
 ### `repo_paths.tcl`
 
-This script sets up the Vivado board repository paths for the Snickerdoodle Rev D project. It is sourced by Vivado's init script (see the **Vivado init script** section of the top-level README). It expects the `ZYNQ_TOOLBOX` environment variable to be set to the root of the repository (through `environment.sh` -- see the **Getting started** section of the top-level README) and loads the board files into Vivado's board repository.
+This script sets up the Vivado board repository paths, loading every board's files (from `boards/*/board_files/*/`) into Vivado's board repository. It's sourced by Vivado's init script (`Vivado_init.tcl`) and expects the `ZYNQ_TOOLBOX` environment variable to point at the repository root. On the **VM** path you wire both up by hand (see the **Vivado init script** and **Profile setup** sections of the [VM install guide](../../documentation/vm_install.md#vivado-init-script)); on the **Docker** path `scripts/docker/entrypoint-vivado.sh` sets `ZYNQ_TOOLBOX` and regenerates `Vivado_init.tcl` inside the container on every start, so it's automatic.
 
 ---
 

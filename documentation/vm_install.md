@@ -1,4 +1,4 @@
-***Updated 2026-07-20***
+***Updated 2026-08-25***
 
 # Installing the tools in a VM
 
@@ -125,7 +125,7 @@ You will need to edit the following variables in this file to match your setup:
 The remaining lines are optional or do not need to be changed:
 
 - `source $VIVADO_PATH/settings64.sh`: This line sources a Vivado script that sets up the terminal environment for Vivado. This should be left as is.
-- `PETALINUX_DOWNLOADS_PATH`/`PETALINUX_SSTATE_PATH`: These are optional variables only needed if you want to do offline builds with PetaLinux. See [Optional: PetaLinux offline build setup](#optional-petalinux-offline-build-setup) below for more information.
+- `PETALINUX_DOWNLOADS_PATH`/`PETALINUX_SSTATE_PATH`: These are optional variables only needed if you want to do offline builds with PetaLinux. See [Optional: PetaLinux offline build setup](#optional-recommended-petalinux-offline-build-setup) below for more information.
 
 With `environment.sh` set up, you will need to source it in your shell. Add the following line to one of the files that is sourced in new bash terminals, where `[path_to_zynq_toolbox]` is the path to the root of this repository (e.g. `/home/username/zynq_toolbox`):
 
@@ -173,7 +173,7 @@ All of this gives the following `~/.profile`, in its entirety:
 #umask 022
 
 # if running bash
-if [ -n "$bash_VERSION" ]; then
+if [ -n "$BASH_VERSION" ]; then
     # include .bashrc if it exists
     if [ -f "$HOME/.bashrc" ]; then
         if [[ $- == *i* ]]; then . "$HOME/.bashrc"; fi

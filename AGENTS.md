@@ -5,9 +5,28 @@ Build framework for Zynq-7000 SoC projects (AMD/Xilinx), producing bootable SD c
 
 Toolchain (Vivado + PetaLinux) runs on the host VM or in Docker, selected via `MODE` in `make_defaults.mk`.
 
-Many folders have README.md files -- look at those for quick summaries of the material. When writing README files, continue text on a single line instead of repeatedly breaking it across multiple lines.
+Many folders have README.md files -- look at those for quick summaries of the material.
 
-Comments in code and documentation should be descripted, not narrative -- do not leave artifacts from the development process (e.g. "Bug fix:", "What changed:", "This used to..."). The exception to this is "TODO"/planned steps or notes about future work, this can and should be included in notes and comments.
+### Documentation & comment style
+Match the voice of the top-level README and hand-written docs, which serve as the style reference:
+
+- Write documentation as a description of what's actually in the repo, not as a reply to the reader or a diff against a previous version. Avoid "now", "previously", "as before", "changed to", "left here", and similar narrative framing.
+- Comments should be descriptive, not narrative -- do not leave artifacts from the development process (e.g. "Bug fix:", "What changed:", "This used to..."). The exception is "TODO"/planned steps or notes about future work, which can and should be included.
+- Conversational but precise, second person ("you'll", "you can"). Use `--` for em-dashes.
+- Prose goes in flowing paragraphs; continue text on a single line instead of repeatedly breaking it across multiple lines. Don't overuse blank lines inside a single block.
+- Use bold sparingly -- only to mark a key distinct term or the two install paths (e.g. **VM**, **Docker**), never to emphasize whole phrases.
+- Avoid the usual AI-writing tells: tables where prose would do, "key takeaways"/summary/recap sections, and strong claims that one choice is better than another. State tradeoffs plainly instead.
+- When docs describe install-path-specific setup, cover both the **VM** and **Docker** paths, or note briefly why one doesn't need it (e.g. the Docker container automates it) rather than referencing just one.
+- Don't over-explain, but some summary is fine -- keep comments proportionate to what a reader actually gains from them, and trim oversized blocks.
+
+For source-file headers and code comments specifically:
+
+- Aim for a short-to-moderate file header that states the observable behavior (what a user should expect) and justifies the non-obvious choices, in reduced form. Push mechanism detail down into brief in-body breadcrumbs at the relevant lines rather than one exhaustive block up top. Avoid inline pseudo-code walkthroughs and long verbatim examples in headers.
+- Give each function a one-line purpose breadcrumb, and mark the phases of a longer function (e.g. probe: fetch -> claim -> name -> publish) so it reads top to bottom.
+- Keep genuinely non-obvious rationale (a surprising permission mode, an IRQ-masking quirk), but at one line where it applies, not a paragraph.
+- Comments are plain text: no Markdown emphasis (`*word*`, `**word**`) or headings inside code comments -- they don't render and just read as stray punctuation. Backticks around identifiers are fine.
+- In C sources, use `//` line comments (stacked across lines for multi-line notes), not `/* */` blocks, matching the hand-written userspace examples (e.g. the `software/*/*.c` files). Short one-line comments don't take a trailing period. The one exception is an idiomatic inline marker like `{ /* sentinel */ }`, where `//` can't sit mid-line.
+- Prefer plain wording over unexplained jargon (e.g. "signals that an interrupt fired" over "doorbell"); if a shorthand term genuinely helps, define it once on first use.
 
 ---
 

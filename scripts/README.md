@@ -1,20 +1,20 @@
 # Scripts
 
-***Updated 2025-06-27***
+***Updated 2026-08-25***
 
 A collection of scripts used in various parts of the automated build process. Some are run by the Makefile (or each other), others are run manually by the user. Scripts are divided into general categories.
 
 ## `check/`
 
-These scripts are used to check required files, directories, and environment variables as part of the build process, giving the user feedback on what is missing or misconfigured.They're typically run by the Makefile or other scripts to ensure that the environment is set up correctly before proceeding with the build.
+These scripts are used to check required files, directories, and environment variables as part of the build process, giving the user feedback on what is missing or misconfigured. They're typically run by the Makefile or other scripts to ensure that the environment is set up correctly before proceeding with the build.
 
-All of thesre scripts check for specific conditions for the step in question. They will also run a minimum set of previous checks required for the step to make sense, and can optionally run ALL previous checks if the `--full` flag is provided. The one exception is `board_files.sh`, which does not have a `--full` option because it is not dependent on any previous checks.
+All of these scripts check for specific conditions for the step in question. They will also run a minimum set of previous checks required for the step to make sense, and can optionally run ALL previous checks if the `--full` flag is provided. The exceptions are `board_files.sh` and `petalinux_offline.sh`, which don't have a `--full` option because they aren't dependent on any previous checks.
 
 You can read the documentation for each script in the `scripts/check/` README.
 
 ## `make/`
 
-These scripts are mainly used by the Makefile to perform various tasks related to the larger build process. The scripts are primarily shell scripts for processing and managing files safely, utlizing the `check/` scripts to give good error messages if something is missing or misconfigured. Some also extract some information from the source code to be used in the Makefile or other scripts, adding flexibility.
+These scripts are mainly used by the Makefile to perform various tasks related to the larger build process. The scripts are primarily shell scripts for processing and managing files safely, utilizing the `check/` scripts to give good error messages if something is missing or misconfigured. Some also extract some information from the source code to be used in the Makefile or other scripts, adding flexibility.
 
 You can read the documentation for each script in the `scripts/make/` README.
 

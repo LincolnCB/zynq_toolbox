@@ -58,7 +58,7 @@ fi
 
 # Package the boot image using the year-specific command line arguments
 if [ "$PETALINUX_YEAR" -lt 2024 ]; then
-  echo "[PTLNX BOOT PKG] Using legacy PetaLinux project creation command for year ${PETALINUX_YEAR}"
+  echo "[PTLNX BOOT PKG] Using legacy PetaLinux boot packaging command for year ${PETALINUX_YEAR}"
   petalinux-package --boot \
   --format BIN \
   --fsbl \
@@ -67,7 +67,7 @@ if [ "$PETALINUX_YEAR" -lt 2024 ]; then
   --boot-device sd \
   --force
 else
-  echo "[PTLNX BOOT PKG] Using PetaLinux project creation python arguments (for year ${PETALINUX_YEAR})"
+  echo "[PTLNX BOOT PKG] Using PetaLinux boot packaging arguments (for year ${PETALINUX_YEAR})"
   petalinux-package boot \
   --format BIN \
   --fsbl \

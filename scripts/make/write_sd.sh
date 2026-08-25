@@ -75,6 +75,8 @@ if [ ! -d "${MNT}/RootFS" ]; then
   exit 1
 fi
 
+# Resolve the block devices behind the BOOT and RootFS mounts, then strip the
+# trailing partition number to confirm both partitions live on the same disk
 BOOT_DEV=$(df "${MNT}/BOOT" | tail -1 | awk '{print $1}')
 ROOTFS_DEV=$(df "${MNT}/RootFS" | tail -1 | awk '{print $1}')
 

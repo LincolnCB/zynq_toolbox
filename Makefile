@@ -28,7 +28,7 @@ include make_defaults.mk
 ## Some scripts to initialize the environment and check for necessary tools/src
 #############################################
 
-# MODE selects vm (tools installed directly on this host, today's behavior)
+# MODE selects vm (tools installed directly on this host)
 # or container (tools live in Docker volumes, invoked via scripts/docker/docker-compose.yml)
 MODE ?= vm
 
@@ -144,15 +144,14 @@ RM = rm -rf
 
 ## PetaLinux
 # RUN_PETALINUX prefixes any command that needs the PetaLinux toolchain.
-# In vm mode it's empty (scripts run natively, exactly as before). In
-# container mode it runs the command inside the petalinux-runner container,
-# via `bash -c` so multi-word commands survive the compose `run` boundary.
-# This is only necessary for scripts that actually call PetaLinux commands.
+# In vm mode it's empty (scripts run natively). In container mode it runs the
+# command inside the petalinux container, via `bash -c` so multi-word commands
+# survive the compose `run` boundary.
 ifeq ($(MODE),container)
 # When OFFLINE=true, point the build scripts at the offline cache mounted
 # into the petalinux container (see petalinux-offline-cache.sh and the
 # petalinux service's volumes in docker-compose.yml). These are fixed
-# in-container paths, not host paths -- nothing host-specific left here.
+# in-container paths, not host paths.
 ifeq ($(OFFLINE),true)
 export PETALINUX_DOWNLOADS_PATH = /workspace/petalinux_cache/downloads
 export PETALINUX_SSTATE_PATH = /workspace/petalinux_cache/sstate-cache

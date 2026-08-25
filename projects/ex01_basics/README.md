@@ -4,7 +4,7 @@
 
 Example 01 is the first full project in this repo, and exists mostly to walk through the shape of a build rather than to do anything complicated in the PL. It stands up a bare Zynq processing system (no custom AXI logic), boots a full PetaLinux image from an SD card, and ships one small userspace program that reprograms the FPGA fabric clock (`FCLK0`) at runtime.
 
-If you are new to the repo, start here: everything after this example assumes you already understand the `cores -> xpr -> xsa -> petalinux -> sd` pipeline that this README lays out.
+If you're new to the repo, start here: everything after this example assumes you already understand the `cores -> xpr -> xsa -> petalinux -> sd` pipeline that this README lays out.
 
 The project introduces the following tools and concepts:
 - The overall project structure and where each piece lives

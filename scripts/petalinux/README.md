@@ -1,4 +1,4 @@
-***Updated 2025-06-27***
+***Updated 2026-08-25***
 # `petalinux` Scripts
 
 These scripts are for managing the PetaLinux build process. They are used to set up the PetaLinux config files, build the PetaLinux project, and package the necessary files for the SD card image. They are typically run by the Makefile or other scripts to ensure that the PetaLinux project is built correctly, but can also be run manually by the user if needed.
@@ -53,7 +53,7 @@ Adds and configures kernel modules for the PetaLinux project. Every subdirectory
 
 Usage:
 ```bash
-./scripts/petalinux/make_offline.sh <petalinux_project_path
+./scripts/petalinux/make_offline.sh <petalinux_project>
 ```
 
 Configures the PetaLinux project for offline builds by updating configuration files to use local pre-mirror and sstate feeds, and disables network access for Yocto fetches.
@@ -86,7 +86,7 @@ Packages additional project files into the PetaLinux root filesystem. It adds fi
 
 Usage:
 ```bash
-./scripts/petalinux/project.sh <board_name> <board_version> <project_name>
+./scripts/petalinux/project.sh <board_name> <board_version> <project_name> [OFFLINE]
 ```
 
 Creates a new PetaLinux project for the specified board, version, and project, loading the hardware definition (`.xsa`) file and configuration patches, as well as running `make_offline.sh` and optionally including kernel configuration. It checks for required files, sets up the project directory, applies patches, and ensures the configuration matches the expected PetaLinux version.

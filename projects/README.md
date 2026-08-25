@@ -1,10 +1,10 @@
-***Updated 2025-06-30***
+***Updated 2026-08-25***
 # Projects
 
 This directory contains the structured source files to build individual projects. Each project has its own folder, and is mainly defined by its `block_design.tcl` file, which defines the FPGA system's block design. Each project will also need folders under `cfg` that define the compatibility with different boards, and can have a few other special folders that augment the build process. To use `make` to build a project, you will need to do it from the top level directory, specifying the project name and the board name and version, like so:
 
 ```bash
-make PROJECT=[project_name] BOARD=[board_name] VERSION=[board_version] [target]
+make PROJECT=[project_name] BOARD=[board_name] BOARD_VER=[board_version] [target]
 ```
 See the **Building a different board, board version, or project** and **Intermediate build files and targets** targets in the top-level README for more information.
 
@@ -56,7 +56,7 @@ Arguments:
 - `intf_pin`: Name of the interface pin to connect to the AXI interconnect.
 - `manager`: Name of the manager interface to connect (should be an absolute path, e.g., `/ps/M_AXI_GP0`).
 
-This procedure automates the creation and connection of an AXI interconnect between a manager and a subordinate interface. It applies Vivado's AXI automation to connect the specified interface pin to the manager, then assigns the address space using the provided offset and range.Projects in this repo preffer to manually connect AXI interfaces with interconnects and use the `addr` procedure to assign addresses for clarity and certainty, but this procedure is included as an alternative.
+This procedure automates the creation and connection of an AXI interconnect between a manager and a subordinate interface. It applies Vivado's AXI automation to connect the specified interface pin to the manager, then assigns the address space using the provided offset and range. Projects in this repo prefer to manually connect AXI interfaces with interconnects and use the `addr` procedure to assign addresses for clarity and certainty, but this procedure is included as an alternative.
 
 Example usage:
 ```tcl
@@ -152,7 +152,7 @@ set my_val [module_get_upvar my_var]
 
 ## `cfg/` directory
 
-This directory contains the project's configuration files for different boards and board versions. Each board and version has its own subdirectory, formatted as `cfg/[board_name]/[board_version]/`. Filling out this directory with the following files defines compatability between the project and given board/version. The necessary files are are the following subdirectories and their contents:
+This directory contains the project's configuration files for different boards and board versions. Each board and version has its own subdirectory, formatted as `cfg/[board_name]/[board_version]/`. Filling out this directory with the following files defines compatibility between the project and given board/version. The necessary files are the following subdirectories and their contents:
 
 ### `petalinux/[petalinux_version]/`
 This directory contains the PetaLinux configuration files for the project. These files are loaded as part of the PetaLinux build process, particularly by scripts in the `scripts/petalinux` directory. PetaLinux's configuration files are slightly more version-sensitive than Vivado, and so need to be configured for each version. The files are:
@@ -160,7 +160,7 @@ This directory contains the PetaLinux configuration files for the project. These
 #### `config.patch`
 A patch file for the PetaLinux project configuration. This file contains changes to the default PetaLinux configuration for the project's system. It's stored in a patch format both for density and clarity -- it's much easier to see what options need to be changed from the default to make everything work than it is to parse the fairly large configuration files.
 
-If you want to make or update this file, you can run `make` in the top-level directory with the `petalinux_cfg` target (with the `PROJECT`, `BOARD`, and `VERSION` variables set to the appropriate values). If you're using a different version of PetaLinux than is currently supported, the recommended approach to create your own configuration file is to use the above `make petalinux_cfg` approach to manually set the listed non-default options read directly from the text of another version's `config.patch` file
+If you want to make or update this file, you can run `make` in the top-level directory with the `petalinux_cfg` target (with the `PROJECT`, `BOARD`, and `BOARD_VER` variables set to the appropriate values). If you're using a different version of PetaLinux than is currently supported, the recommended approach to create your own configuration file is to use the above `make petalinux_cfg` approach to manually set the listed non-default options read directly from the text of another version's `config.patch` file
 
 For example, to create a new `config.patch` file for your computer's PetaLinux 2023.2, you would open
 ```
@@ -168,7 +168,7 @@ projects/[project_name]/cfg/[board_name]/[board_version]/petalinux/2024.2/config
 ```
 for reference, then run (with a sufficiently large terminal window for the GUI -- the script will tell you if the terminal is too small):
 ```bash
-make PROJECT=[project_name] BOARD=[board_name] VERSION=[board_version] petalinux_cfg
+make PROJECT=[project_name] BOARD=[board_name] BOARD_VER=[board_version] petalinux_cfg
 ```
 and manually look through the `2024.2` version as a guide to set the equivalent options in the `2023.2` version.
 
@@ -177,7 +177,7 @@ A patch file for the PetaLinux filesystem configuration. Similar to the `config.
 
 ### `xdc/`
 
-This directory contains any Xilinx Design Constraints (XDC) files for the project. These files define the hardware interface for the project and board (primarily pin assignments and types), and must match the ports defined in the block design. When building a project, any file in this directory with the `.xdc` extension will be included in the Vivado project. Often, a default or example `.xdc` file is provided with the the board files (see the `boards/` README for more detail). For boards already supported in this repo, there are some examples in that directory.
+This directory contains any Xilinx Design Constraints (XDC) files for the project. These files define the hardware interface for the project and board (primarily pin assignments and types), and must match the ports defined in the block design. When building a project, any file in this directory with the `.xdc` extension will be included in the Vivado project. Often, a default or example `.xdc` file is provided with the board files (see the `boards/` README for more detail). For boards already supported in this repo, there are some examples in that directory.
 
 ## Additional directories (OPTIONAL)
 
@@ -205,7 +205,7 @@ Source for out-of-tree kernel modules this project builds. Every subdirectory is
 
 Example projects usually symlink to shared modules in `examples/kernel_modules/` rather than duplicating source.
 
-Modules are built and installed into the image but are not loaded automatically -- use `modprobe` or `insmod` after boot.
+Modules are built and installed into the image and enabled for autoload (`KERNEL_MODULE_AUTOLOAD`), so they come up automatically at boot -- no need to `modprobe` or `insmod` them by hand.
 
 ### `tests/`
 
@@ -213,14 +213,10 @@ This folder will be created if you run tests for the project using the `make tes
 
 ## Main projects
 
-Please read the README in each of the main project directories for more information on the project, but in brief, the main projects in this repo are:
+Please read the README in each of the main project directories for more information on the project, but in brief, the main project in this repo is:
 
 ### `rev_d_shim/`
 This is the main project for the Rev D Shim firmware. It contains the block design for the Rev D Shim, as well as the PetaLinux configuration files and software for the project.
-
-### `shim_controller_v0/`
-
-This is the beta version of the Rev D Shim firmware, written almost entirely by Thomas Witzel. It's included in this repo as both a baseline backup as well as a verification for the build process of the repo.
 
 ## Example projects
 

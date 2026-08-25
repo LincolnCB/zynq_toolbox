@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build PetaLinux software for the given project
+# Configure an existing PetaLinux project for offline builds (local downloads + sstate cache)
 # Arguments: <petalinux_project>
 if [ $# -ne 1 ]; then
   echo "[PTLNX OFFLINE] ERROR:"
@@ -15,10 +15,9 @@ set --
 set -e
 
 echo "[PTLNX OFFLINE] Setting PetaLinux project ${PTLNX_PROJECT} up for offline build"
-# Check that the PetaLinux project exists
 # Check that the necessary PetaLinux project exists
 if [ ! -d "tmp/${PTLNX_PROJECT}/petalinux" ]; then
-  echo "[CHECK PTLNX PROJECT] ERROR:"
+  echo "[PTLNX OFFLINE] ERROR:"
   echo "Missing PetaLinux project directory for ${PTLNX_PROJECT}"
   echo " Path: tmp/${PTLNX_PROJECT}/petalinux"
   exit 1

@@ -238,7 +238,7 @@ add_files -norecurse $wrapper
 set_property TOP system_wrapper [current_fileset]
 
 # Load all Verilog and SystemVerilog source files from the project folder, as well as any .mem files
-set files [glob -nocomplain projects/$project_name/*.v projects/$project_name/*.sv, projects/$project_name/*.mem]
+set files [glob -nocomplain projects/$project_name/*.v projects/$project_name/*.sv projects/$project_name/*.mem]
 if {[llength $files] > 0} {
   add_files -norecurse $files
 }

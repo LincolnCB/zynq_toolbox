@@ -58,7 +58,6 @@ for SW_DIR in ${SW_PATH}/*; do
       echo "Please create the top file and re-run the build."
       echo " Path: projects/${PRJ}/software/${SW_NAME}/${SW_NAME}.c"
       exit 1
-      continue
     fi
 
     # Sanitize the software name
