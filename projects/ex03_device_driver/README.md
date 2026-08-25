@@ -1,8 +1,8 @@
 ***Updated 2026-08-12***
 
-# Example 05: Device Driver
+# Example 03: Device Driver
 
-Example 05 shows how to reach the same PL registers as the earlier examples using a proper Linux device driver instead of `/dev/mem` -- so the userspace program doesn't need root/`sudo` permissions. Additionally, it performs this without any manually written device trees.
+Example 03 shows how to reach the same PL registers as the earlier examples using a proper Linux device driver instead of `/dev/mem` -- so the userspace program doesn't need root/`sudo` permissions. Additionally, it performs this without any manually written device trees.
 
 The project introduces the following tools and concepts:
 - `/dev/mem` register access is fast and simple but requires root
@@ -15,7 +15,7 @@ The project introduces the following tools and concepts:
 
 ## Overview
 
-Examples 02-04 talk to the PL registers by opening `/dev/mem` and `mmap`-ing a physical address (`0x40000000`, ...) defined in the block design. That works and it is fast, but `/dev/mem` is a window onto *all* of physical memory, so the kernel only hands it to `root`. Any program that touches a register has to run as root.
+Example 02 talks to the PL registers by opening `/dev/mem` and `mmap`-ing a physical address (`0x40000000`, ...) defined in the block design. That works and it is fast, but `/dev/mem` is a window onto *all* of physical memory, so the kernel only hands it to `root`. Any program that touches a register has to run as root.
 
 This example keeps the exact same hardware as ex02 -- one `CFG -> NAND -> STS` block -- and reaches it through a driver instead.
 
@@ -27,7 +27,7 @@ Source: `examples/kernel_modules/pl-reg/petalinux/pl-reg.c` (symlinked into `ker
 
 ### 1. It binds to PetaLinux's auto-generated nodes (no `.dtsi`)
 
-PetaLinux's device-tree generator (DTG) already emits one node per PL IP, with a `compatible` derived from the core's VLNV (`vendor:library:name:version`). For ex05's two cores it produces, with no input from the user:
+PetaLinux's device-tree generator (DTG) already emits one node per PL IP, with a `compatible` derived from the core's VLNV (`vendor:library:name:version`). For ex03's two cores it produces, with no input from the user:
 
 ```dts
 axi_cfg_register@40000000 { compatible = "xlnx,axi-cfg-register-1.0"; reg = <0x40000000 0x1000>; };
@@ -108,10 +108,10 @@ static int pl_reg_mmap(struct file *file, struct vm_area_struct *vma)
 
 ### Why not UIO?
 
-UIO is the usual "userspace driver" answer, and it also gives you `mmap` -- see [ex04](../ex04_interrupts/README.md). Two properties make a misc device the better fit for this example:
+UIO is the usual "userspace driver" answer, and it also gives you `mmap`. Two properties make a misc device the better fit for this example:
 
 - **Named, deterministic nodes.** `pl-reg` names each node after its Vivado instance (`/dev/cfg`, `/dev/sts`) and refuses to bind if the core's identity changes (the fail-loud property above). UIO exposes numbered `/dev/uioN` nodes assigned in probe order, so telling one core from another means walking `/sys/class/uio/*/maps/*/name`, and the numbering shifts when the design changes.
-- **No interrupt to deliver.** UIO exists mainly to hand interrupts to userspace (`read`/`poll` on `/dev/uioN`). These register windows have no interrupt, so that capability goes unused. When an interrupt *is* the point, UIO is the right tool -- that is exactly what [ex04](../ex04_interrupts/README.md) uses.
+- **No interrupt to deliver.** UIO exists mainly to hand interrupts to userspace (`read`/`poll` on `/dev/uioN`). These register windows have no interrupt, so that capability goes unused. When an interrupt *is* the point, `pl-reg`'s interrupt sibling `pl-irq` is the tool -- that is what the next example, [ex04](../ex04_interrupts/README.md), uses (with the in-tree generic UIO kept there as a documented alternative).
 
 The obvious objection is permissions: `/dev/uioN` nodes come up `root`-owned, while `pl-reg` sets `misc.mode = 0666` and is born non-root. That difference is not decisive on its own. This build framework has a udev-free way to relax any node at boot: a project may ship an executable `boot_script.sh`, which the build installs as an auto-enabled `/etc/init.d` service (see `scripts/petalinux/boot_script.sh` and `projects/README.md`). A one-line `chmod 0666 /dev/uio0` there would give UIO non-root access just as well. The misc device is simply cleaner for a pure register window: the node is correct the instant it is created -- no boot-time step -- and the named, fail-loud behavior comes for free.
 
@@ -243,7 +243,7 @@ This is then readable both from the kernel (walk the `/__symbols__` node) and fr
 
 `pl-reg` then does the following:
 
-- list the auto-generated compatibles (for ex05, `xlnx,axi-cfg-register-1.0` and `xlnx,axi-sts-register-1.0`; for a project like rev_d_shim also `xlnx,axi-fifo-bridge-1.0`, ...) in its `of_match_table`;
+- list the auto-generated compatibles (for ex03, `xlnx,axi-cfg-register-1.0` and `xlnx,axi-sts-register-1.0`; for a project like rev_d_shim also `xlnx,axi-fifo-bridge-1.0`, ...) in its `of_match_table`;
 - in `probe`, recover its node's instance name (reverse-lookup in `/__symbols__`, with `/aliases` tried first) and name its misc device after it;
 - expose `mmap` at offset 0.
 
@@ -274,4 +274,4 @@ This explicit node approach is possibly more robust and self-documenting: a priv
 
 ---
 
-Previous: [Example 04: Interrupts](../ex04_interrupts/README.md)
+Previous: [Example 02: AXI Interface](../ex02_axi_interface/README.md) | Next: [Example 04: Interrupts](../ex04_interrupts/README.md)

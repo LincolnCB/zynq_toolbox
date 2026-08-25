@@ -1,6 +1,6 @@
 # axi_rate_gen
 
-Per-channel AXI4-Stream rate limiter for ex07's DAC -> ADC datapath. It sits
+Per-channel AXI4-Stream rate limiter for ex05's DAC -> ADC datapath. It sits
 between a channel's DAC FIFO (`M_AXIS`) and ADC FIFO (`S_AXIS`) -- where the SPI
 core lives in rev_d_shim -- and forwards beats unchanged (`tdata`/`tdest`/`tlast`
 preserved, so TDEST routing and packet boundaries survive) while throttling the
@@ -9,7 +9,7 @@ still propagates through it.
 
 Control and status are one 32-bit word per channel, driven by slices of a shared
 `axi_cfg_register` / `axi_sts_register` in the block design and reachable
-non-root via `pl-reg` (see ex05).
+non-root via `pl-reg` (see ex03).
 
 | Word | Bits | Field | Meaning |
 |------|------|-------|---------|
@@ -26,5 +26,5 @@ non-root via `pl-reg` (see ex05).
 ## Tests
 
 ```bash
-./scripts/make/test_core.sh ex07_dma base axi_rate_gen
+./scripts/make/test_core.sh ex05_dma base axi_rate_gen
 ```

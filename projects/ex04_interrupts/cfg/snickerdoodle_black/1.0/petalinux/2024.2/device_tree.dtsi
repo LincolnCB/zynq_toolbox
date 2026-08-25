@@ -2,44 +2,57 @@
 / {
 };
 
+/* Eight PL interrupt lines, each handed to userspace non-root through the
+ * out-of-tree pl-irq module (the interrupt sibling of pl-reg).
+ *
+ * pl-irq binds by its own private compatible ("zynq-toolbox,pl-irq"), so unlike
+ * the in-tree generic-uio driver it needs NO kernel command-line parameter
+ * (uio_pdrv_genirq.of_id) and NO chmod: it names each /dev entry after the
+ * node's Vivado label (user_irq0 -> /dev/user_irq0) and creates it mode 0666.
+ * See the project README for the generic-uio + bootargs alternative this
+ * replaces.
+ *
+ * The eight lines keep mixed trigger types on purpose so the edge-vs-level
+ * difference is observable: the third `interrupts` cell is 1 = rising edge,
+ * 4 = level-high. Lines 0,1,4,5 are edge; lines 2,3,6,7 are level. */
 &amba_pl {
   user_irq0: user_irq0 {
-    compatible = "generic-uio";
+    compatible = "zynq-toolbox,pl-irq";
     interrupt-parent = <&intc>;
     interrupts = <0 29 1>;
   };
   user_irq1: user_irq1 {
-    compatible = "generic-uio";
+    compatible = "zynq-toolbox,pl-irq";
     interrupt-parent = <&intc>;
     interrupts = <0 30 1>;
   };
   user_irq2: user_irq2 {
-    compatible = "generic-uio";
+    compatible = "zynq-toolbox,pl-irq";
     interrupt-parent = <&intc>;
     interrupts = <0 31 4>;
   };
   user_irq3: user_irq3 {
-    compatible = "generic-uio";
+    compatible = "zynq-toolbox,pl-irq";
     interrupt-parent = <&intc>;
     interrupts = <0 32 4>;
   };
   user_irq4: user_irq4 {
-    compatible = "generic-uio";
+    compatible = "zynq-toolbox,pl-irq";
     interrupt-parent = <&intc>;
     interrupts = <0 33 1>;
   };
   user_irq5: user_irq5 {
-    compatible = "generic-uio";
+    compatible = "zynq-toolbox,pl-irq";
     interrupt-parent = <&intc>;
     interrupts = <0 34 1>;
   };
   user_irq6: user_irq6 {
-    compatible = "generic-uio";
+    compatible = "zynq-toolbox,pl-irq";
     interrupt-parent = <&intc>;
     interrupts = <0 35 4>;
   };
   user_irq7: user_irq7 {
-    compatible = "generic-uio";
+    compatible = "zynq-toolbox,pl-irq";
     interrupt-parent = <&intc>;
     interrupts = <0 36 4>;
   };

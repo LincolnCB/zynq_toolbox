@@ -11,8 +11,8 @@ These modules will be built "out-of-tree" and included in the PetaLinux build, b
 ## Modules here
 
 - `u-dma-buf` — physically-contiguous DMA buffers exposed to userspace (upstream `ikwzm/udmabuf`).
-- `pl-reg` — non-root, `mmap`-only access to a PL AXI register window, bound automatically by device-tree compatible (ex05). No hand-written device tree, no root.
-- `pl-irq` — the interrupt sibling of `pl-reg`: non-root, doorbell (`poll`/`read`/`write`) access to a PL interrupt line, bound by device-tree compatible. Publishes a `0666` misc device (`/dev/<label>`), so unlike the in-tree `generic-uio` it needs no `uio_pdrv_genirq` kernel command line and no `chmod` (ex07).
+- `pl-reg` — non-root, `mmap`-only access to a PL AXI register window, bound automatically by device-tree compatible (ex03). No hand-written device tree, no root.
+- `pl-irq` — the interrupt sibling of `pl-reg`: non-root, doorbell (`poll`/`read`/`write`) access to a PL interrupt line, bound by device-tree compatible. Publishes a `0666` misc device (`/dev/<label>`), so unlike the in-tree `generic-uio` it needs no `uio_pdrv_genirq` kernel command line and no `chmod` (ex04).
 - `dummy-kmod` — minimal skeleton module for reference.
 
 ## Kernel module directory structure

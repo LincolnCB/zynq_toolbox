@@ -1,4 +1,4 @@
-/* fault-inject -- exercise the one data hazard the PS/DMA side of ex07 owns:
+/* fault-inject -- exercise the one data hazard the PS/DMA side of ex05 owns:
  * cache coherency. Companion to mcdma-loopback (the happy-path round trip) and
  * rate-ctl (the per-channel pacers).
  *

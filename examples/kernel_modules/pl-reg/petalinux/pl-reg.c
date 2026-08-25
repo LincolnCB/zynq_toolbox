@@ -3,7 +3,7 @@
  * pl-reg -- non-root, mmap-only access to PL AXI register windows, bound
  *           AUTOMATICALLY to the device-tree nodes PetaLinux already generates.
  *
- * This is the whole point of ex05: give userspace the SAME direct, full-speed
+ * This is the whole point of ex03: give userspace the SAME direct, full-speed
  * access to the PL registers that /dev/mem gives -- but without root, scoped to
  * only these registers instead of all of physical memory, AND without writing a
  * single line of device tree by hand.
@@ -12,7 +12,7 @@
  * How the binding works (the key idea of this example)
  * ---------------------------------------------------------------------------
  * PetaLinux's device-tree generator (DTG) already emits one node for every IP
- * in the Vivado address map. For ex05's two cores it produces, with no input
+ * in the Vivado address map. For ex03's two cores it produces, with no input
  * from us:
  *
  *   axi_cfg_register@40000000 { compatible = "xlnx,axi-cfg-register-1.0";
@@ -272,14 +272,14 @@ static int pl_reg_remove(struct platform_device *pdev)
 	return 0;
 }
 
-/* Bind to the compatibles PetaLinux's DTG auto-generates for ex05's two cores.
+/* Bind to the compatibles PetaLinux's DTG auto-generates for ex03's two cores.
  * These are "xlnx,<vlnv-name-dashed>-<version>" -- the vendor part of the VLNV
  * (here pavel-demin) is always rewritten to "xlnx" by the generator. Add a line
  * here for any additional core type you want pl-reg to expose. */
 static const struct of_device_id pl_reg_of_match[] = {
 	{ .compatible = "xlnx,axi-cfg-register-1.0" },
 	{ .compatible = "xlnx,axi-sts-register-1.0" },
-	/* ex07: the AXI MCDMA control window is exposed to userspace (option B). The
+	/* ex05 (DMA): the AXI MCDMA control window is exposed to userspace (option B). The
 	 * project's device_tree.dtsi overrides that node's compatible to this private
 	 * string, specifically so no in-kernel driver matches it -- PetaLinux tags a
 	 * standalone MCDMA as xlnx,eth-dma and the xilinx_dma probe fails on the missing
@@ -303,4 +303,4 @@ module_platform_driver(pl_reg_driver);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Zynq Toolbox");
-MODULE_DESCRIPTION("Non-root, mmap-only access to PL register windows, bound to PetaLinux auto-nodes (ex05)");
+MODULE_DESCRIPTION("Non-root, mmap-only access to PL register windows, bound to PetaLinux auto-nodes (ex03)");

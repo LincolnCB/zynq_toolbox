@@ -1,10 +1,10 @@
 /* rate-ctl -- program and read back the per-channel axi_rate_gen pacers.
  *
- * ex07 puts an axi_rate_gen between each channel's DAC and ADC FIFO (the SPI
+ * ex05 puts an axi_rate_gen between each channel's DAC and ADC FIFO (the SPI
  * core's role in rev_d_shim). Each pacer throttles its DAC->ADC stream to a
  * programmed rate and can pause it. Control and status are one 32-bit word per
  * channel in a shared cfg/sts register pair, reached the same non-root way as
- * ex05: two pl-reg device nodes, mmap'd once, then plain load/store.
+ * ex03: two pl-reg device nodes, mmap'd once, then plain load/store.
  *
  *   /dev/rate_cfg   writable, word[ch] = control (rate_div + pause)
  *   /dev/rate_sts   read-only, word[ch] = BEAT_COUNT forwarded since reset

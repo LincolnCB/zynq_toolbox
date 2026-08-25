@@ -21,7 +21,7 @@
  * to the kernel command line, then a matching `compatible = "generic-uio"` node.
  * That command-line edit is a maintenance hazard: it lives apart from the block
  * design and the rest of the project config, and is easy to drop or overwrite
- * when the bootargs are regenerated. (ex04 demonstrates that approach on purpose,
+ * when the bootargs are regenerated. (ex04 documents that approach as an alternative,
  * for cases that genuinely need command-line control.)
  *
  * pl-irq takes pl-reg's approach instead: it carries its own of_match_table, so

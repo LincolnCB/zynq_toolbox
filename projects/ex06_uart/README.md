@@ -1,8 +1,8 @@
 ***Updated 2026-08-06***
 
-# Example 03: UART
+# Example 06: UART
 
-Example 03 brings up a second serial port by routing the Zynq's `UART1` controller out through the PS MIO pins. There is no custom PL at all -- the entire change lives in the processing system configuration -- so it shows how PS peripheral settings flow from the block design, through the `.xsa`, and into the booted Linux system as a working `/dev/ttyPS1`.
+Example 06 brings up a second serial port by routing the Zynq's `UART1` controller out through the PS MIO pins. There is no custom PL at all -- the entire change lives in the processing system configuration -- so it shows how PS peripheral settings flow from the block design, through the `.xsa`, and into the booted Linux system as a working `/dev/ttyPS1`.
 
 The project introduces the following tools and concepts:
 - Configuring PS peripherals (MIO pin assignment) from `block_design.tcl`
@@ -62,5 +62,5 @@ Seeing `/dev/ttyPS1` confirms the PS peripheral configuration made it all the wa
 
 ---
 
-Previous: [Example 02: AXI Interface](../ex02_axi_interface/README.md) | Next: [Example 04: Interrupts](../ex04_interrupts/README.md)
+Previous: [Example 05: DMA](../ex05_dma/README.md)
 

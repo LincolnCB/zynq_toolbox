@@ -1,6 +1,6 @@
 # No external FPGA ports are used in this project.
 #
-# Example 07: DDR-backed FIFO buffers via AXI MCDMA.
+# Example 05: DDR-backed FIFO buffers via AXI MCDMA.
 #
 # Stands up:
 #   - one MCDMA with `num_ch` MM2S (PS->PL) and `num_ch` S2MM (PL->PS) channels,
@@ -131,7 +131,7 @@ addr 0x00000000 1G ps/S_AXI_HP0 mcdma/M_AXI_SG
 # One shared cfg/sts register pair backs the per-channel axi_rate_gen cores:
 # 32 bits per channel, packed into a single wide window each. Reachable non-root
 # via pl-reg as /dev/rate_cfg and /dev/rate_sts (its match table already lists
-# the axi-cfg-register / axi-sts-register compatibles -- see ex05). The per-
+# the axi-cfg-register / axi-sts-register compatibles -- see ex03). The per-
 # channel slices are wired up inside the datapath loop below.
 
 # Writable config: channel i's control word is cfg_data[32*i +: 32].

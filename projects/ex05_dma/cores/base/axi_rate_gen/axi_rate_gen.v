@@ -1,6 +1,6 @@
 `timescale 1 ns / 1 ps
 
-// Per-channel AXI4-Stream rate limiter for ex07's DAC->ADC datapath.
+// Per-channel AXI4-Stream rate limiter for ex05's DAC->ADC datapath.
 //
 // Sits between a channel's DAC FIFO (M_AXIS) and ADC FIFO (S_AXIS), where the
 // SPI core lives in rev_d_shim. It forwards beats unchanged (tdata/tdest/tlast
@@ -10,7 +10,7 @@
 //
 // Control (`cfg`) and status (`sts`) are one 32-bit word per channel, driven by
 // slices of a shared axi_cfg_register / axi_sts_register in the block design and
-// reachable non-root via pl-reg (see ex05). Register layout:
+// reachable non-root via pl-reg (see ex03). Register layout:
 //   cfg[RATE_WIDTH-1:0] RATE_DIV  extra idle cycles between forwarded beats
 //                                 (0 = full rate, N = one beat every N+1 cycles)
 //   cfg[16]             PAUSE     freeze forwarding while set

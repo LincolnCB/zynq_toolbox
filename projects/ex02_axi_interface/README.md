@@ -83,9 +83,9 @@ sudo reg-test      # self-checking NAND round trip through CFG/STS
 sudo mem-test      # interactive FIFO/BRAM playground; type "help"
 ```
 
-`reg-test` should report matching NAND results. In `mem-test`, push a few words into the FIFO and pop them back, and write/read BRAM addresses, to confirm both AXI ports. Both need root because they use `/dev/mem`; ex05 revisits this same hardware without that requirement.
+`reg-test` should report matching NAND results. In `mem-test`, push a few words into the FIFO and pop them back, and write/read BRAM addresses, to confirm both AXI ports. Both need root because they use `/dev/mem`; ex03 revisits this same hardware without that requirement.
 
 ---
 
-Previous: [Example 01: Basics](../ex01_basics/README.md) | Next: [Example 03: UART](../ex03_uart/README.md)
+Previous: [Example 01: Basics](../ex01_basics/README.md) | Next: [Example 03: Device Driver](../ex03_device_driver/README.md)
 

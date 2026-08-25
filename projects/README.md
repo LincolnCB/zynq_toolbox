@@ -236,14 +236,18 @@ This example project is mostly a template for the minimum viable project. It wil
 
 This example project explores more of the Vivado Tcl scripting capabilities and demonstrates the basic AXI interface, which will be how the Zynq's CPU / processing system (PS) communicates with the FPGA / programmable logic (PL). It includes some playground software to try out various AXI interfaces. This is necessary for the Rev D Shim firmware to actually control the hardware, as it needs to communicate with the FPGA to set the shim channels and read the buffer data (among other things).
 
-### EX03 -- UART
+### EX03 -- Device Driver
 
-This example project demonstrates some configuration options for the PS's interfaces, including its UART interface. It's a good overview of how to connect the Zynq's PS to an external computer via a UART interface. This is necessary for the Rev D Shim firmware to communicate with an external host computer outside of the scanner room.
+This example project revisits the same PL registers as the earlier examples, but reaches them through a small Linux device driver (`pl-reg`) instead of `/dev/mem`, so userspace programs no longer need root. It also does this without any hand-written device tree, binding a kernel module to the nodes PetaLinux auto-generates for each AXI-mapped core and naming each `/dev` entry after the core's Vivado instance. This is the approach the Rev D Shim firmware uses to expose its control and status registers to userspace safely, and it introduces the kernel-module pattern the interrupts example builds on.
 
 ### EX04 -- Interrupts
 
-This example project covers interrupts from the PL to the PS and software to handle that, allowing the PL to signal the PS when it needs attention. This is necessary for the safety features of the Rev D Shim firmware.
+This example project covers interrupts from the PL to the PS and the software to handle them, allowing the PL to signal the PS when it needs attention. It delivers them to userspace non-root with the `pl-irq` kernel module (the interrupt sibling of `pl-reg`), and documents the in-tree `generic-uio` + kernel-bootarg path as an alternative. This is necessary for the safety features of the Rev D Shim firmware.
 
 ### EX05 -- DMA
 
 This example project covers the Direct Memory Access (DMA) interface, which allows the PS to transfer data to and from the PL through the off-chip DDR memory.
+
+### EX06 -- UART
+
+This example project demonstrates some configuration options for the PS's interfaces, including its UART interface. It's a good overview of how to connect the Zynq's PS to an external computer via a UART interface. This is necessary for the Rev D Shim firmware to communicate with an external host computer outside of the scanner room.

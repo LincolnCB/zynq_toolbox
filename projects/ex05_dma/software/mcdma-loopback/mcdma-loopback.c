@@ -1,11 +1,11 @@
 /* mcdma-loopback -- prebuffered AXI MCDMA loopback test using u-dma-buf.
  *
- * This is the ex07 successor to xilinx-dma-test.c. That program drove a plain
+ * This is the ex05 successor to xilinx-dma-test.c. That program drove a plain
  * axi_dma in *direct register* mode (MM2S_SRC_ADDRESS / TRNSFR_LENGTH /
  * S2MM_DST_ADDRESS ...) over /dev/mem at hardcoded raw physical addresses. None
  * of that applies here: the block design now uses an AXI *MCDMA*, which is
  * scatter-gather only (no direct mode) and has a multichannel register map. So
- * this program is a clean rewrite around the model ex07 actually needs:
+ * this program is a clean rewrite around the model ex05 actually needs:
  *
  *   - contiguous DMA memory from u-dma-buf (physically contiguous, physical
  *     address readable from sysfs, cached mapping with an explicit one-shot
