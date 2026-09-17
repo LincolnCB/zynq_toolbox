@@ -18,7 +18,7 @@ Clean the BOOT and RootFS directories on the mounted SD card. If no mount direct
 
 ### `cocotb.mk`
 
-This is a Makefile used to build the cocotb testbench for custom verilog cores. It's used with [`test_core.sh`](#test_coresh) to build the testbench and run the tests, interfacing with the `cocotb` Python library and its respective Makefiles. You can read more about running tests in the [top level](../../README.md#testing) and [`examples/cores/`](../../examples/cores/README.md) README files.
+This is a Makefile used to build the cocotb testbench for custom verilog cores. It's used with [`test_core.sh`](#test_coresh) to build the testbench and run the tests, interfacing with the `cocotb` Python library and its respective Makefiles. It's included by `test_core.sh` rather than run on its own, and it shells out to `cocotb-config`, so `cocotb` has to be on PATH -- true on a **VM** host or inside the cocotb container, but not on a **Docker** host. You can read more about running tests in the [top level](../../README.md#testing) and [`examples/cores/`](../../examples/cores/README.md) README files.
 
 ---
 
@@ -88,6 +88,10 @@ Usage:
 ```
 
 Runs cocotb-based tests for a custom core located in `projects/<project>/cores/<vendor>/<core>/tests`. Uses the shared `cocotb.mk` Makefile to build and run the testbench. Writes test results and status to the appropriate files in the core's test directory. Exits with a nonzero code if the tests fail or if required directories are missing.
+
+This runs cocotb/Verilator directly, so it needs those tools on PATH. Call it standalone only in **VM** mode; in **Docker** mode (`MODE=container`) `cocotb` lives only inside the cocotb container, so a bare host call fails with `cocotb-config: No such file or directory`. Drive it through the make targets there -- `make tests` for all of a project's cores, or a per-core `test_status` target (e.g. `make projects/rev_d_shim/cores/shim/datapath_mux/tests/test_status PROJECT=rev_d_shim`) for one -- which wrap this script in the container via the Makefile's `run_cocotb`.
+
+The run is bounded by a wall-clock timeout so a hung simulation (a testbench that parks the DUT and never returns) self-terminates rather than blocking the suite. The default is 600 seconds per core; override it with the `CORE_TEST_TIMEOUT` environment variable (and `CORE_TEST_KILL_GRACE`, the seconds to wait after `SIGTERM` before escalating to `SIGKILL` for a child that ignores it). On expiry the core's status is recorded as `TIMED OUT`. An interrupt (Ctrl-C) or `SIGTERM` is relayed to the test process and recorded as `ABORTED`, so pressing Ctrl-C during `make tests` stops the run cleanly; under `docker compose run --rm` container teardown then reaps anything the simulator left behind. In container mode (`MODE=container`) the two variables are passed through to the cocotb container by `scripts/docker/docker-compose.yml`, so `CORE_TEST_TIMEOUT=1200 make tests` works from the host.
 
 ---
 

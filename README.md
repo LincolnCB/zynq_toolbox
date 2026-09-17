@@ -249,7 +249,7 @@ To run tests for a specific core in a project, you can use the `test_core.sh` sc
 ./scripts/make/test_core.sh ex02_axi_interface base fifo_sync
 ```
 
-This will run the tests for the `fifo_sync` core under `projects/ex02_axi_interface/cores/base/fifo_sync/tests/src` and output a test status report at `projects/ex02_axi_interface/cores/base/fifo_sync/tests/test_status`.
+This will run the tests for the `fifo_sync` core under `projects/ex02_axi_interface/cores/base/fifo_sync/tests/src` and output a test status report at `projects/ex02_axi_interface/cores/base/fifo_sync/tests/test_status`. Calling the script directly like this needs `cocotb` on your PATH, which is the case in a **VM** install. In **Docker** mode (`MODE=container`) `cocotb` only exists inside the cocotb container, so a bare host call fails with `cocotb-config: No such file or directory` -- run the tests through the make targets below instead, which wrap the script in the container for you.
 
 To run tests for all cores in a project, you can use the make target `tests`. For example, to run tests for the `rev_d_shim` project, you can run:
 
@@ -257,4 +257,4 @@ To run tests for all cores in a project, you can use the make target `tests`. Fo
 make tests PROJECT=rev_d_shim
 ```
 
-In addition to the individual test files, this will also give a summary of all core tests for the project at `projects/[PROJECT]/tests/core_tests_summary`.
+In addition to the individual test files, this will also give a summary of all core tests for the project at `projects/[PROJECT]/tests/core_tests_summary`. To rerun just one core through make (and the container, in Docker mode), ask for its status file directly, e.g. `make projects/rev_d_shim/cores/shim/datapath_mux/tests/test_status PROJECT=rev_d_shim`.

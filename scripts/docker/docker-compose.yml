@@ -61,6 +61,14 @@ services:
     working_dir: /workspace/zynq_toolbox
     volumes:
       - ../../:/workspace/zynq_toolbox
+    environment:
+      # Opt-in flag for the free-running example/cal sims (skipped by default so the
+      # automated suite stays bounded). Passed through from the host when set.
+      - RUN_EXAMPLE_SIMS
+      # Per-core wall-clock test timeout and post-SIGTERM grace period (seconds), consumed
+      # by scripts/make/test_core.sh. Passed through from the host when set.
+      - CORE_TEST_TIMEOUT
+      - CORE_TEST_KILL_GRACE
     stdin_open: true
     tty: true
 

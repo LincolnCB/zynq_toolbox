@@ -1,3 +1,9 @@
+ # This Makefile is included and run by scripts/make/test_core.sh, not invoked on its own.
+# It shells out to cocotb-config (last line), so cocotb must be on PATH -- true on a VM-mode
+# host or inside the cocotb container, but NOT on a Docker-mode host, where a direct call
+# fails with "cocotb-config: No such file or directory". Run tests through the make targets
+# (make tests, or a per-core test_status target), which wrap test_core.sh in the container.
+
  # cocotb variable -- Simulator to use (needs to match $(shell cocotb-config --makefiles)/simulators/Makefile.$(SIM))
 SIM ?= verilator
 # cocotb variable -- Top-level language (needs to match an option in the above-mentioned Makefile.$(SIM))

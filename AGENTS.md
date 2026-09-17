@@ -54,9 +54,10 @@ cocotb + Verilator, example available under `examples/cores/[vendor]/[core]/test
 
 To run tests, examples:
 ```bash
-./scripts/make/test_core.sh ex02_axi_interface base fifo_sync # single core
+./scripts/make/test_core.sh ex02_axi_interface base fifo_sync # single core (VM mode / inside cocotb container)
 make tests PROJECT=rev_d_shim                                 # all tests for "rev_d_shim"
 ```
+Direct `test_core.sh` needs cocotb on PATH -- in Docker mode (`MODE=container`) that only exists in the cocotb container, so run one core via `make projects/[project]/cores/[vendor]/[core]/tests/test_status PROJECT=[project]` (wraps it in the container) rather than calling the script on the host.
 Output: `projects/[project]/cores/[vendor]/[core]/tests/test_status`, `projects/[project]/tests/core_tests_summary`. 
 
 ---
