@@ -18,7 +18,7 @@ Clean the BOOT and RootFS directories on the mounted SD card. If no mount direct
 
 ### `cocotb.mk`
 
-This is a Makefile used to build the cocotb testbench for custom verilog cores. It's used with [`test_core.sh`](#test_coresh) to build the testbench and run the tests, interfacing with the `cocotb` Python library and its respective Makefiles. You can read more about running tests in the [top level](../../README.md#testing) and [`examples/cores/`](../../examples/cores/README.md) README files.
+This is a Makefile used to build the cocotb testbench for custom verilog cores. It's used with [`test_core.sh`](#test_coresh) to build the testbench and run the tests, interfacing with the `cocotb` Python library and its respective Makefiles. It enables Verilator coverage and uses LCOV to generate a human-readable report at `tests/results/coverage_html/index.html` after each test run. You can read more about running tests and interpreting the generated coverage files in the [top level](../../README.md#testing) and [`examples/cores/`](../../examples/cores/README.md) README files.
 
 ---
 
@@ -87,7 +87,7 @@ Usage:
 ./scripts/make/test_core.sh <project> <vendor> <core>
 ```
 
-Runs cocotb-based tests for a custom core located in `projects/<project>/cores/<vendor>/<core>/tests`. Uses the shared `cocotb.mk` Makefile to build and run the testbench. Writes test results and status to the appropriate files in the core's test directory. Exits with a nonzero code if the tests fail or if required directories are missing.
+Runs cocotb-based tests for a custom core located in `projects/<project>/cores/<vendor>/<core>/tests`. Uses the shared `cocotb.mk` Makefile to build and run the testbench. Writes test results and status to the appropriate files in the core's test directory, generates an LCOV HTML coverage report, and prints the report path. Exits with a nonzero code if the tests fail or if required directories are missing.
 
 ---
 
