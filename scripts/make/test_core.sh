@@ -85,4 +85,7 @@ if [ "${STATUS}" == "FAILED tests" ]; then
 fi
 
 echo "[CORE TESTS] ${CORE}: ${STATUS} (see ${TEST_DIR}/${STS_FILE} and ${TEST_DIR}/results/log.txt for details)"
+if [ -f "${TEST_DIR}/results/coverage_html/index.html" ]; then
+  echo "[CORE TESTS] Coverage report: ${TEST_DIR}/results/coverage_html/index.html"
+fi
 exit 0

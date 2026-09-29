@@ -267,11 +267,11 @@ With these variables set, include `OFFLINE=true` in the `make` command or [Makef
 
 You can optionally run tests for individual Verilog cores or all the custom cores used for a project using [cocotb](https://www.cocotb.org/). cocotb is a Python tool that allows you to write tests for your Verilog cores in Python, which can be run in a simulator (we use [Verilator](https://www.veripool.org/verilator/) here).
 
-### Installing cocotb
+### Installing cocotb and LCOV
 
-- Use `apt` to install `cocotb` and `libpython3-dev`:
+- Use `apt` to install `cocotb`, `libpython3-dev`, and LCOV (used to generate HTML coverage reports):
   ```
-  sudo apt install python3-cocotb libpython3-dev
+  sudo apt install python3-cocotb libpython3-dev lcov
   ```
 - Use `pip` to install `cocotb` and `cocotb_coverage`:
   ```

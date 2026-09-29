@@ -247,6 +247,12 @@ To run tests for a specific core in a project, you can use the `test_core.sh` sc
 
 This will run the tests for the `fifo_sync` core under `projects/ex02_axi_interface/cores/base/fifo_sync/tests/src` and output a test status report at `projects/ex02_axi_interface/cores/base/fifo_sync/tests/test_status`.
 
+Each test run also collects Verilator line, toggle, and expression coverage. The generated files are placed under the core's `tests/results` directory:
+
+- `coverage.dat`: Raw Verilator coverage database.
+- `coverage.info`: LCOV data generated from the Verilator database.
+- `coverage_html/index.html`: Human-readable HTML report with line and branch coverage.
+
 To run tests for all cores in a project, you can use the make target `tests`. For example, to run tests for the `rev_d_shim` project, you can run:
 
 ```

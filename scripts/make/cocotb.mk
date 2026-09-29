@@ -20,6 +20,10 @@ RESULTS_DIR := $(TEST_DIR)/results
 SIM_BUILD := $(RESULTS_DIR)/sim_build
 # cocotb variable -- Where the cocotb results will be stored. Defaults to "results.xml"
 COCOTB_RESULTS_FILE := $(RESULTS_DIR)/results.xml
+# Verilator and LCOV coverage outputs
+COVERAGE_DATA := $(RESULTS_DIR)/coverage.dat
+COVERAGE_INFO := $(RESULTS_DIR)/coverage.info
+COVERAGE_HTML_DIR := $(RESULTS_DIR)/coverage_html
 
 # Log some information about variables as they increment
 $(info --------------------------)
@@ -36,7 +40,9 @@ $(info -  "$(firstword $(MAKEFILE_LIST))" is the top Makefile ($$(firstword $$(M
 $(info --------------------------)
 
 # Additional compile arguments, including Verilog core parameters (from parameters.json)
-EXTRA_ARGS += --trace --trace-structs -Wno-fatal --timing
+EXTRA_ARGS += --trace --trace-structs -Wno-fatal --timing --coverage
+# Write Verilator's coverage database alongside the other test results
+PLUSARGS += +verilator+coverage+file+$(COVERAGE_DATA)
 # Parse parameters.json with jq and add as -pvalue+KEY=VALUE to EXTRA_ARGS
 ifneq ("$(wildcard parameters.json)","")
 EXTRA_ARGS += $(foreach kv,$(shell jq -r 'to_entries|map("\(.key)=\(.value|tostring)")|.[]' parameters.json),-pvalue+$(kv))
@@ -52,10 +58,19 @@ $(info --------------------------)
 # Expects a cocotb module named <CORE_NAME>_test
 test_custom_core:
 	mkdir -p $(RESULTS_DIR)
+	rm -rf $(COVERAGE_DATA) $(COVERAGE_INFO) $(COVERAGE_HTML_DIR)
 	COCOTB_RESULTS_FILE=$(COCOTB_RESULTS_FILE) SIM_BUILD=$(SIM_BUILD) \
 		RESULTS_DIR=$(RESULTS_DIR) \
 		$(MAKE) --file="$(firstword $(MAKEFILE_LIST))" sim MODULE=testbench TOPLEVEL=$(CORE_NAME); \
 	RESULT=$$?; \
+	if [ -f $(COVERAGE_DATA) ]; then \
+		if ! verilator_coverage --write-info $(COVERAGE_INFO) $(COVERAGE_DATA) || \
+			! genhtml --branch-coverage $(COVERAGE_INFO) --output-directory $(COVERAGE_HTML_DIR); then \
+			echo "[CORE TESTS] WARNING: Coverage report generation failed." >&2; \
+		fi; \
+	else \
+		echo "[CORE TESTS] WARNING: Coverage report generation failed: $(COVERAGE_DATA) not found." >&2; \
+	fi; \
 	mv dump.vcd $(RESULTS_DIR)/dump.vcd; \
 	rm -rf __pycache__; \
 	if [ $$RESULT -ne 0 ]; then exit $$RESULT; fi

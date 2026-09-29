@@ -221,9 +221,9 @@ docker run --rm -v petalinux-tools:/tools ubuntu:20.04 ls -la /tools
 
 You won't need to touch these volumes again unless you're installing a different tools version, and you never need to re-run the installers just because you rebuilt or removed a runner container -- the volumes are independent of any container.
 
-## Optional: cocotb and Verilator
+## Optional: cocotb, Verilator, and LCOV
 
-Nothing to install separately -- both are baked into the `cocotb` image at build time (see [Building the runner images](#building-the-runner-images) above). Verilator is built from source during the image build, pinned to a tag via the `VERILATOR_REF` build arg in `scripts/docker/cocotb.Dockerfile` (defaults to `stable`). 
+Nothing to install separately -- cocotb, Verilator, and LCOV are baked into the `cocotb` image at build time (see [Building the runner images](#building-the-runner-images) above). Verilator is built from source during the image build, pinned to a tag via the `VERILATOR_REF` build arg in `scripts/docker/cocotb.Dockerfile` (defaults to `stable`). LCOV generates the HTML reports for Verilator coverage. 
 
 <details>
 <summary><i>To bump the Verilator version, edit that arg and rebuild:</i></summary>
