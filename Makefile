@@ -423,7 +423,7 @@ tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/cores/%: projects/${PROJECT}/cores/$$(VENDO
 # Requires all the cores
 # Built using the `scripts/vivado/project.tcl` script, which uses
 # 	the block design and ports files from the project
-tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr: scripts/vivado/project.tcl projects/$(PROJECT)/block_design.tcl $(BOARD_XDC) $(addprefix tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/cores/, $(PROJECT_CORES)) $(wildcard projects/$(PROJECT)/modules/*.tcl) scripts/vivado/project.tcl
+tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr: scripts/vivado/project.tcl projects/$(PROJECT)/block_design.tcl $(BOARD_XDC) $(addprefix tmp/$(BOARD)/$(BOARD_VER)/$(PROJECT)/cores/, $(PROJECT_CORES)) $(wildcard projects/$(PROJECT)/modules/*.tcl) scripts/vivado/route_hold_retry.tcl
 	@./scripts/make/status.sh "MAKING PROJECT: $(BOARD)/$(BOARD_VER)/$(PROJECT)/project.xpr"
 	mkdir -p $(@D)
 	$(VIVADO) -source scripts/vivado/project.tcl -tclargs $(BOARD) $(BOARD_VER) $(PROJECT)

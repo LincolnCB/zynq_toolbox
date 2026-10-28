@@ -253,5 +253,7 @@ set_property VERILOG_DEFINE {TOOL_VIVADO} [current_fileset]
 
 set_property STRATEGY Flow_PerfOptimized_high [get_runs synth_1]
 set_property STRATEGY Performance_ExploreWithRemap [get_runs impl_1]
+# Re-route once if hold still fails after routing (see the hook script)
+set_property STEPS.ROUTE_DESIGN.TCL.POST [file normalize scripts/vivado/route_hold_retry.tcl] [get_runs impl_1]
 
 close_project

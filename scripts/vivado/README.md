@@ -1,4 +1,4 @@
-***Updated 2026-08-25***
+***Updated 2026-10-21***
 # `vivado` scripts
 
 These scripts are for managing the Vivado build process. Vivado uses Tcl commands for all of its tasks and steps, which can be scripted and loaded, allowing for a fully automated build process. These scripts are used to create the Vivado project, build the block design, and package the bitstream and hardware definition into output files for PetaLinux to load. They are run by Vivado itself, passed in via the command line by the Makefile.
@@ -45,7 +45,13 @@ Arguments:
 - `board_ver`: The version of the target board.
 - `project_name`: The name of the Vivado project.
 
-This script is the bulk of the Vivado project setup and scripting. It creates and initializes the Vivado `project.xpr` project file in `tmp/`. It then sets up various convenient procedures that can be used for readability and simplicity in the project's `block_design.tcl` and submodule `modules/` script files. When understanding the `block_design.tcl` script, it is helpful to read through this file first to understand the defined procedures available.
+This script is the bulk of the Vivado project setup and scripting. It creates and initializes the Vivado `project.xpr` project file in `tmp/`. It then sets up various convenient procedures that can be used for readability and simplicity in the project's `block_design.tcl` and submodule `modules/` script files. When understanding the `block_design.tcl` script, it is helpful to read through this file first to understand the defined procedures available. It also sets the synthesis and implementation strategies, including `route_hold_retry.tcl` as a post-route hook.
+
+---
+
+### `route_hold_retry.tcl`
+
+Post-route hook for the implementation run, registered by `project.tcl` -- you don't run it directly. If hold timing still fails after `route_design`, it runs a second `route_design -directive Explore` pass, which works from the actual routes and closes the small hold violations the first pass can miss on short paths. When hold is already met it does nothing. It runs before Vivado writes the routed checkpoint, so the result carries through to the bitstream.
 
 ---
 
